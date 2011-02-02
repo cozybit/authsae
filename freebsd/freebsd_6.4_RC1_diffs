@@ -1,0 +1,121 @@
+*** bpf.c	Thu Dec  4 11:50:27 2008
+--- /usr/src/sys/net/bpf.c	Thu Dec  4 11:57:36 2008
+***************
+*** 219,224 ****
+--- 219,232 ----
+  		hlen = 4;	/* This should match PPP_HDRLEN */
+  		break;
+  
++             case DLT_IEEE802_11:
++                 /*
++                  * support for 802.11 frames
++                  */
++                 sockp->sa_family = AF_UNSPEC;
++                 hlen = 0;
++                 break;
++ 
+  	default:
+  		return (EIO);
+  	}
+*** ieee80211.c	Thu Dec  4 11:47:37 2008
+--- /usr/src/sys/net80211/ieee80211.c	Thu Dec  4 12:06:46 2008
+***************
+*** 46,51 ****
+--- 46,52 ----
+  #include <net/if.h>
+  #include <net/if_media.h>
+  #include <net/ethernet.h>
++ #include <net/route.h>
+  
+  #include <net80211/ieee80211_var.h>
+  
+***************
+*** 86,91 ****
+--- 87,95 ----
+  static struct mtx ieee80211_vap_mtx;
+  MTX_SYSINIT(ieee80211, &ieee80211_vap_mtx, "net80211 instances", MTX_DEF);
+  
++ /* forward dec'l */
++ static struct ieee80211com *ieee80211_find_instance(struct ifnet *ifp);
++ 
+  static void
+  ieee80211_add_vap(struct ieee80211com *ic)
+  {
+***************
+*** 203,208 ****
+--- 207,242 ----
+  #undef DEFAULTRATES
+  }
+  
++ /*
++  * ieee80211_output()
++  *      queue an 802.11 frame to send over-the-air
++  */
++ static int
++ ieee80211_output (struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
++                   struct rtentry *rt0)
++ {
++     struct ieee80211com *ic;
++     struct ieee80211_node *ni;
++ 
++     if ((ic = ieee80211_find_instance(ifp)) == NULL) {
++         if_printf(ifp, "%s: no 802.11 instance!\n", __func__);
++         if (m != NULL) {
++             m_freem(m);
++         }
++         return EINVAL;
++     }
++     ni = ic->ic_bss;
++     ieee80211_ref_node(ni);
++     m->m_pkthdr.rcvif = (void *)ni;
++ 
++     IEEE80211_NODE_STAT(ni, tx_auth);
++     IEEE80211_NODE_STAT(ni, tx_mgmt);
++ 
++     IF_ENQUEUE(&ic->ic_mgtq, m);
++     if_start(ifp);
++     return 0;
++ }
++ 
+  void
+  ieee80211_ifattach(struct ieee80211com *ic)
+  {
+***************
+*** 246,251 ****
+--- 280,287 ----
+  
+  	ieee80211_sysctl_attach(ic);		/* NB: requires ic_vap */
+  
++         ifp->if_output = ieee80211_output;      /* so we can send thru BPF */
++ 
+  	/*
+  	 * Install a default reset method for the ioctl support.
+  	 * The driver is expected to fill this in before calling us.
+*** ieee80211.h	Thu Dec  4 11:49:48 2008
+--- /usr/src/sys/net80211/ieee80211.h	Thu Dec  4 12:07:01 2008
+***************
+*** 517,522 ****
+--- 517,523 ----
+  #define	IEEE80211_AUTH_ALG_OPEN		0x0000
+  #define	IEEE80211_AUTH_ALG_SHARED	0x0001
+  #define	IEEE80211_AUTH_ALG_LEAP		0x0080
++ #define IEEE80211_AUTH_ALG_SAE          0x8000
+  
+  enum {
+  	IEEE80211_AUTH_OPEN_REQUEST		= 1,
+*** ieee80211_input.c	Thu Dec  4 11:49:17 2008
+--- /usr/src/sys/net80211/ieee80211_input.c	Thu Dec  4 12:35:21 2008
+***************
+*** 2202,2207 ****
+--- 2202,2212 ----
+  		else if (algo == IEEE80211_AUTH_ALG_OPEN)
+  			ieee80211_auth_open(ic, wh, ni, rssi, rstamp, seq,
+  			    status);
++                 else if (algo >= IEEE80211_AUTH_ALG_SAE) {
++                     IEEE80211_DISCARD(ic, IEEE80211_MSG_AUTH, wh, "auth", 
++                                       "SAE frame (alg = %d) ignored", algo);
++                     return;
++                 }
+  		else {
+  			IEEE80211_DISCARD(ic, IEEE80211_MSG_ANY,
+  			    wh, "auth", "unsupported alg %d", algo);

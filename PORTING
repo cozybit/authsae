@@ -1,0 +1,30 @@
+The SAE module, sae.c, is OS-independent. The OS-specific portion
+of this release is <os>/meshd.c. Porting SAE to a different OS requires
+definition of a new meshd.c module for the new OS. Each <os>/meshd.c
+must:
+
+  1. manage a wireless interface-- set the ssid, set the band, set
+     the channel, et cetera.
+  2. receive beacons and authentication frames in an OS-specific
+     manner. 
+  3. be capable of sending authentication frames over the wireless
+     interface. 
+
+A generic service model, service.[ch], is included to allow <os>/meshd.c
+to manage socket interfaces and sae to manage timers. Replacement of
+service.[ch] with a different service model should be trivial. 
+
+os_glue.h defines the external API each <os>/meshd.c must have
+to allow SAE to use to send frames over the air.
+
+sae.h defines the routines each <os>/meshd.c must call to enable SAE
+authentication.
+
+  - sae_initialize() -- must be called first, before any processing
+    is done.
+  - process_mgmt_frame() -- send beacons and authentication frames
+    to SAE for processing.
+  - sae_read_config() -- if desired <os>/meshd.c can catch HUP with
+    this routine, or catch HUP itself and call this routine with
+    the signal if an sa_handler(int) action is not supported.
+

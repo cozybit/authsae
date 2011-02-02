@@ -1,0 +1,129 @@
+Simultaneous Authentication of Equals (SAE)
+--------------------------------------------
+
+  SAE provides secure password-based authentication for 802.11.
+This reference implementation is written with an OS-specific
+component which manages the wireless interface and communicates
+with the host OS, and an OS-independent component which implements
+the SAE protocol.
+
+  The OS-specific components reside in directories named for their
+respective OS, for example the freebsd OS-specific component is 
+in freebsd/meshd.c. The OS-independent component is sae.c. The 
+other .c files are helper modules. See PORTING for a description
+of the interfaces the modules have to each other.
+
+  Multiple meshd applications can communicate over a loopback
+interface to simulate a wireless mesh. Each OS-specific component
+supports communication over the loopback interface.
+
+  A monitor application, mon, can be used to sniff interfaces for
+SAE traffic and provide pithy output.
+
+RESTRICTIONS
+
+  Currently, the only OS with wireless support is freebsd. The
+linux module only supports communication over loopback. Extending
+the linux OS-specific module-- linux/meshd.c-- to support wireless
+interfaces is the subject of on-going work.
+
+  Only elliptic curves defined over a prime field are supported--
+i.e. no characteristic two curves and no prime modulus groups.
+Therefore the only groups currently supported are 19, 20, 21, 25
+and 26 from the IANA registry of RFC 2409's "Diffie-Hellman groups".
+
+  meshd currently only supports Atheros radios.
+
+REQUIREMENTS
+
+  libcrypto from OpenSSL, version 0.9.8 or later. Basically, all
+you need is EC support that has the pre-defined groups.
+
+BUILDING
+
+  The file freebsd_6.4_RC1_diffs contains patches for a few
+kernel files in freebsd 6.4_RC1 (other versions should be
+straightforward to patch as the diffs are minor) to allow for the
+sending of 802.11 authentication frames via a BPF. Rebuild the
+OS with these patchs.
+
+  Edit the Makefile to point $(LIBS) to OpenSSL and make.
+
+HOW TO CONFIGURE
+
+  Configuration of sae and meshd are done with sae.conf and meshd.conf,
+respectively, in the config directory. These files contain attribute and
+value pairs in the form:
+		attribute=value
+
+One attribute supports a prioritized list of values in the form of a
+value list:
+		attribute=value1 value2 value3 ...
+
+Lines beginning with '#' are treated as comments and ignored. 
+
+  Attributes for sae.conf are:
+
+	group: a prioritized list of groups to support. This is
+		the only attribute that supports a value-list.
+		There is no default.
+	password: the password to use for authentication. There is
+		no default.
+	retrans: the amount of seconds to wait before retransmitting.
+		Default is 3.
+	thresh: the number of open connections allowed before
+		anti-clogging tokens are demanded. Default is 5.
+	blacklist: how long to ignore peers which fail authentication.
+		Default is 30.
+	debug: a bitmask to selectively enable/disable debugging.
+		error debugging is bit 0x01, protocol messaging is bit
+		0x02, state machine transitions are bit 0x04,
+		crypto debugging is bit 0x08, and very verbose crypto
+		debugging can be turned on with bit 0x10.
+	lifetime: how long a negotiated PMK is valid for. At then end
+		of this period the key will be deleted and the peer
+		will be authenticated again (if it's still around).
+	giveup: the number of errors and/or state-machine resyncronizations
+		allowed before the conversation is abandoned. Default
+		is 5.
+
+  Attributes for meshd.conf are:
+
+	interface: the name of the wireless interface to use.
+		Default is "ath0".
+	ssid: the ssid to beacon. Default is "meshd".
+	passive: whether meshd will initiate (0) an SAE connection
+		or wait (1) until initiated to. Default is 0.
+	debug: when set to 1 sends more information to stdout.
+		Default is 0.
+	mediaopt: the media selection option for the wireless interface.
+		Values are 0 for STA; 1 for ADHOC; 2 for HOSTAP; and,
+		3 for MONITOR. Default is ADHOC.
+	band: which radio band to use, "11a", "11b", or "11g". Default
+		is 11b.
+	channel: which channel to use in the defined band. Default
+		is 6.
+
+HOW TO USE
+
+meshd MUST be run as root. After it's built just run it. If a beacon
+advertising the configured ssid is received meshd will attempt SAE
+authentication to the sender. If the sender is configured in a 
+compatible fashion authentication will happen. When run over the 
+loopback interface meshd will generate a random BSSID and begin
+sending pseudo-beacons over the loopback interface. When another meshd
+module connects to the loopback authentication will commense.
+
+Note: a mediaopt of HOSTAP will prevent beacons from being received by
+meshd. A mediaopt of STA will not result in beacons being sent out
+the radio. It is possible to configure two mesh points to not see each
+other or to ignore each other.
+
+KNOWN ISSUES
+
+The 802.11s draft will probably change. This implementation is based
+on anticipated changes to 4.0 that will become the basis of version 
+4.01.
+
+
+

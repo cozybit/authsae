@@ -195,6 +195,11 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler)
 	if (ret >= 0)
 		ret = nl_socket_add_membership(nlcfg->nl_sock_event, ret);
 
+    /* And scan events */
+	ret = nl_get_multicast_id(nlcfg->nl_sock, "nl80211", "scan");
+	if (ret >= 0)
+		ret = nl_socket_add_membership(nlcfg->nl_sock_event, ret);
+
 	if (ret < 0) {
 		printf("Could not add multicast "
 			   "membership for mlme events: %d (%s)",

@@ -39,6 +39,7 @@ struct netlink_config_s {
 	struct nl_cache *nl_cache_event;
     struct nl_cb *nl_cb;
 	struct genl_family *nl80211;
+    int ifindex;
 };
 
 int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);

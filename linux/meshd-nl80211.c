@@ -101,6 +101,7 @@ static void srv_handler_wrapper(int fd, void *data)
 {
     if (nl_recvmsgs_default((struct nl_sock *) data))
         fprintf(stderr, "nl_recvmsgs_default error\n");
+    fflush(stdout);
 }
 
 static int scan_results_handler(struct nl_msg *msg, void *arg)
@@ -311,6 +312,10 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+void term_handle(int i)
+{
+    exit(1);
+}
 
 int main(int argc, char *argv[])
 {
@@ -321,9 +326,7 @@ int main(int argc, char *argv[])
     int daemonize = 0;
     char *outfile = NULL;
 
-    signal(SIGTTIN, SIG_IGN);
-    signal(SIGTTOU, SIG_IGN);
-
+    signal(SIGTERM, term_handle);
 
     for (;;) {
         c = getopt(argc, argv, "o:Bi:s:");

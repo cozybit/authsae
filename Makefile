@@ -1,0 +1,3 @@
+
+all: linux
+	make -C $<

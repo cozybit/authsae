@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Dan Harkins, 2008, 2009, 2010
+ * Copyright (c) Dan Harkins, 2008, 2009, 2010;
  * Copyright (c) 2010, cozybit Inc.
  *
  *
@@ -44,17 +44,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <net/if.h>
+#include <linux/if_ether.h>
+#include <netinet/in.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
 
 #include "nlutils.h"
 
-/* authsae's event loop */
+/* authsae headers */
 #include "service.h"
+#include "ieee802_11.h"
+#include "sae.h"
 
 
 /* Runtime config variables */
 static char *ifname = NULL;
-struct netlink_config_s nlcfg;
+static struct netlink_config_s nlcfg;
 service_context srvctx;
 
 const char rsn_ie[0x14] = {0x30, /* RSN element ID */
@@ -67,6 +73,30 @@ const char rsn_ie[0x14] = {0x30, /* RSN element ID */
                        0x0, 0x0F, 0xAC, 0x4, /* SAE for authentication */
                        /* optional capabilities omitted */
                        };
+
+
+int get_mac_addr(const char * ifname, uint8_t *macaddr)
+{
+    int fd;
+    struct ifreq ifr;
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+
+    if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
+        printf("meshd: failed to read mac address for %s\n", ifname);
+        perror("meshd");
+        return -1;
+    }
+
+    memcpy(macaddr, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+
+    close(fd);
+
+    return 0;
+}
+
 
 static const char * memmem(const char *haystack, int haystack_len, const char *needle, int needle_len)
 {
@@ -104,6 +134,13 @@ static void srv_handler_wrapper(int fd, void *data)
     fflush(stdout);
 }
 
+int meshd_write_mgmt(char *buf, int len)
+{
+    printf("libsae:Trying to send something, but meshd won't do it (yet)\n");
+    hexdump("meshd_write_mgmt", (const uint8_t *) buf, len);
+    return 0;
+}
+
 static int scan_results_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -125,31 +162,51 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     int *num = (int *) arg;
     const uint8_t *ie;
     size_t ie_len;
+    struct ieee80211_mgmt_frame bcn;
 
-    printf("meshd: Got bss info\n");
+    /* check that all the required info exists: source address
+     * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
+     * */
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
+
     if (!tb[NL80211_ATTR_BSS])
         return NL_SKIP;
+
     if (nla_parse_nested(bss, NL80211_BSS_MAX, tb[NL80211_ATTR_BSS],
                 bss_policy))
         return NL_SKIP;
-    if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
-        ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-        ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
 
-        /* XXX: For now, just do a brute search for the RSN ie in this scan
-         * results.  */
-        if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)))
-            printf("Found a mesh neighbor that supports SAE :)\n");
-        // hexdump("ie", ie, ie_len);
-    } else {
-        ie = NULL;
-        ie_len = 0;
-    }
+    if (!bss[NL80211_BSS_BSSID])
+        return NL_SKIP;
 
-    num++;
+    if (!bss[NL80211_BSS_INFORMATION_ELEMENTS])
+        return NL_SKIP;
+
+    ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
+    ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
+
+    hexdump("ie", ie, ie_len);
+
+	/* JC: For now, just do a brute search for the RSN ie in
+	 * these scan results. When we move this to wpa_supplicant
+	 * we'll use the available ie parsing routines
+	 * */
+    if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL)
+        return NL_SKIP;
+
+    printf("meshd: Found a suitable mesh neighbor to peer with\n");
+    memset(&bcn, 0, sizeof(bcn));
+    bcn.frame_control = htole16(
+            (IEEE802_11_FC_TYPE_MGMT << 2 |
+             IEEE802_11_FC_STYPE_BEACON << 4));
+    memcpy(bcn.sa, nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
+
+    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr))
+        printf("libsae: process_mgmt_frame failed\n");
+
+    (*num)++;
 
     return NL_SKIP;
 }
@@ -196,8 +253,6 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
-
-    printf("meshd: Requesting scan results\n");
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, NLM_F_DUMP, cmd, 0);
@@ -325,11 +380,12 @@ int main(int argc, char *argv[])
     struct nl_sock *nlsock;
     int daemonize = 0;
     char *outfile = NULL;
+    char confdir[80];
 
     signal(SIGTERM, term_handle);
 
     for (;;) {
-        c = getopt(argc, argv, "o:Bi:s:");
+        c = getopt(argc, argv, "I:o:Bi:s:");
         if (c < 0)
             break;
         switch (c) {
@@ -346,16 +402,28 @@ int main(int argc, char *argv[])
             case 's':
                 mesh_id = optarg;
                 break;
+            case 'I':
+                strncpy(confdir, optarg, sizeof(confdir));
+                break;
             default:
                 usage();
                 goto out;
         }
     }
 
-    if (ifname == NULL) {
+    if (ifname == NULL || confdir == NULL) {
         usage();
         exitcode = -EINVAL;
         goto out;
+    }
+
+    exitcode = get_mac_addr(ifname, nlcfg.mymacaddr);
+    if (exitcode)
+        goto out;
+
+    if (sae_initialize(mesh_id, confdir) < 0) {
+        fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
+        exit(1);
     }
 
     if (daemonize)

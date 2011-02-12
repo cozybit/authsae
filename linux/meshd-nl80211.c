@@ -170,7 +170,6 @@ nla_put_failure:
 
 int meshd_write_mgmt(char *buf, int len)
 {
-    hexdump("meshd_write_mgmt", (uint8_t *)buf, len);
     tx_frame(&nlcfg, buf, len);
     return 0;
 }
@@ -389,8 +388,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
             printf("NL80211_CMD_TX_STATUS\n");
-            if (tb[NL80211_ATTR_ACK]) {
-                printf("Frame Acked\n");
+            if (tb[NL80211_ATTR_ACK] && tb[NL80211_ATTR_FRAME]) {
+                hexdump("tx frame", (uint8_t *)nla_data(tb[NL80211_ATTR_FRAME]),
+                        nla_len(tb[NL80211_ATTR_FRAME]));
             }
             break;
         default:

@@ -124,6 +124,7 @@ static void hexdump(const char *label, const uint8_t *start, int len)
         printf("%02x ", *pos++);
     }
     printf("\n----------\n\n");
+    fflush(stdout);
     return;
 }
 
@@ -134,12 +135,46 @@ static void srv_handler_wrapper(int fd, void *data)
     fflush(stdout);
 }
 
+static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_FRAME;
+    int ret = 0;
+    char *pret;
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    if (!frame || !len)
+        return -EINVAL;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+#define CHANNEL_1_FREQ  2412               /* XXX: obtain channel from interface */
+    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, CHANNEL_1_FREQ);
+    NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
+
+    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
+    if (ret)
+        printf("tx frame failed: %d (%s)\n", ret,
+                strerror(-ret));
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 int meshd_write_mgmt(char *buf, int len)
 {
-    printf("libsae:Trying to send something, but meshd won't do it (yet)\n");
-    hexdump("meshd_write_mgmt", (const uint8_t *) buf, len);
+    hexdump("meshd_write_mgmt", (uint8_t *)buf, len);
+    tx_frame(&nlcfg, buf, len);
     return 0;
 }
+
 
 static int scan_results_handler(struct nl_msg *msg, void *arg)
 {
@@ -187,7 +222,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
     ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
 
-    hexdump("ie", ie, ie_len);
+    //hexdump("ie", ie, ie_len);
 
 	/* JC: For now, just do a brute search for the RSN ie in
 	 * these scan results. When we move this to wpa_supplicant
@@ -239,6 +274,42 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+static int register_for_auth_frames(struct netlink_config_s *nlcfg)
+{
+        struct nl_msg *msg;
+        uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
+#define IEEE80211_FTYPE_MGMT            0x0000
+#define IEEE80211_STYPE_AUTH            0x00B0
+        uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_AUTH;
+        int ret;
+        char *pret;
+        char auth_algo[1] = { 0x3};     /* SAE */
+
+        msg = nlmsg_alloc();
+        if (!msg)
+                return -ENOMEM;
+
+        pret = genlmsg_put(msg, 0, 0,
+                genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+        if (pret == NULL)
+                goto nla_put_failure;
+
+        NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+        NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
+        NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
+
+        ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
+        if (ret)
+                printf("Registering for auth frames failed: %d (%s)\n", ret,
+                        strerror(-ret));
+        else
+                printf("Registering for auth frames succeeded.  Yay!\n");
+
+        return ret;
+ nla_put_failure:
+        return -ENOBUFS;
+}
+
 static int check_scan_results(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
@@ -263,6 +334,7 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_and_recv(nlcfg->nl_sock, msg, scan_results_handler, &num);
+    printf("got %d results\n", num);
     if (ret)
         printf("Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -289,7 +361,8 @@ static int event_handler(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
-    uint8_t *pos;
+    struct ieee80211_mgmt_frame *frame;
+    int frame_len;
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
@@ -297,8 +370,11 @@ static int event_handler(struct nl_msg *msg, void *arg)
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
-                pos = nla_data(tb[NL80211_ATTR_FRAME]);
-                hexdump("frame", nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]));
+                frame = nla_data(tb[NL80211_ATTR_FRAME]);
+                frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
+                hexdump("rx frame", (const uint8_t *) frame, frame_len);
+                if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr))
+                    printf("libsae: process_mgmt_frame failed\n");
             }
             break;
         case NL80211_CMD_NEW_STATION:
@@ -311,6 +387,12 @@ static int event_handler(struct nl_msg *msg, void *arg)
         case NL80211_CMD_TRIGGER_SCAN:
             printf("NL80211_CMD_TRIGGER_SCAN\n");
             break;
+        case NL80211_CMD_FRAME_TX_STATUS:
+            printf("NL80211_CMD_TX_STATUS\n");
+            if (tb[NL80211_ATTR_ACK]) {
+                printf("Frame Acked\n");
+            }
+            break;
         default:
             printf("Ignored event (%d)\n", gnlh->cmd);
             break;
@@ -319,7 +401,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-int join_mesh_rsn(char *mesh_id, int mesh_id_len)
+int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
@@ -339,7 +421,7 @@ int join_mesh_rsn(char *mesh_id, int mesh_id_len)
     printf("meshd: Staring mesh with mesh id = %s\n", mesh_id);
 
     pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
     if (pret == NULL)
         goto nla_put_failure;
 
@@ -355,7 +437,7 @@ int join_mesh_rsn(char *mesh_id, int mesh_id_len)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mesh_id_len, mesh_id);
 
-    ret = send_and_recv(nlcfg.nl_sock, msg, NULL, NULL);
+    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
         printf("Mesh start failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -453,7 +535,11 @@ int main(int argc, char *argv[])
     srv_add_input(srvctx, nl_socket_get_fd(nlsock), nlsock,
             srv_handler_wrapper);
 
-    exitcode = join_mesh_rsn(mesh_id, strlen(mesh_id));
+    exitcode = register_for_auth_frames(&nlcfg);
+    if (exitcode)
+        goto out;
+
+    exitcode = join_mesh_rsn(&nlcfg, mesh_id, strlen(mesh_id));
     if (exitcode)
         goto out;
 

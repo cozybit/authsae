@@ -171,7 +171,7 @@ nla_put_failure:
 int meshd_write_mgmt(char *buf, int len)
 {
     tx_frame(&nlcfg, buf, len);
-    return 0;
+    return len;
 }
 
 

@@ -202,7 +202,7 @@ pp_a_bignum (char *str, BIGNUM *bn)
     free(buf);
 }
 
-static void
+void
 sae_debug (int level, const char *fmt, ...)
 {
     va_list argptr;

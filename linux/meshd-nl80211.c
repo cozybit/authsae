@@ -85,7 +85,7 @@ int get_mac_addr(const char * ifname, uint8_t *macaddr)
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
     if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
-        printf("meshd: failed to read mac address for %s\n", ifname);
+        sae_debug(SAE_DEBUG_MESHD,"meshd: failed to read mac address for %s\n", ifname);
         perror("meshd");
         return -1;
     }
@@ -111,19 +111,24 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
     return NULL;
 }
 
+#ifndef MAC2STR
+#define MAC2STR(a) (a)[0]&0xff, (a)[1]&0xff, (a)[2]&0xff, (a)[3]&0xff, (a)[4]&0xff, (a)[5]&0xff
+#define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
+#endif
+
 static void hexdump(const char *label, const uint8_t *start, int len)
 {
     const uint8_t *pos;
     int i;
 
-    printf("----------\n");
-    printf("%s hexdump: ", label);
+    sae_debug(SAE_DEBUG_MESHD,"----------\n");
+    sae_debug(SAE_DEBUG_MESHD,"%s hexdump: ", label);
     pos = start;
     for (i=0; i<len; i++) {
-        if (!(i%20)) printf("\n");
-        printf("%02x ", *pos++);
+        if (!(i%20)) sae_debug(SAE_DEBUG_MESHD,"\n");
+        sae_debug(SAE_DEBUG_MESHD,"%02x ", *pos++);
     }
-    printf("\n----------\n\n");
+    sae_debug(SAE_DEBUG_MESHD,"\n----------\n\n");
     fflush(stdout);
     return;
 }
@@ -161,7 +166,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
-        printf("tx frame failed: %d (%s)\n", ret,
+        sae_debug(SAE_DEBUG_MESHD,"tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -221,8 +226,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
     ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
 
-    //hexdump("ie", ie, ie_len);
-
 	/* JC: For now, just do a brute search for the RSN ie in
 	 * these scan results. When we move this to wpa_supplicant
 	 * we'll use the available ie parsing routines
@@ -230,15 +233,18 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL)
         return NL_SKIP;
 
-    printf("meshd: Found a suitable mesh neighbor to peer with\n");
     memset(&bcn, 0, sizeof(bcn));
     bcn.frame_control = htole16(
             (IEEE802_11_FC_TYPE_MGMT << 2 |
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
 
+    sae_debug(SAE_DEBUG_MESHD,"meshd: " MACSTR " initiating"
+            " simultaneous authentication with " MACSTR "\n",
+            MAC2STR(nlcfg.mymacaddr), MAC2STR(bcn.sa));
+
     if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr))
-        printf("libsae: process_mgmt_frame failed\n");
+        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
 
     (*num)++;
 
@@ -266,7 +272,7 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
-        printf("Scan failed: %d (%s)\n", ret,
+        sae_debug(SAE_DEBUG_MESHD,"Scan failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -299,10 +305,10 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
 
         ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
         if (ret)
-                printf("Registering for auth frames failed: %d (%s)\n", ret,
+                fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
                         strerror(-ret));
         else
-                printf("Registering for auth frames succeeded.  Yay!\n");
+                sae_debug(SAE_DEBUG_MESHD,"Registering for auth frames succeeded.  Yay!\n");
 
         return ret;
  nla_put_failure:
@@ -333,9 +339,9 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_and_recv(nlcfg->nl_sock, msg, scan_results_handler, &num);
-    printf("got %d results\n", num);
+    sae_debug(SAE_DEBUG_MESHD,"got %d results\n", num);
     if (ret)
-        printf("Scan results request failed: %d (%s)\n", ret,
+        sae_debug(SAE_DEBUG_MESHD,"Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -351,7 +357,7 @@ static void srv_timeout_wrapper(timerid t, void *data)
 
 static void usage(void)
 {
-    printf("\n\n"
+    sae_debug(SAE_DEBUG_MESHD,"\n\n"
             "usage:\n"
             "  meshd-nl80211 [-B] [-i<ifname>]\n\n");
 }
@@ -373,28 +379,28 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (const uint8_t *) frame, frame_len);
                 if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr))
-                    printf("libsae: process_mgmt_frame failed\n");
+                    fprintf(stderr, "libsae: process_mgmt_frame failed\n");
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            printf("NL80211_CMD_NEW_STATION :)\n");
+            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_NEW_STATION :)\n");
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
-            printf("NL80211_CMD_NEW_SCAN_RESULTS\n");
+            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_NEW_SCAN_RESULTS\n");
             check_scan_results(&nlcfg);
             break;
         case NL80211_CMD_TRIGGER_SCAN:
-            printf("NL80211_CMD_TRIGGER_SCAN\n");
+            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_TRIGGER_SCAN\n");
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
-            printf("NL80211_CMD_TX_STATUS\n");
+            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_TX_STATUS\n");
             if (tb[NL80211_ATTR_ACK] && tb[NL80211_ATTR_FRAME]) {
                 hexdump("tx frame", (uint8_t *)nla_data(tb[NL80211_ATTR_FRAME]),
                         nla_len(tb[NL80211_ATTR_FRAME]));
             }
             break;
         default:
-            printf("Ignored event (%d)\n", gnlh->cmd);
+            sae_debug(SAE_DEBUG_MESHD,"Ignored event (%d)\n", gnlh->cmd);
             break;
     }
 
@@ -407,7 +413,6 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
     int ret;
     char *pret;
-    int ifindex = if_nametoindex(ifname);
 
     assert(rsn_ie[1] == sizeof(rsn_ie) - 2);
 
@@ -418,7 +423,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!mesh_id || !mesh_id_len)
         return -EINVAL;
 
-    printf("meshd: Staring mesh with mesh id = %s\n", mesh_id);
+    sae_debug(SAE_DEBUG_MESHD,"meshd: Staring mesh with mesh id = %s\n", mesh_id);
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
@@ -434,15 +439,14 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     NLA_PUT(msg, NL80211_MESH_SETUP_RSN_IE, sizeof(rsn_ie), rsn_ie);
     nla_nest_end(msg, container);
 
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, ifindex);
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mesh_id_len, mesh_id);
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
-        printf("Mesh start failed: %d (%s)\n", ret,
-                strerror(-ret));
+        fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
     else
-        printf("Mesh start succeeded.  Yay!\n");
+        sae_debug(SAE_DEBUG_MESHD,"Mesh start succeeded.  Yay!\n");
 
     return ret;
 nla_put_failure:

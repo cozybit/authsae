@@ -111,11 +111,6 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
     return NULL;
 }
 
-#ifndef MAC2STR
-#define MAC2STR(a) (a)[0]&0xff, (a)[1]&0xff, (a)[2]&0xff, (a)[3]&0xff, (a)[4]&0xff, (a)[5]&0xff
-#define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
-#endif
-
 static void hexdump(const char *label, const uint8_t *start, int len)
 {
     const uint8_t *pos;
@@ -238,10 +233,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             (IEEE802_11_FC_TYPE_MGMT << 2 |
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
-
-    sae_debug(SAE_DEBUG_MESHD,"meshd: " MACSTR " initiating"
-            " simultaneous authentication with " MACSTR "\n",
-            MAC2STR(nlcfg.mymacaddr), MAC2STR(bcn.sa));
 
     if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr))
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
@@ -371,6 +362,10 @@ static int event_handler(struct nl_msg *msg, void *arg)
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
+
+    /* Ignore events for other interfaces */
+    if (tb[NL80211_ATTR_IFINDEX] && nlcfg.ifindex != *(uint32_t *)nla_data(tb[NL80211_ATTR_IFINDEX]))
+        return NL_SKIP;
 
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:

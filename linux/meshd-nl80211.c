@@ -330,7 +330,6 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_and_recv(nlcfg->nl_sock, msg, scan_results_handler, &num);
-    sae_debug(SAE_DEBUG_MESHD,"got %d results\n", num);
     if (ret)
         sae_debug(SAE_DEBUG_MESHD,"Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -369,6 +368,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
 
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
+            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_FRAME\n");
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);

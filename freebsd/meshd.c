@@ -271,6 +271,22 @@ int meshd_write_mgmt (char *data, int len)
     return len;
 }
 
+/*
+ * fin()
+ *      sae has finished for the specified MAC address. If the reason
+ *      is because it was successful, there will be a key (PMK) to plumb
+ */
+void
+fin (unsigned short reason, unsigned char *mac, unsigned char *key, int keylen)
+{
+    printf("status of " MACSTR " is %d, ", MAC2STR(mac), reason);
+    if ((reason == 0) && (key != NULL) && (keylen > 0)) {
+        printf("plumb the %d byte key into the kernel now!\n", keylen);
+    } else {
+        printf("(an error)\n");
+    }
+}
+
 static void
 add_interface (unsigned char *ptr)
 {

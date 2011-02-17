@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source
- *  and binary forms, with or without modification, provided that the
+ *  Copyright holder grants permission for redistribution and use in source 
+ *  and binary forms, with or without modification, provided that the 
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *
+ *  
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -40,12 +40,10 @@
 #define _SAE_H_
 #include "ieee802_11.h"
 
-int sae_initialize(char *, char *);
-int process_mgmt_frame(struct ieee80211_mgmt_frame *, int, unsigned char *);
-void sae_read_config(int);
-void sae_dump_db (int);
-
-#define SAE_DEBUG_MESHD         0x20
-void sae_debug (int level, const char *fmt, ...);
+int sae_initialize(char *ssid, char *config_directory);
+int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len, 
+                       unsigned char *local_mac_addr);
+void sae_read_config(int signal);
+void sae_dump_db (int signal);
 
 #endif  /* _SAE_H_ */

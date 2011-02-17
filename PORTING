@@ -15,16 +15,51 @@ to manage socket interfaces and sae to manage timers. Replacement of
 service.[ch] with a different service model should be trivial. 
 
 os_glue.h defines the external API each <os>/meshd.c must have
-to allow SAE to use to send frames over the air.
+to allow SAE to use to send frames over the air. These are:
+
+  - int meshd_write_mgmt(char *frame, int len)
+
+	To send a management frame over the air
+
+  - void fin(unsigned short status, unsigned char *peer_mac, 
+	      unsigned char *key, int keylen)
+
+	To obtain notification of termination of sae. The status
+	is defined in ieee802_11.h and, if zero, a key will be
+	returned for the specified MAC address.
+
+	<os>/meshd.c must make a local copy of this key if it wants to
+	manipulate it for any reason.
 
 sae.h defines the routines each <os>/meshd.c must call to enable SAE
 authentication.
 
-  - sae_initialize() -- must be called first, before any processing
-    is done.
-  - process_mgmt_frame() -- send beacons and authentication frames
-    to SAE for processing.
-  - sae_read_config() -- if desired <os>/meshd.c can catch HUP with
-    this routine, or catch HUP itself and call this routine with
-    the signal if an sa_handler(int) action is not supported.
+  - int sae_initialize(char *ssid, char *config_directory)
+
+	This must be called first, before any processing is done. It
+	allows SAE to configure itself.
+
+  - int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len, 
+                           unsigned char *local_mac_addr);
+
+	Used to send beacons and authentiction frames to SAE for
+	processing.
+
+  - void sae_read_config(int signal)
+
+	This is a helper routine that can be used to catch HUP, or
+	<os>/meshd.c can catch HUP itself and call this routine
+	if an sa_handler(int) action is not supported by the OS.
+
+	It re-reads the SAE configuration without having to stop
+	and re-start meshd.
+
+void sae_dump_db (int signal);
+
+	This is a routine that can be used to catch USR1, or 
+	<os>/meshd.c can catch USR1 itself and call this routine
+	if an sa_handler(int) action is not supported by the OS.
+
+	This prints all peer instances and their current state of
+	negotiation.
 

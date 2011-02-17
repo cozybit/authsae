@@ -121,9 +121,10 @@ other or to ignore each other.
 
 KNOWN ISSUES
 
-The 802.11s draft will probably change. This implementation is based
-on anticipated changes to 4.0 that will become the basis of version 
-4.01.
+This implementation is based version 8.01 of IEEE 802.11s. The specification
+is pretty stable but It may change before final ratification.
+
+
 
 
 

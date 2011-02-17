@@ -39,6 +39,8 @@
 #ifndef _OS_GLUE_H_
 #define _OS_GLUE_H_
 
-int meshd_write_mgmt(char *, int);
+int meshd_write_mgmt(char *frame, int framelen);
+void fin(unsigned short reason, unsigned char *peer_mac, 
+         unsigned char *key, int keylen);
 
 #endif  /* _OS_GLUE_H_ */

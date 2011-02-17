@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source
- *  and binary forms, with or without modification, provided that the
+ *  Copyright holder grants permission for redistribution and use in source 
+ *  and binary forms, with or without modification, provided that the 
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *
+ *  
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -66,13 +66,17 @@ ieee_order (unsigned short x)                   /* if BE, byte-swap */
 #define IEEE802_11_FC_GET_TYPE(fc)  (((fc) & 0x000c) >> 2)
 #define IEEE802_11_FC_GET_STYPE(fc) (((fc) & 0x00f0) >> 4)
 
-#define WLAN_STATUS_ANTI_CLOGGING_TOKEN_NEEDED  52      /* anticpated value */
-#define WLAN_STATUS_NOT_SUPPORTED_GROUP         53      /*        ditto     */
+#define WLAN_STATUS_SUCCESSFUL                  0
+#define WLAN_STATUS_UNSPECIFIED_FAILURE         1
+#define WLAN_STATUS_AUTHENTICATION_TIMEOUT      16
+#define WLAN_STATUS_REQUEST_DECLINED            37
+#define WLAN_STATUS_ANTI_CLOGGING_TOKEN_NEEDED  76
+#define WLAN_STATUS_NOT_SUPPORTED_GROUP         77
 
-#define IEEE802_11_IE_SSID      0
-#define IEEE802_11_HDR_LEN 24
+#define IEEE802_11_IE_SSID                      0
+#define IEEE802_11_HDR_LEN                      24
 
-#define ETH_ALEN 6
+#define ETH_ALEN                                6
 
 /*
  * all we're interested in is mgmt frames of subtype beacon and auth,
@@ -92,7 +96,7 @@ struct ieee80211_mgmt_frame {
     unsigned short seq;
     union {
         struct {
-#define SAE_AUTH_ALG                    3       /* anticpated value */
+#define SAE_AUTH_ALG                    3
             unsigned short alg;
 #define SAE_AUTH_COMMIT                 1
 #define SAE_AUTH_CONFIRM                2

@@ -39,6 +39,7 @@
  */
 
 #include <unistd.h>
+#include <stdarg.h>
 #include <signal.h>
 #include <sys/select.h>
 #include <stdlib.h>
@@ -75,6 +76,16 @@ const char rsn_ie[0x14] = {0x30, /* RSN element ID */
                        /* optional capabilities omitted */
                        };
 
+static void
+debug_msg (const char *fmt, ...)
+{
+    va_list argptr;
+
+    va_start(argptr, fmt);
+    vfprintf(stderr, fmt, argptr);
+    va_end(argptr);
+}
+
 int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {
     int fd;
@@ -85,7 +96,7 @@ int get_mac_addr(const char * ifname, uint8_t *macaddr)
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
     if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
-        sae_debug(SAE_DEBUG_MESHD,"meshd: failed to read mac address for %s\n", ifname);
+        debug_msg("meshd: failed to read mac address for %s\n", ifname);
         perror("meshd");
         return -1;
     }
@@ -118,14 +129,14 @@ static void hexdump(const char *label, const uint8_t *start, int len)
     struct timeval now;
 
     gettimeofday(&now, NULL);
-    sae_debug(SAE_DEBUG_MESHD,"----------\n");
-    sae_debug(SAE_DEBUG_MESHD,"%s hexdump: %d.%d", label, now.tv_sec, now.tv_usec);
+    debug_msg("----------\n");
+    debug_msg("%s hexdump: %d.%d", label, now.tv_sec, now.tv_usec);
     pos = start;
     for (i=0; i<len; i++) {
-        if (!(i%20)) sae_debug(SAE_DEBUG_MESHD,"\n");
-        sae_debug(SAE_DEBUG_MESHD,"%02x ", *pos++);
+        if (!(i%20)) debug_msg("\n");
+        debug_msg("%02x ", *pos++);
     }
-    sae_debug(SAE_DEBUG_MESHD,"\n----------\n\n");
+    debug_msg("\n----------\n\n");
     fflush(stdout);
     return;
 }
@@ -163,7 +174,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
-        sae_debug(SAE_DEBUG_MESHD,"tx frame failed: %d (%s)\n", ret,
+        debug_msg("tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -174,6 +185,13 @@ int meshd_write_mgmt(char *buf, int len)
 {
     tx_frame(&nlcfg, buf, len);
     return len;
+}
+
+void fin(int status, char *peer, char *buf, int len)
+{
+    debug_msg("fin: %d, key len:%d\n", status, len);
+    if (!status)
+        hexdump("pmk", (unsigned char *)buf, len % 80);
 }
 
 
@@ -269,7 +287,7 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
-        sae_debug(SAE_DEBUG_MESHD,"Scan failed: %d (%s)\n", ret,
+        debug_msg("Scan failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -305,7 +323,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
                 fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
                         strerror(-ret));
         else
-                sae_debug(SAE_DEBUG_MESHD,"Registering for auth frames succeeded.  Yay!\n");
+                debug_msg("Registering for auth frames succeeded.  Yay!\n");
 
         return ret;
  nla_put_failure:
@@ -337,7 +355,7 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
 
     ret = send_and_recv(nlcfg->nl_sock, msg, scan_results_handler, &num);
     if (ret)
-        sae_debug(SAE_DEBUG_MESHD,"Scan results request failed: %d (%s)\n", ret,
+        debug_msg("Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -353,7 +371,7 @@ static void srv_timeout_wrapper(timerid t, void *data)
 
 static void usage(void)
 {
-    sae_debug(SAE_DEBUG_MESHD,"\n\n"
+    debug_msg("\n\n"
             "usage:\n"
             "  meshd-nl80211 [-B] [-i<ifname>]\n\n");
 }
@@ -375,7 +393,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
-                sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_FRAME\n");
+                debug_msg("NL80211_CMD_FRAME\n");
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (const uint8_t *) frame, frame_len);
@@ -384,24 +402,24 @@ static int event_handler(struct nl_msg *msg, void *arg)
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_NEW_STATION :)\n");
+            debug_msg("NL80211_CMD_NEW_STATION :)\n");
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
-            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_NEW_SCAN_RESULTS\n");
+            debug_msg("NL80211_CMD_NEW_SCAN_RESULTS\n");
             check_scan_results(&nlcfg);
             break;
         case NL80211_CMD_TRIGGER_SCAN:
-            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_TRIGGER_SCAN\n");
+            debug_msg("NL80211_CMD_TRIGGER_SCAN\n");
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
-            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_TX_STATUS\n");
+            debug_msg("NL80211_CMD_TX_STATUS\n");
             if (tb[NL80211_ATTR_ACK] && tb[NL80211_ATTR_FRAME]) {
                 hexdump("tx frame", (uint8_t *)nla_data(tb[NL80211_ATTR_FRAME]),
                         nla_len(tb[NL80211_ATTR_FRAME]));
             }
             break;
         default:
-            sae_debug(SAE_DEBUG_MESHD,"Ignored event (%d)\n", gnlh->cmd);
+            debug_msg("Ignored event (%d)\n", gnlh->cmd);
             break;
     }
 
@@ -424,7 +442,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!mesh_id || !mesh_id_len)
         return -EINVAL;
 
-    sae_debug(SAE_DEBUG_MESHD,"meshd: Staring mesh with mesh id = %s\n", mesh_id);
+    debug_msg("meshd: Staring mesh with mesh id = %s\n", mesh_id);
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
@@ -456,7 +474,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (ret)
         fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
     else
-        sae_debug(SAE_DEBUG_MESHD,"Mesh start succeeded.  Yay!\n");
+        debug_msg("Mesh start succeeded.  Yay!\n");
 
     return ret;
 nla_put_failure:

@@ -1054,7 +1054,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
             memcpy(addrs+ETH_ALEN, peer->peer_mac, ETH_ALEN);
         }
         H_Init(&ctx, addrs, (ETH_ALEN * 2));
-        H_Update(&ctx, grp->password, strlen(grp->password));
+        H_Update(&ctx, (unsigned char*)grp->password, strlen(grp->password));
         H_Update(&ctx, &ctr, sizeof(ctr));
         H_Final(&ctx, pwe_digest);
 

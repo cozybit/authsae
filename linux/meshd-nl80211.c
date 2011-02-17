@@ -374,8 +374,8 @@ static int event_handler(struct nl_msg *msg, void *arg)
 
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
-            sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_FRAME\n");
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
+                sae_debug(SAE_DEBUG_MESHD,"NL80211_CMD_FRAME\n");
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (const uint8_t *) frame, frame_len);
@@ -432,6 +432,15 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
         goto nla_put_failure;
 
     struct nlattr *container = nla_nest_start(msg,
+            NL80211_ATTR_MESH_CONFIG);
+
+    if (!container)
+        return -ENOBUFS;
+
+    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
+    nla_nest_end(msg, container);
+
+    container = nla_nest_start(msg,
             NL80211_ATTR_MESH_SETUP);
 
     if (!container)

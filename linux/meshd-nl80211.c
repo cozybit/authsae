@@ -49,6 +49,7 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 
 #include "nlutils.h"
 
@@ -115,9 +116,11 @@ static void hexdump(const char *label, const uint8_t *start, int len)
 {
     const uint8_t *pos;
     int i;
+    struct timeval now;
 
+    gettimeofday(&now, NULL);
     sae_debug(SAE_DEBUG_MESHD,"----------\n");
-    sae_debug(SAE_DEBUG_MESHD,"%s hexdump: ", label);
+    sae_debug(SAE_DEBUG_MESHD,"%s hexdump: %d.%d", label, now.tv_sec, now.tv_usec);
     pos = start;
     for (i=0; i<len; i++) {
         if (!(i%20)) sae_debug(SAE_DEBUG_MESHD,"\n");

@@ -122,9 +122,9 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
     return NULL;
 }
 
-static void hexdump(const char *label, const uint8_t *start, int len)
+static void hexdump(const char *label, const char *start, int len)
 {
-    const uint8_t *pos;
+    const char *pos;
     int i;
     struct timeval now;
 
@@ -134,7 +134,7 @@ static void hexdump(const char *label, const uint8_t *start, int len)
     pos = start;
     for (i=0; i<len; i++) {
         if (!(i%20)) debug_msg("\n");
-        debug_msg("%02x ", *pos++);
+        debug_msg("%02x ", (unsigned char) *pos++);
     }
     debug_msg("\n----------\n\n");
     fflush(stdout);
@@ -176,6 +176,8 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
     if (ret)
         debug_msg("tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
+    else
+        hexdump("tx frame", frame, len);
     return ret;
 nla_put_failure:
     return -ENOBUFS;
@@ -191,7 +193,7 @@ void fin(int status, char *peer, char *buf, int len)
 {
     debug_msg("fin: %d, key len:%d\n", status, len);
     if (!status)
-        hexdump("pmk", (unsigned char *)buf, len % 80);
+        hexdump("pmk", buf, len % 80);
 }
 
 
@@ -213,7 +215,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         [NL80211_BSS_SEEN_MS_AGO] = { .type = NLA_U32 },
         [NL80211_BSS_BEACON_IES] = { .type = NLA_UNSPEC },
     };
-    int *num = (int *) arg;
     const uint8_t *ie;
     size_t ie_len;
     struct ieee80211_mgmt_frame bcn;
@@ -221,7 +222,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     /* check that all the required info exists: source address
      * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
      * */
-
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
 
@@ -256,8 +256,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
 
     if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr))
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
-
-    (*num)++;
 
     return NL_SKIP;
 }
@@ -330,14 +328,12 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
         return -ENOBUFS;
 }
 
-static int check_scan_results(struct netlink_config_s *nlcfg)
+static int request_scan_results(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_GET_SCAN;
     int ret;
     char *pret;
-    int num = 0;
-
 
     assert(nlcfg);
 
@@ -353,7 +349,7 @@ static int check_scan_results(struct netlink_config_s *nlcfg)
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
-    ret = send_and_recv(nlcfg->nl_sock, msg, scan_results_handler, &num);
+    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)
         debug_msg("Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -396,27 +392,30 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 debug_msg("NL80211_CMD_FRAME\n");
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
-                hexdump("rx frame", (const uint8_t *) frame, frame_len);
+                hexdump("rx frame", (char *)frame, frame_len);
                 if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr))
                     fprintf(stderr, "libsae: process_mgmt_frame failed\n");
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            debug_msg("NL80211_CMD_NEW_STATION :)\n");
+            debug_msg("NL80211_CMD_NEW_STATION\n");
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
             debug_msg("NL80211_CMD_NEW_SCAN_RESULTS\n");
-            check_scan_results(&nlcfg);
+            if (tb[NL80211_ATTR_GENERATION])
+                /* scan results received */
+                return scan_results_handler(msg, arg);
+            else
+                /* scan done */
+                request_scan_results(&nlcfg);
             break;
         case NL80211_CMD_TRIGGER_SCAN:
             debug_msg("NL80211_CMD_TRIGGER_SCAN\n");
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
             debug_msg("NL80211_CMD_TX_STATUS\n");
-            if (tb[NL80211_ATTR_ACK] && tb[NL80211_ATTR_FRAME]) {
-                hexdump("tx frame", (uint8_t *)nla_data(tb[NL80211_ATTR_FRAME]),
-                        nla_len(tb[NL80211_ATTR_FRAME]));
-            }
+            if (!tb[NL80211_ATTR_ACK] || !tb[NL80211_ATTR_FRAME])
+                debug_msg("tx frame failed!");
             break;
         default:
             debug_msg("Ignored event (%d)\n", gnlh->cmd);

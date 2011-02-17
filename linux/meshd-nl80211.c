@@ -246,13 +246,15 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
 
 static int trigger_scan(struct netlink_config_s *nlcfg)
 {
-    struct nl_msg *msg;
+    struct nl_msg *msg, *freqs;
     uint8_t cmd = NL80211_CMD_TRIGGER_SCAN;
     int ret;
     char *pret;
 
     msg = nlmsg_alloc();
-    if (!msg)
+    freqs = nlmsg_alloc();
+
+    if (!msg || !freqs)
         return -ENOMEM;
 
     pret = genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0,
@@ -262,6 +264,8 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
         goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT_U32(freqs, 1, CHANNEL_1_FREQ);
+    nla_put_nested(msg, NL80211_ATTR_SCAN_FREQUENCIES, freqs);
 
     ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
     if (ret)

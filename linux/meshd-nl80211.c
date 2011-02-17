@@ -71,10 +71,9 @@ const char rsn_ie[0x14] = {0x30, /* RSN element ID */
                        0x1, 0x0,             /* pairwise suite count */
                        0x0, 0x0F, 0xAC, 0x4, /* CCMP for pairwise cipher suite */
                        0x1, 0x0,             /* authentication suite count */
-                       0x0, 0x0F, 0xAC, 0x4, /* SAE for authentication */
+                       0x0, 0x0F, 0xAC, 0x8, /* SAE for authentication */
                        /* optional capabilities omitted */
                        };
-
 
 int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {

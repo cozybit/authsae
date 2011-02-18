@@ -195,7 +195,7 @@ int meshd_write_mgmt(char *buf, int len)
 void fin(int status, char *peer, char *buf, int len)
 {
     debug_msg("fin: %d, key len:%d\n", status, len);
-    if (!status)
+    if (!status && len)
         hexdump("pmk", buf, len % 80);
 }
 

@@ -39,6 +39,7 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
 {
     int *ret = arg;
     *ret = err->error;
+    fprintf(stderr, "nl error handler called\n");
     return NL_SKIP;
 }
 
@@ -154,6 +155,8 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler)
 	int ret;
     struct nl_cb *cb;
 
+    //nl_debug = 4;
+
     /* Allocate nl socket for commands with default callback */
 	nlcfg->nl_sock = nl_socket_alloc();
 	if (nlcfg->nl_sock == NULL) {
@@ -185,6 +188,16 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler)
 		printf("Failed to connect events to generic netlink");
 		goto err3;
 	}
+
+    /* Increase the default buffer size on both sockets */
+#define NL_SOCKET_BUFFER_SIZE   (1024 * 256)
+    ret = nl_socket_set_buffer_size(nlcfg->nl_sock_event, NL_SOCKET_BUFFER_SIZE, NL_SOCKET_BUFFER_SIZE);
+    if (ret)
+        fprintf(stderr, "nl_socket_set_buffer_size failed with error %d, errno %d)\n", ret, errno);
+
+    ret = nl_socket_set_buffer_size(nlcfg->nl_sock, NL_SOCKET_BUFFER_SIZE, NL_SOCKET_BUFFER_SIZE);
+    if (ret)
+        fprintf(stderr, "nl_socket_set_buffer_size failed with error %d, errno %d)\n", ret, errno);
 
     /* Allocate caches for each socket */
 	if (genl_ctrl_alloc_cache(nlcfg->nl_sock, &nlcfg->nl_cache) < 0) {

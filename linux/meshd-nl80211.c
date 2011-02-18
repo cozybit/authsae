@@ -143,8 +143,11 @@ static void hexdump(const char *label, const char *start, int len)
 
 static void srv_handler_wrapper(int fd, void *data)
 {
-    if (nl_recvmsgs_default((struct nl_sock *) data))
-        fprintf(stderr, "nl_recvmsgs_default error\n");
+    int err;
+    if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0) {
+        fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
+        perror("srv_handler_wrapper()\n");
+    }
     fflush(stdout);
 }
 

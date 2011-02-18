@@ -285,6 +285,7 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT_U32(freqs, 1, CHANNEL_1_FREQ);
     nla_put_nested(msg, NL80211_ATTR_SCAN_FREQUENCIES, freqs);
+    nlmsg_free(freqs);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)

@@ -42,8 +42,23 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
     return NL_SKIP;
 }
 
+int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg)
+{
+        struct nl_cb *cb;
+        int err = -ENOMEM;
 
-int send_and_recv(struct nl_sock *nl_sock, struct nl_msg *msg,
+        cb = nl_cb_clone(nl_socket_get_cb(nl_sock));
+        if (!cb)
+                goto out;
+
+        err = nl_send_auto_complete(nl_sock, msg);
+ out:
+        nl_cb_put(cb);
+        nlmsg_free(msg);
+        return err;
+}
+
+static int send_and_recv(struct nl_sock *nl_sock, struct nl_msg *msg,
                          int (*valid_handler)(struct nl_msg *, void *),
                          void *valid_data)
 {

@@ -45,6 +45,4 @@ struct netlink_config_s {
 };
 
 int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);
-int send_and_recv(struct nl_sock *nl_sock, struct nl_msg *msg,
-                         int (*valid_handler)(struct nl_msg *, void *),
-                         void *valid_data);
+int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg);

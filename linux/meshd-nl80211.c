@@ -172,8 +172,8 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
     NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, CHANNEL_1_FREQ);
     NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
 
-    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
-    if (ret)
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
         debug_msg("tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     else
@@ -283,8 +283,8 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(freqs, 1, CHANNEL_1_FREQ);
     nla_put_nested(msg, NL80211_ATTR_SCAN_FREQUENCIES, freqs);
 
-    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
-    if (ret)
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
         debug_msg("Scan failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
@@ -316,12 +316,12 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
         NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
         NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
 
-        ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
-        if (ret)
+        ret = send_nlmsg(nlcfg->nl_sock, msg);
+        if (ret < 0)
                 fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
                         strerror(-ret));
         else
-                debug_msg("Registering for auth frames succeeded.  Yay!\n");
+            ret = 0;
 
         return ret;
  nla_put_failure:
@@ -349,8 +349,8 @@ static int request_scan_results(struct netlink_config_s *nlcfg)
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
-    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
-    if (ret)
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
         debug_msg("Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
@@ -469,11 +469,11 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mesh_id_len, mesh_id);
 
-    ret = send_and_recv(nlcfg->nl_sock, msg, NULL, NULL);
-    if (ret)
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
         fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
     else
-        debug_msg("Mesh start succeeded.  Yay!\n");
+        ret = 0;
 
     return ret;
 nla_put_failure:

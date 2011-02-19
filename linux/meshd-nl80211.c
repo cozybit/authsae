@@ -382,6 +382,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct ieee80211_mgmt_frame *frame;
     int frame_len;
+    struct timeval now;
+
+    gettimeofday(&now, NULL);
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
@@ -393,7 +396,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
-                debug_msg("NL80211_CMD_FRAME\n");
+                debug_msg("NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (char *)frame, frame_len);
@@ -402,22 +405,23 @@ static int event_handler(struct nl_msg *msg, void *arg)
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            debug_msg("NL80211_CMD_NEW_STATION\n");
+            debug_msg("NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
-            debug_msg("NL80211_CMD_NEW_SCAN_RESULTS\n");
-            if (tb[NL80211_ATTR_GENERATION])
-                /* scan results received */
+            debug_msg("NL80211_CMD_NEW_SCAN_RESULTS (%d.%d)\n", now.tv_sec, now.tv_usec);
+            if (tb[NL80211_ATTR_GENERATION]) {
+                debug_msg("retrieving results...\n");
                 return scan_results_handler(msg, arg);
-            else
-                /* scan done */
+            } else {
+                debug_msg("requesting results\n");
                 request_scan_results(&nlcfg);
+            }
             break;
         case NL80211_CMD_TRIGGER_SCAN:
-            debug_msg("NL80211_CMD_TRIGGER_SCAN\n");
+            debug_msg("NL80211_CMD_TRIGGER_SCAN (%d.%d)\n", now.tv_sec, now.tv_usec);
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
-            debug_msg("NL80211_CMD_TX_STATUS\n");
+            debug_msg("NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
             if (!tb[NL80211_ATTR_ACK] || !tb[NL80211_ATTR_FRAME])
                 debug_msg("tx frame failed!");
             break;

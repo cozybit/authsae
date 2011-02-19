@@ -365,7 +365,7 @@ nla_put_failure:
 static void srv_timeout_wrapper(timerid t, void *data)
 {
     trigger_scan(data);
-    srv_add_timeout(srvctx, SRV_SEC(10), srv_timeout_wrapper, data);
+    srv_add_timeout(srvctx, SRV_SEC(60), srv_timeout_wrapper, data);
     return;
 }
 

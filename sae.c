@@ -460,8 +460,8 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
              sizeof(unsigned short));
 
         /* peer's scalar */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
+    memset(tmp, 0, offset);
     BN_bn2bin(peer->peer_scalar, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
@@ -473,18 +473,18 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         return ERR_NOT_FATAL;
     }
         /* peer's element */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
         /* my scalar */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
+    memset(tmp, 0, offset);
     BN_bn2bin(peer->my_scalar, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
@@ -496,12 +496,12 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         return ERR_NOT_FATAL;
     }
         /* my element */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
@@ -571,8 +571,8 @@ confirm_to_peer (struct candidate *peer)
     CN_Update(&ctx, (unsigned char *)&send_conf, sizeof(unsigned short));
 
         /* my scalar */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
+    memset(tmp, 0, offset);
     BN_bn2bin(peer->my_scalar, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
@@ -583,18 +583,18 @@ confirm_to_peer (struct candidate *peer)
         return -1;
     }
         /* my element */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
         /* peer's scalar */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
+    memset(tmp, 0, offset);
     BN_bn2bin(peer->peer_scalar, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
@@ -605,12 +605,12 @@ confirm_to_peer (struct candidate *peer)
         return -1;
     }
         /* peer's element */
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
-    memset(tmp, 0, sizeof(tmp));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
@@ -763,8 +763,8 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     /*
      * first extract the entropy from k into keyseed...
      */
-    memset(tmp, 0, BN_num_bytes(peer->grp_def->prime));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(k);
+    memset(tmp, 0, offset);
     BN_bn2bin(k, tmp + offset);
     H_Init(&ctx, allzero, SHA256_DIGEST_LENGTH);
     H_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
@@ -781,8 +781,8 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     }
     BN_add(nsum, peer->my_scalar, peer->peer_scalar);
     BN_mod(nsum, nsum, peer->grp_def->order, bnctx);
-    memset(tmp, 0, BN_num_bytes(peer->grp_def->order));
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(nsum);
+    memset(tmp, 0, offset);
     BN_bn2bin(nsum, tmp + offset);
 
     prf(keyseed, SHA256_DIGEST_LENGTH,

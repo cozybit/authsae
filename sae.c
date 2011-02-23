@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -109,7 +109,7 @@ typedef struct group_def_ {
 struct candidate {
     TAILQ_ENTRY(candidate) entry;
     GD *grp_def;
-    EC_POINT *pwe;                           
+    EC_POINT *pwe;
     unsigned char pmk[SHA256_DIGEST_LENGTH];
     unsigned char kck[SHA256_DIGEST_LENGTH];
     BIGNUM *private_val;
@@ -119,13 +119,13 @@ struct candidate {
     EC_POINT *my_element;
     unsigned long beacons;
     unsigned int failed_auth;
-    timerid t0;                           
+    timerid t0;
     timerid t1;
 #define SAE_NOTHING             0
 #define SAE_COMMITTED           1
 #define SAE_CONFIRMED           2
 #define SAE_ACCEPTED            3
-    unsigned short state;                           
+    unsigned short state;
     unsigned short got_token;
     unsigned short sync;
     unsigned short sc;
@@ -245,11 +245,12 @@ prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
         HMAC_CTX_cleanup(&ctx);
     } while (len < resultlen);
     /*
-     * since we're expanding to a bit length, mask off the excess
+     * we're expanding to a bit length, if this is not a
+     * multiple of 8 bits then mask off the excess.
      */
     if (resultbitlen % 8) {
-        mask >>= ((resultlen * 8) - resultbitlen);
-        result[0] &= mask;
+        mask <<= (8 - (resultbitlen % 8));
+        result[resultlen - 1] &= mask;
     }
     return resultlen;
 }
@@ -292,7 +293,7 @@ delete_peer (struct candidate **delme)
 
     TAILQ_FOREACH(peer, &peers, entry) {
         if (memcmp(*delme, peer, sizeof(struct candidate)) == 0) {
-            sae_debug(SAE_DEBUG_PROTOCOL_MSG, "deleting peer at " MACSTR " in state %s\n", 
+            sae_debug(SAE_DEBUG_PROTOCOL_MSG, "deleting peer at " MACSTR " in state %s\n",
                       MAC2STR(peer->peer_mac), state_to_string(peer->state));
             if ((peer->state == SAE_COMMITTED) || (peer->state == SAE_CONFIRMED)) {
                 curr_open--;
@@ -360,7 +361,7 @@ find_peer (unsigned char *mac, int accept)
             /*
              * if "accept" then we're only looking for peers in "accepted" state
              */
-            if (accept) { 
+            if (accept) {
                 if (peer->state == SAE_ACCEPTED) {
                     return peer;
                 }
@@ -435,6 +436,7 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     BIGNUM *x, *y;
     EC_POINT *psum;
     HMAC_CTX ctx;
+    int offset;
 
     if (len != (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) + SHA256_DIGEST_LENGTH)) {
         sae_debug(SAE_DEBUG_ERR, "bad size of confirm message (%d)\n", len);
@@ -451,14 +453,17 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     peer->rc = ieee_order(*((unsigned short *)frame->authenticate.variable));
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "processing confirm (%d)\n", peer->rc);
-    /* 
+    /*
      * compute the confirm verifier using the over-the-air format of send_conf
      */
-    CN_Update(&ctx, (unsigned char *)&frame->authenticate.variable, 
-             sizeof(unsigned short));  
+    CN_Update(&ctx, (unsigned char *)&frame->authenticate.variable,
+             sizeof(unsigned short));
 
-    BN_bn2bin(peer->peer_scalar, tmp);    /* peer's scalar */
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->peer_scalar));
+        /* peer's scalar */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
+    BN_bn2bin(peer->peer_scalar, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->peer_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of peer's element\n");
@@ -467,13 +472,21 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         EC_POINT_free(psum);
         return ERR_NOT_FATAL;
     }
-    BN_bn2bin(x, tmp);                  /* peer's element */
-    CN_Update(&ctx, tmp, BN_num_bytes(x));
-    BN_bn2bin(y, tmp);
-    CN_Update(&ctx, tmp, BN_num_bytes(y));
+        /* peer's element */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    BN_bn2bin(x, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    BN_bn2bin(y, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
-    BN_bn2bin(peer->my_scalar, tmp);    /* my scalar */
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->my_scalar));
+        /* my scalar */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
+    BN_bn2bin(peer->my_scalar, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->my_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of my element\n");
@@ -482,10 +495,15 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         EC_POINT_free(psum);
         return ERR_NOT_FATAL;
     }
-    BN_bn2bin(x, tmp);                  /* my element */
-    CN_Update(&ctx, tmp, BN_num_bytes(x));
-    BN_bn2bin(y, tmp);
-    CN_Update(&ctx, tmp, BN_num_bytes(y));
+        /* my element */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    BN_bn2bin(x, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    BN_bn2bin(y, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
     CN_Final(&ctx, tmp);
 
@@ -515,10 +533,11 @@ confirm_to_peer (struct candidate *peer)
     char buf[2048];
     unsigned char tmp[128];
     struct ieee80211_mgmt_frame *frame;
-    size_t len = 0; 
+    size_t len = 0;
     BIGNUM *x, *y;
     HMAC_CTX ctx;
     unsigned short send_conf;
+    int offset;
 
     if (((x = BN_new()) == NULL) ||
         ((y = BN_new()) == NULL)) {
@@ -551,8 +570,11 @@ confirm_to_peer (struct candidate *peer)
     /* send_conf is in over-the-air format now */
     CN_Update(&ctx, (unsigned char *)&send_conf, sizeof(unsigned short));
 
-    BN_bn2bin(peer->my_scalar, tmp);    /* my scalar */
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->my_scalar));
+        /* my scalar */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
+    BN_bn2bin(peer->my_scalar, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->my_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of my element\n");
@@ -560,13 +582,21 @@ confirm_to_peer (struct candidate *peer)
         BN_free(y);
         return -1;
     }
-    BN_bn2bin(x, tmp);                  /* my element */
-    CN_Update(&ctx, tmp, BN_num_bytes(x));
-    BN_bn2bin(y, tmp);
-    CN_Update(&ctx, tmp, BN_num_bytes(y));
+        /* my element */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    BN_bn2bin(x, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    BN_bn2bin(y, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
-    BN_bn2bin(peer->peer_scalar, tmp);    /* peer's scalar */
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->peer_scalar));
+        /* peer's scalar */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
+    BN_bn2bin(peer->peer_scalar, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->peer_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of peer's element\n");
@@ -574,10 +604,16 @@ confirm_to_peer (struct candidate *peer)
         BN_free(y);
         return -1;
     }
-    BN_bn2bin(x, tmp);                  /* peer element */
-    CN_Update(&ctx, tmp, BN_num_bytes(x));
-    BN_bn2bin(y, tmp);
-    CN_Update(&ctx, tmp, BN_num_bytes(y));
+        /* peer's element */
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
+    BN_bn2bin(x, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    memset(tmp, 0, sizeof(tmp));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
+    BN_bn2bin(y, tmp + offset);
+    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+
     CN_Final(&ctx, (frame->authenticate.variable + sizeof(unsigned short)));
 
     if (debug & SAE_DEBUG_CRYPTO_VERB) {
@@ -589,7 +625,7 @@ confirm_to_peer (struct candidate *peer)
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "in %s, sending %s (sc=%d), len %d\n",
-              state_to_string(peer->state), 
+              state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               peer->sc, len);
     if (meshd_write_mgmt(buf, len) != len) {
@@ -607,7 +643,7 @@ static int
 process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int len)
 {
     BIGNUM *x, *y, *k, *nsum;
-    int itemsize, ret = 0;
+    int offset, itemsize, ret = 0;
     EC_POINT *K;
     unsigned char *ptr, *tmp, keyseed[SHA256_DIGEST_LENGTH], kckpmk[(SHA256_DIGEST_LENGTH * 2) * 8];
     HMAC_CTX ctx;
@@ -619,7 +655,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
                 (2 * BN_num_bytes(peer->grp_def->prime)) + BN_num_bytes(peer->grp_def->order))) {
         sae_debug(SAE_DEBUG_ERR, "invalid size for commit message (%d < %d+%d+(2*%d)+%d = %d))\n", len,
                   IEEE802_11_HDR_LEN, sizeof(frame->authenticate), BN_num_bytes(peer->grp_def->prime),
-                  BN_num_bytes(peer->grp_def->order), 
+                  BN_num_bytes(peer->grp_def->order),
                   (IEEE802_11_HDR_LEN+sizeof(frame->authenticate)+
                    (2*BN_num_bytes(peer->grp_def->prime)) + BN_num_bytes(peer->grp_def->order)));
         return -1;
@@ -719,7 +755,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     /*
      * compute the KCK and PMK
      */
-    if ((tmp = (unsigned char *)malloc(BN_num_bytes(k))) == NULL) {
+    if ((tmp = (unsigned char *)malloc(BN_num_bytes(peer->grp_def->prime))) == NULL) {
         sae_debug(SAE_DEBUG_ERR, "unable to malloc %d bytes for secret!\n",
                   BN_num_bytes(k));
         goto fail;
@@ -727,9 +763,11 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     /*
      * first extract the entropy from k into keyseed...
      */
-    BN_bn2bin(k, tmp);
+    memset(tmp, 0, BN_num_bytes(peer->grp_def->prime));
+    offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(k);
+    BN_bn2bin(k, tmp + offset);
     H_Init(&ctx, allzero, SHA256_DIGEST_LENGTH);
-    H_Update(&ctx, tmp, BN_num_bytes(k));
+    H_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     H_Final(&ctx, keyseed);
     free(tmp);
 
@@ -743,11 +781,13 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     }
     BN_add(nsum, peer->my_scalar, peer->peer_scalar);
     BN_mod(nsum, nsum, peer->grp_def->order, bnctx);
-    BN_bn2bin(nsum, tmp);
+    memset(tmp, 0, BN_num_bytes(peer->grp_def->order));
+    offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(nsum);
+    BN_bn2bin(nsum, tmp + offset);
 
-    prf(keyseed, SHA256_DIGEST_LENGTH, 
+    prf(keyseed, SHA256_DIGEST_LENGTH,
         (unsigned char *)"SAE KCK and PMK", strlen("SAE KCK and PMK"),
-        tmp, BN_num_bytes(peer->grp_def->order), 
+        tmp, BN_num_bytes(peer->grp_def->order),
         kckpmk, ((SHA256_DIGEST_LENGTH * 2) * 8));
     free(tmp);
     BN_free(nsum);
@@ -757,7 +797,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
 
     if (debug & SAE_DEBUG_CRYPTO_VERB) {
         pp_a_bignum("k", k);
-        print_buffer("keyseed:", keyseed, SHA256_DIGEST_LENGTH);
+        print_buffer("keyseed", keyseed, SHA256_DIGEST_LENGTH);
         print_buffer("KCK", peer->kck, SHA256_DIGEST_LENGTH);
         print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
     }
@@ -818,7 +858,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
     }
 
     if (peer->private_val == NULL) {
-        if (((mask = BN_new()) == NULL) || 
+        if (((mask = BN_new()) == NULL) ||
             ((peer->private_val = BN_new()) == NULL)) {
             sae_debug(SAE_DEBUG_ERR, "unable to commit to peer!\n");
             return -1;
@@ -896,8 +936,8 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
     len += (2 * BN_num_bytes(peer->grp_def->prime));
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "in %s, sending %s (%s token), len %d, group %d\n",
-              state_to_string(peer->state), 
-              seq_to_string(ieee_order(frame->authenticate.auth_seq)), 
+              state_to_string(peer->state),
+              seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               (token_len ? "with" : "no"), len,
               peer->grp_def->group_num);
     BN_free(x);
@@ -937,7 +977,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me)
     H_Update(&ctx, me, ETH_ALEN);
     H_Final(&ctx, frame->authenticate.variable);
     len += SHA256_DIGEST_LENGTH;
-    
+
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
     if (meshd_write_mgmt(buf, len) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send a rejection frame to " MACSTR "\n",
@@ -998,13 +1038,13 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
     /*
      * allow for replacement of group....
      */
-    EC_POINT_free(peer->pwe); 
+    EC_POINT_free(peer->pwe);
     peer->pwe = NULL;
-    EC_POINT_free(peer->peer_element); 
+    EC_POINT_free(peer->peer_element);
     peer->peer_element = NULL;
-    EC_POINT_free(peer->my_element); 
+    EC_POINT_free(peer->my_element);
     peer->my_element = NULL;
-    BN_free(peer->private_val); 
+    BN_free(peer->private_val);
     peer->private_val = NULL;
 
     if (((rnd = BN_new()) == NULL) ||
@@ -1038,7 +1078,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
     ctr = 0;
     while (1) {
         if (ctr > 16) {
-            EC_POINT_free(peer->pwe); 
+            EC_POINT_free(peer->pwe);
             peer->pwe = NULL;
             break;
         }
@@ -1054,7 +1094,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
             memcpy(addrs+ETH_ALEN, peer->peer_mac, ETH_ALEN);
         }
         H_Init(&ctx, addrs, (ETH_ALEN * 2));
-        H_Update(&ctx, (unsigned char*)grp->password, strlen(grp->password));
+        H_Update(&ctx, (unsigned char *) grp->password, strlen(grp->password));
         H_Update(&ctx, &ctr, sizeof(ctr));
         H_Final(&ctx, pwe_digest);
 
@@ -1070,11 +1110,23 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         }
 
         BN_bin2bn(pwe_digest, SHA256_DIGEST_LENGTH, rnd);
-        prf(pwe_digest, SHA256_DIGEST_LENGTH, 
+        prf(pwe_digest, SHA256_DIGEST_LENGTH,
             (unsigned char *)"SAE Hunting and Pecking", strlen("SAE Hunting and Pecking"),
             primebuf, BN_num_bytes(grp->prime),
             prfbuf, primebitlen);
         BN_bin2bn(prfbuf, BN_num_bytes(grp->prime), x_candidate);
+        /*
+         * prf() returns a string of bits 0..primebitlen, but BN_bin2bn will
+         * treat that string of bits as a big-endian number. If the primebitlen
+         * is not an even multiple of 8 we masked off the excess bits-- those
+         * _after_ primebitlen-- in prf() so now interpreting this as a
+         * big-endian number is wrong. We have to shift right the amount we
+         * masked off.
+         */
+        if (primebitlen % 8) {
+            BN_rshift(x_candidate, x_candidate, (8 - (primebitlen % 8)));
+        }
+
         /*
          * if this candidate value is greater than the prime then try again
          */
@@ -1083,6 +1135,8 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         }
 
         if (debug & SAE_DEBUG_CRYPTO_VERB) {
+            memset(prfbuf, 0, BN_num_bytes(grp->prime));
+            BN_bn2bin(x_candidate, prfbuf + (BN_num_bytes(grp->prime) - BN_num_bytes(x_candidate)));
             print_buffer("candidate x value", prfbuf, BN_num_bytes(grp->prime));
         }
 
@@ -1125,9 +1179,11 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
             ((py = BN_new()) != NULL)) {
             if (EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->pwe, px, py, bnctx)) {
                 printf("PWE (x,y):\n");
-                BN_bn2bin(px, prfbuf);
+                memset(prfbuf, 0, BN_num_bytes(grp->prime));
+                BN_bn2bin(px, prfbuf + (BN_num_bytes(grp->prime) - BN_num_bytes(px)));
                 print_buffer("x", prfbuf, BN_num_bytes(grp->prime));
-                BN_bn2bin(py, prfbuf);
+                memset(prfbuf, 0, BN_num_bytes(grp->prime));
+                BN_bn2bin(py, prfbuf + (BN_num_bytes(grp->prime) - BN_num_bytes(py)));
                 print_buffer("y", prfbuf, BN_num_bytes(grp->prime));
             }
             BN_free(px);
@@ -1141,7 +1197,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
     BN_free(rnd);
 
     if (peer->pwe == NULL) {
-        sae_debug(SAE_DEBUG_ERR, "unable to find random point on curve for group %d, something's fishy!\n", 
+        sae_debug(SAE_DEBUG_ERR, "unable to find random point on curve for group %d, something's fishy!\n",
                   grp->group_num);
         return -1;
     }
@@ -1251,7 +1307,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
     enum result ret;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "recv'd %s from " MACSTR " while in %s\n",
-              seq_to_string(seq), MAC2STR(frame->sa), 
+              seq_to_string(seq), MAC2STR(frame->sa),
               state_to_string(peer->state));
 
     srv_rem_timeout(srvctx, peer->t0);
@@ -1328,7 +1384,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      * guards against bad implementations.
                      */
                     if (status == WLAN_STATUS_ANTI_CLOGGING_TOKEN_NEEDED) {
-                        sae_debug(SAE_DEBUG_STATE_MACHINE, 
+                        sae_debug(SAE_DEBUG_STATE_MACHINE,
                                   "received a token request, add a token, length %d, and resend commit\n",
                                   (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
                         commit_to_peer(peer, frame->authenticate.variable,
@@ -1358,13 +1414,13 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                              * otherwise assign the next group and send another commit
                              */
                             group_def = peer->grp_def->next;
-                            sae_debug(SAE_DEBUG_STATE_MACHINE, "peer rejected %d, try group %d instead...\n", 
+                            sae_debug(SAE_DEBUG_STATE_MACHINE, "peer rejected %d, try group %d instead...\n",
                                       peer->grp_def->group_num, group_def->group_num);
                             assign_group_to_peer(peer, group_def);
                             commit_to_peer(peer, NULL, 0);
                             peer->sync = 0;
                         } else {
-                            sae_debug(SAE_DEBUG_STATE_MACHINE, 
+                            sae_debug(SAE_DEBUG_STATE_MACHINE,
                                       "peer is rejecting something (%d) not offered, must be old, ignore...\n", grp);
                         }
                         peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
@@ -1407,10 +1463,10 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                          * OK, this is not what we offered but it's aceptable...
                          */
                         if (memcmp(peer->my_mac, peer->peer_mac, ETH_ALEN) > 0) {
-                            sae_debug(SAE_DEBUG_STATE_MACHINE, 
+                            sae_debug(SAE_DEBUG_STATE_MACHINE,
                                       "offered group %d, got %d in return, numerically greater, maintain.\n",
                                       peer->grp_def->group_num, grp);
-                                   
+
                             /*
                              * the numerically greater MAC address retransmits
                              */
@@ -1423,7 +1479,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                                       peer->grp_def->group_num, grp);
                             /*
                              * the numerically lesser converts, send a commit with
-                             * this group and then just proceed with the acceptable 
+                             * this group and then just proceed with the acceptable
                              * commit
                              */
                             peer->sync = 0;
@@ -1545,7 +1601,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      * must've lost our confirm, check if it's old or invalid,
                      * if neither send confirm again....
                      */
-                    if (check_confirm(peer, frame) && 
+                    if (check_confirm(peer, frame) &&
                         (process_confirm(peer, frame, len) >= 0)) {
                         sae_debug(SAE_DEBUG_STATE_MACHINE, "resending CONFIRM...\n");
                         peer->sync++;
@@ -1559,7 +1615,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
             }
             break;
     }
-    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n", 
+    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
               MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
     return NO_ERR;
 }
@@ -1595,7 +1651,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
     }
     if (group_def == NULL) {
         /*
-         * if the group isn't supported then there's no way we can truely 
+         * if the group isn't supported then there's no way we can truely
          * evaluate this frame, just check whether our token is there. If the
          * group isn't supported then at least we'll tell the peer of that fact
          * later and maybe we can come to some resolution after a few more exchanges.
@@ -1630,14 +1686,14 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
          * NB: if/when FFC groups are supported it won't be plus twice the prime, it'll just be
          * plus the length of the prime (an FFC element is not complex like an ECC element is).
          */
-        if (len != (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) + 
-                    SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) + 
+        if (len != (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) +
+                    SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) +
                     (2 * BN_num_bytes(group_def->prime)))) {
-            sae_debug(SAE_DEBUG_PROTOCOL_MSG, 
+            sae_debug(SAE_DEBUG_PROTOCOL_MSG,
                       "checking for token in offer of group %d but length is wrong: %d vs. %d\n",
-                      group_def->group_num, len, 
+                      group_def->group_num, len,
                       (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) +
-                       SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) + 
+                       SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) +
                        (2 * BN_num_bytes(group_def->prime))));
             return 1;
         }
@@ -1651,7 +1707,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
              */
              return -1;
         }
-    } 
+    }
     /*
      * found a token and it's good
      */
@@ -1659,7 +1715,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
 }
 
 /*
- * the "parent process" gets management frames as input and dispatches to 
+ * the "parent process" gets management frames as input and dispatches to
  * "protocol instances".
  */
 int
@@ -1726,7 +1782,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                     commit_to_peer(peer, NULL, 0);
                     peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
                     peer->state = SAE_COMMITTED;
-                    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n", 
+                    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
                               MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
                 }
                 break;
@@ -1735,7 +1791,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
         case IEEE802_11_FC_STYPE_AUTH:
             auth_alg = ieee_order(frame->authenticate.alg);
             if (auth_alg != SAE_AUTH_ALG) {
-                sae_debug(SAE_DEBUG_PROTOCOL_MSG, 
+                sae_debug(SAE_DEBUG_PROTOCOL_MSG,
                           "let kernel handle authenticate (%d) frame from " MACSTR " to " MACSTR "\n",
                           auth_alg, MAC2STR(frame->sa), MAC2STR(frame->da));
                 break;
@@ -1774,7 +1830,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                                 request_token(frame, me);
                                 return 0;
                             } else {
-                                sae_debug(SAE_DEBUG_ERR, "correct token received\n"); 
+                                sae_debug(SAE_DEBUG_ERR, "correct token received\n");
                             }
                         }
                         /*
@@ -1782,7 +1838,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                          * and the token was correct. In either case we create a protocol instance.
                          */
                         if ((peer = create_candidate(frame->sa, me, (curr_open >= open_threshold))) == NULL) {
-                            sae_debug(SAE_DEBUG_ERR, "can't malloc space for candidate from " MACSTR "\n", 
+                            sae_debug(SAE_DEBUG_ERR, "can't malloc space for candidate from " MACSTR "\n",
                                       MAC2STR(frame->sa));
                             return -1;
                         }
@@ -1841,8 +1897,8 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                 /*
                  * if the state machines are so out-of-whack just declare failure
                  */
-                sae_debug(SAE_DEBUG_STATE_MACHINE, 
-                          "too many state machine syncronization errors, adding " MACSTR " to blacklist\n", 
+                sae_debug(SAE_DEBUG_STATE_MACHINE,
+                          "too many state machine syncronization errors, adding " MACSTR " to blacklist\n",
                           MAC2STR(peer->peer_mac));
                 blacklist_peer(peer);
                 fin(WLAN_STATUS_REQUEST_DECLINED, peer->peer_mac, NULL, 0);
@@ -2050,13 +2106,13 @@ sae_parse_config (void)
         }
     }
     fclose(fp);
-    if (group_num == 0 || got_pwd == 0) { 
+    if (group_num == 0 || got_pwd == 0) {
         sae_debug(SAE_DEBUG_ERR, "failed to read in necessary portions of config!\n");
         return -1;
     }
     curr = gd;
     while(curr) {
-        sae_debug(SAE_DEBUG_STATE_MACHINE, "group %d is configured, prime is %d bytes\n", 
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "group %d is configured, prime is %d bytes\n",
                   curr->group_num, BN_num_bytes(curr->prime));
         curr = curr->next;
     }
@@ -2073,7 +2129,7 @@ sae_read_config (int unused)
 }
 
 void
-sae_dump_db (int unused) 
+sae_dump_db (int unused)
 {
     struct candidate *peer;
 
@@ -2095,7 +2151,7 @@ sae_initialize (char *ourssid, char *confdir)
     BIO_set_fp(out, stderr, BIO_NOCLOSE);
 
     /*
-     * initialize globals 
+     * initialize globals
      */
     memset(allzero, 0, SHA256_DIGEST_LENGTH);
     memcpy(mesh_ssid, ourssid, strlen(ourssid));

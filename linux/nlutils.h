@@ -41,6 +41,7 @@ struct netlink_config_s {
     struct nl_cb *nl_cb;
 	struct genl_family *nl80211;
     int ifindex;
+    int freq;
     uint8_t mymacaddr[ETH_ALEN];
 };
 

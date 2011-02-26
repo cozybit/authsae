@@ -171,8 +171,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
         goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-#define CHANNEL_1_FREQ  2412               /* XXX: obtain channel from interface */
-    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, CHANNEL_1_FREQ);
+    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, nlcfg->freq);
     NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
@@ -283,7 +282,7 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
         goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT_U32(freqs, 1, CHANNEL_1_FREQ);
+    NLA_PUT_U32(freqs, 1, nlcfg->freq);
     nla_put_nested(msg, NL80211_ATTR_SCAN_FREQUENCIES, freqs);
     nlmsg_free(freqs);
 
@@ -433,6 +432,77 @@ static int event_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
+int authenticate_peer(struct netlink_config_s *nlcfg, char *peer)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_STATION;
+    int ret;
+    char *pret;
+    struct nl80211_sta_flag_update flags;
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED);
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Peer authenticate failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+int set_frequency(struct netlink_config_s *nlcfg, int freq)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_CHANNEL;
+    int ret;
+    char *pret;
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    if (!freq)
+        return -EINVAL;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, freq);
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Set channel failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
 {
     struct nl_msg *msg;
@@ -505,8 +575,10 @@ int main(int argc, char *argv[])
 
     signal(SIGTERM, term_handle);
 
+    memset(&nlcfg, 0, sizeof(nlcfg));
+
     for (;;) {
-        c = getopt(argc, argv, "I:o:Bi:s:");
+        c = getopt(argc, argv, "I:o:Bi:s:f:");
         if (c < 0)
             break;
         switch (c) {
@@ -519,6 +591,9 @@ int main(int argc, char *argv[])
             case 'i':
                 ifname = optarg;
                 nlcfg.ifindex = if_nametoindex(ifname);
+                break;
+            case 'f':
+                nlcfg.freq = atoi(optarg);
                 break;
             case 's':
                 mesh_id = optarg;
@@ -537,6 +612,13 @@ int main(int argc, char *argv[])
         exitcode = -EINVAL;
         goto out;
     }
+
+    if (! nlcfg.freq)
+        nlcfg.freq = 2412;      /* default to channel 1 */
+
+    /* TODO: Check if ifname is of type mesh and if it's up.
+     * For now this is assumed to be true.
+     */
 
     exitcode = get_mac_addr(ifname, nlcfg.mymacaddr);
     if (exitcode)
@@ -564,7 +646,6 @@ int main(int argc, char *argv[])
         exitcode = -ENOMEM;
         goto out;
     }
-
 
     /* Add netlink sockets to our event loop */
     nlsock = nlcfg.nl_sock;

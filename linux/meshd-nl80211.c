@@ -191,14 +191,6 @@ int meshd_write_mgmt(char *buf, int len)
     return len;
 }
 
-void fin(int status, char *peer, char *buf, int len)
-{
-    debug_msg("fin: %d, key len:%d\n", status, len);
-    if (!status && len)
-        hexdump("pmk", buf, len % 80);
-}
-
-
 static int scan_results_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -556,6 +548,15 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     return ret;
 nla_put_failure:
     return -ENOBUFS;
+}
+
+void fin(int status, char *peer, char *buf, int len)
+{
+    debug_msg("fin: %d, key len:%d\n", status, len);
+    if (!status && len) {
+        hexdump("pmk", buf, len % 80);
+        authenticate_peer(&nlcfg, peer);
+    }
 }
 
 void term_handle(int i)

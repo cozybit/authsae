@@ -248,7 +248,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
 
-    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr))
+    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL))
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
 
     return NL_SKIP;
@@ -391,7 +391,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (char *)frame, frame_len);
-                if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr))
+                if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
                     fprintf(stderr, "libsae: process_mgmt_frame failed\n");
             }
             break;
@@ -424,13 +424,12 @@ static int event_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-int authenticate_peer(struct netlink_config_s *nlcfg, char *peer)
+int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_SET_STATION;
     int ret;
     char *pret;
-    struct nl80211_sta_flag_update flags;
 
     if (!peer)
         return -EINVAL;
@@ -448,12 +447,58 @@ int authenticate_peer(struct netlink_config_s *nlcfg, char *peer)
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED);
-    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+#define    PLINK_ACTION_OPEN    1
+    NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_ACTION, PLINK_ACTION_OPEN);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        fprintf(stderr,"Peer authenticate failed: %d (%s)\n", ret, strerror(-ret));
+        fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+int new_authenticated_peer(struct netlink_config_s *nlcfg, char *peer)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_NEW_STATION;
+    int ret;
+    char *pret;
+    struct nl80211_sta_flag_update flags;
+    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
+            supported_rates);
+    flags.mask = flags.set = 1 << NL80211_STA_FLAG_AUTHORIZED;
+
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"New authenticated station failed: %d (%s)\n", ret, strerror(-ret));
     else
         ret = 0;
 
@@ -524,7 +569,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!container)
         return -ENOBUFS;
 
-    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
+    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 1);
     nla_nest_end(msg, container);
 
     container = nla_nest_start(msg,
@@ -533,7 +578,8 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!container)
         return -ENOBUFS;
 
-    NLA_PUT(msg, NL80211_MESH_SETUP_RSN_IE, sizeof(rsn_ie), rsn_ie);
+    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_ENABLE_SECURITY);
+    NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
     nla_nest_end(msg, container);
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
@@ -555,7 +601,8 @@ void fin(int status, char *peer, char *buf, int len)
     debug_msg("fin: %d, key len:%d\n", status, len);
     if (!status && len) {
         hexdump("pmk", buf, len % 80);
-        authenticate_peer(&nlcfg, peer);
+        new_authenticated_peer(&nlcfg, peer);
+        //open_peer_link(&nlcfg, peer);
     }
 }
 

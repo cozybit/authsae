@@ -133,6 +133,7 @@ struct candidate {
     unsigned short rc;
     unsigned char peer_mac[ETH_ALEN];
     unsigned char my_mac[ETH_ALEN];
+    void *cookie;
 };
 
 extern service_context srvctx;
@@ -629,7 +630,7 @@ confirm_to_peer (struct candidate *peer)
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               peer->sc, len);
-    if (meshd_write_mgmt(buf, len) != len) {
+    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                 MAC2STR(peer->peer_mac));
         return -1;
@@ -943,7 +944,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
               peer->grp_def->group_num);
     BN_free(x);
     BN_free(y);
-    if (meshd_write_mgmt(buf, len) != len) {
+    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                   MAC2STR(peer->peer_mac));
         return -1;
@@ -980,7 +981,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me)
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
-    if (meshd_write_mgmt(buf, len) != len) {
+    if (meshd_write_mgmt(buf, len, NULL) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send a rejection frame to " MACSTR "\n",
                 MAC2STR(req->sa));
         return -1;
@@ -1015,7 +1016,7 @@ reject_to_peer (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
     len += sizeof(unsigned long);
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending REJECTION to " MACSTR "\n", MAC2STR(peer->peer_mac));
-    if (meshd_write_mgmt(buf, len) != len) {
+    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                 MAC2STR(peer->peer_mac));
         return -1;
@@ -1226,7 +1227,7 @@ retransmit_peer (timerid id, void *data)
             sae_debug(SAE_DEBUG_STATE_MACHINE, MACSTR " never responded, adding to blacklist\n", MAC2STR(peer->peer_mac));
             blacklist_peer(peer);
         }
-        fin(WLAN_STATUS_AUTHENTICATION_TIMEOUT, peer->peer_mac, NULL, 0);
+        fin(WLAN_STATUS_AUTHENTICATION_TIMEOUT, peer->peer_mac, NULL, 0, peer->cookie);
         delete_peer(&peer);
         return;
     }
@@ -1247,7 +1248,7 @@ retransmit_peer (timerid id, void *data)
 }
 
 struct candidate *
-create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token)
+create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie)
 {
     struct candidate *peer;
 
@@ -1281,7 +1282,7 @@ reauth (timerid id, void *data)
     struct candidate *peer, *newpeer;
 
     peer = (struct candidate *)data;
-    if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0)) != NULL) {
+    if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
         if (assign_group_to_peer(newpeer, gd) < 0) {
             delete_peer(&newpeer);
         } else {
@@ -1573,7 +1574,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         if (debug & SAE_DEBUG_CRYPTO) {
                             print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
                         }
-                        fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH);
+                        fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %d seconds\n", pmk_expiry);
                     peer->t1 = srv_add_timeout(srvctx, SRV_SEC(pmk_expiry), reauth, peer);
@@ -1720,7 +1721,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
  * "protocol instances".
  */
 int
-process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
+process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie)
 {
     unsigned short frame_control, type, auth_alg;
     int need_token;
@@ -1770,14 +1771,15 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                  */
                 sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
                 sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
-                if ((peer = create_candidate(frame->sa, me, 0)) == NULL) {
+                if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
                     return -1;
                 }
+                peer->cookie = cookie;
                 /*
                  * assign the first group in the list as the one to try
                  */
                 if (assign_group_to_peer(peer, gd) < 0) {
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0);
+                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
                     delete_peer(&peer);
                 } else {
                     commit_to_peer(peer, NULL, 0);
@@ -1838,7 +1840,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                          * if we got here that means we're not demanding tokens or we are
                          * and the token was correct. In either case we create a protocol instance.
                          */
-                        if ((peer = create_candidate(frame->sa, me, (curr_open >= open_threshold))) == NULL) {
+                        if ((peer = create_candidate(frame->sa, me, (curr_open >= open_threshold), cookie)) == NULL) {
                             sae_debug(SAE_DEBUG_ERR, "can't malloc space for candidate from " MACSTR "\n",
                                       MAC2STR(frame->sa));
                             return -1;
@@ -1866,7 +1868,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                      * a "del" event
                      */
                     blacklist_peer(peer);
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0);
+                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
                     /* fallthru intentional */
                 case ERR_FATAL:
                     /*
@@ -1902,7 +1904,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                           "too many state machine syncronization errors, adding " MACSTR " to blacklist\n",
                           MAC2STR(peer->peer_mac));
                 blacklist_peer(peer);
-                fin(WLAN_STATUS_REQUEST_DECLINED, peer->peer_mac, NULL, 0);
+                fin(WLAN_STATUS_REQUEST_DECLINED, peer->peer_mac, NULL, 0, peer->cookie);
                 delete_peer(&peer);
             }
             break;

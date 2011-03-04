@@ -61,7 +61,7 @@ struct sae_config {
 int sae_parse_config(char* confdir, struct sae_config *config);
 int sae_initialize(char *ssid, struct sae_config *config);
 int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
-                       unsigned char *local_mac_addr);
+                       unsigned char *local_mac_addr, void *cookie);
 void sae_read_config(int signal);
 void sae_dump_db (int signal);
 

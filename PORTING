@@ -17,12 +17,12 @@ service.[ch] with a different service model should be trivial.
 os_glue.h defines the external API each <os>/meshd.c must have
 to allow SAE to use to send frames over the air. These are:
 
-  - int meshd_write_mgmt(char *frame, int len)
+  - int meshd_write_mgmt(char *frame, int len, void *cookie)
 
-	To send a management frame over the air
+	To send a management frame over the air.
 
   - void fin(unsigned short status, unsigned char *peer_mac, 
-	      unsigned char *key, int keylen)
+	      unsigned char *key, int keylen, void *cookie)
 
 	To obtain notification of termination of sae. The status
 	is defined in ieee802_11.h and, if zero, a key will be
@@ -40,10 +40,12 @@ authentication.
 	allows SAE to configure itself.
 
   - int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len, 
-                           unsigned char *local_mac_addr);
+                           unsigned char *local_mac_addr, void *cookie);
 
 	Used to send beacons and authentiction frames to SAE for
-	processing.
+    processing.  The cookie argument is passed back to the caller on all
+    callbacks associated with this management frame (e.g. meshd_write_mgmt(),
+    fin()).  It is mapped to associated with a given peer.
 
   - void sae_read_config(int signal)
 

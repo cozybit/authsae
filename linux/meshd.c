@@ -173,7 +173,7 @@ mgmt_frame_in (int fd, void *data)
                         if ((el_len == 0) || memcmp(ssid, mesh_ssid, strlen(ssid))) {
                             break;
                         }
-                        if (process_mgmt_frame(frame, framesize, inf->bssid) < 0) {
+                        if (process_mgmt_frame(frame, framesize, inf->bssid, NULL) < 0) {
                             fprintf(stderr, "error processing beacon for %s from " MACSTR "\n",
                                     ssid, MAC2STR(frame->sa));
                         }
@@ -185,7 +185,7 @@ mgmt_frame_in (int fd, void *data)
                 break;
             case IEEE802_11_FC_STYPE_AUTH:
                 if (memcmp(frame->da, inf->bssid, ETH_ALEN) == 0) {
-                    if (process_mgmt_frame(frame, framesize, inf->bssid) < 0) {
+                    if (process_mgmt_frame(frame, framesize, inf->bssid, NULL) < 0) {
                         fprintf(stderr, "error processing AUTH frame from " MACSTR "\n",
                                 MAC2STR(frame->sa));
                     }

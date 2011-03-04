@@ -63,6 +63,7 @@
 #include "common.h"
 #include "ieee802_11.h"
 #include "os_glue.h"
+#include "sae.h"
 
 #define COUNTER_INFINITY        65535
 
@@ -1986,48 +1987,23 @@ fail:
     return ret;
 }
 
-static int
-sae_parse_config (void)
+int
+sae_parse_config (char *confdir, struct sae_config* config)
 {
+    int i;
     FILE *fp;
-    char pwd[80], buf[80], *ptr;
-    int got_pwd = 0, group_num = 0, got_someone, ret, found;
-    GD *curr, *delme;
-    struct candidate *peer;
+    char buf[80], *ptr;
+    int ret;
 
-    if (gd != NULL) {
-        /*
-         * not the first time around so clean up the group definitions...
-         */
-        curr = gd;
-        while (curr) {
-            delme = curr;
-            curr = curr->next;
-            EC_GROUP_clear_free(delme->group);
-            BN_free(delme->order);
-            BN_free(delme->prime);
-            free(delme);
-        }
-        /*
-         * ...get rid of all in-progress negotiations
-         */
-        got_someone = 1;
-        while (got_someone) {
-            got_someone = 0;
-            TAILQ_FOREACH(peer, &peers, entry) {
-                if (peer->state != SAE_ACCEPTED) {
-                    got_someone = 1;
-                    delete_peer(&peer);
-                    break;
-                }
-            }
-        }
-    }
+    if (config == NULL)
+        return -1;
+
+    memset(config, 0, sizeof(*config));
+    snprintf(conffile, sizeof(conffile), "%s/sae.conf", confdir);
     if ((fp = fopen(conffile, "r")) == NULL) {
         sae_debug(SAE_DEBUG_ERR, "cannot open configuration file, %s!\n", conffile);
         return -1;
     }
-    group_num = 0;
     while (!feof(fp)) {
         if (fgets(buf, sizeof(buf), fp) == 0) {
             continue;
@@ -2039,93 +2015,34 @@ sae_parse_config (void)
             continue;
         }
         if (strncmp(buf, "group", strlen("group")) == 0) {
-            if (got_pwd == 0) {
-                sae_debug(SAE_DEBUG_ERR, "bad configuration file format: group(s) before password\n");
-                break;
-            }
-            if ((gd = (GD *)malloc(sizeof(GD))) == NULL) {
-                sae_debug(SAE_DEBUG_ERR, "cannot malloc group definition!\n");
-                exit(1);
-            }
-            curr = gd;
+            i = 0;
             do {
-                group_num = atoi(ptr);
-                found = compute_group_definition(curr, pwd, group_num);
+                config->group[i++] = atoi(ptr);
                 ptr = strstr(ptr, " ");
-                if (ptr == NULL) {
+                if (ptr == NULL)
                     break;
-                }
-                if (*ptr != '\n') {
+                if (*ptr != '\n')
                     ptr++;
-                }
-            } while ((*ptr != '\n') && (found < 0));
-            if (found < 0) {
-                free(gd);
-                sae_debug(SAE_DEBUG_ERR, "no supported groups in configuration file!\n");
-                exit(1);
-            }
-            if (ptr == NULL) {
-                break;
-            }
-            while (*ptr != '\n') {
-                if ((curr->next = malloc(sizeof(GD))) == NULL) {
-                    sae_debug(SAE_DEBUG_ERR, "cannot malloc next group definition!\n");
-                    exit(1);
-                }
-                group_num = atoi(ptr);
-                if (compute_group_definition(curr->next, pwd, group_num) < 0) {
-                    free(curr->next);
-                    curr->next = NULL;
-                } else {
-                    curr->next->next = NULL;
-                    curr = curr->next;
-                }
-                ptr = strstr(ptr, " ");
-                if (ptr == NULL) {
-                    break;
-                }
-                if (*ptr != '\n') {
-                    ptr++;
-                }
-            }
+            } while (*ptr != '\n');
+            config->num_groups = i;
         } else if (strncmp(buf, "password", strlen("password")) == 0) {
-            strcpy(pwd, ptr);
-            got_pwd = 1;
+            strcpy(config->pwd, ptr);
         } else if (strncmp(buf, "debug", strlen("debug")) == 0) {
-            debug = atoi(ptr);
+            config->debug = atoi(ptr);
         } else if (strncmp(buf, "retrans", strlen("retrans")) == 0) {
-            retrans = atoi(ptr);
+            config->retrans = atoi(ptr);
         } else if (strncmp(buf, "lifetime", strlen("lifetime")) == 0) {
-            pmk_expiry = atoi(ptr);
+            config->pmk_expiry = atoi(ptr);
         } else if (strncmp(buf, "thresh", strlen("thresh")) == 0) {
-            open_threshold = atoi(ptr);
+            config->open_threshold = atoi(ptr);
         } else if (strncmp(buf, "blacklist", strlen("blacklist")) == 0) {
-            blacklist_timeout = atoi(ptr);
+            config->blacklist_timeout = atoi(ptr);
         } else if (strncmp(buf, "giveup", strlen("giveup")) == 0) {
-            giveup_threshold = atoi(ptr);
+            config->giveup_threshold = atoi(ptr);
         }
     }
     fclose(fp);
-    if (group_num == 0 || got_pwd == 0) {
-        sae_debug(SAE_DEBUG_ERR, "failed to read in necessary portions of config!\n");
-        return -1;
-    }
-    curr = gd;
-    while(curr) {
-        sae_debug(SAE_DEBUG_STATE_MACHINE, "group %d is configured, prime is %d bytes\n",
-                  curr->group_num, BN_num_bytes(curr->prime));
-        curr = curr->next;
-    }
-
-    return 1;
-}
-
-void
-sae_read_config (int unused)
-{
-    if (sae_parse_config() < 0) {
-        fprintf(stderr, "SAE: unable to re-read config!\n");
-    }
+    return 0;
 }
 
 void
@@ -2140,13 +2057,17 @@ sae_dump_db (int unused)
 }
 
 int
-sae_initialize (char *ourssid, char *confdir)
+sae_initialize (char *ourssid, struct sae_config *config)
 {
-    snprintf(conffile, sizeof(conffile), "%s/sae.conf", confdir);
+    GD *curr, *prev = NULL;
+    int i;
+
+    /* TODO: detect duplicate calls.  validate config. */
+
     EVP_add_digest(EVP_sha256());
     if ((out = BIO_new(BIO_s_file())) == NULL) {
         fprintf(stderr, "SAE: unable to create file BIO!\n");
-        exit(1);
+        return -1;
     }
     BIO_set_fp(out, stderr, BIO_NOCLOSE);
 
@@ -2160,20 +2081,40 @@ sae_initialize (char *ourssid, char *confdir)
     RAND_pseudo_bytes((unsigned char *)&token_generator, sizeof(unsigned long));
     if ((bnctx = BN_CTX_new()) == NULL) {
         fprintf(stderr, "cannot create bignum context!\n");
-        exit(1);
+        return -1;
     }
     /*
      * set defaults and read in config
      */
-    debug = 0;
+    debug = config->debug;
     curr_open = 0;
-    open_threshold = 5;
-    blacklist_timeout = 30;
-    giveup_threshold = 5;
-    retrans = 3;
-    pmk_expiry = 86400;                 /* one day */
-    if (sae_parse_config() < 0) {
-        return -1;
+    open_threshold = config->open_threshold ? config->open_threshold : 5;
+    blacklist_timeout = config->blacklist_timeout ? config->blacklist_timeout
+        : 30;
+    giveup_threshold = config->giveup_threshold ? config->giveup_threshold :
+        5;
+    retrans = config->retrans ? config->retrans : 3;
+    pmk_expiry = config->pmk_expiry ? config->pmk_expiry : 86400; /* one day */
+    /*
+     * create groups from configuration data
+     */
+    for (i=0; i<config->num_groups; i++) {
+        if ((curr = (GD *)malloc(sizeof(GD))) == NULL) {
+            sae_debug(SAE_DEBUG_ERR, "cannot malloc group definition!\n");
+            return -1;
+        }
+        if (compute_group_definition(curr, config->pwd, config->group[i])) {
+            free(curr);
+            continue;
+        }
+        if (prev)
+            prev->next = curr;
+        else
+            gd = curr;
+        prev = curr;
+        curr->next = NULL;
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "group %d is configured, prime is %d"
+                " bytes\n", curr->group_num, BN_num_bytes(curr->prime));
     }
     return 1;
 }

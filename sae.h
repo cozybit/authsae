@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -40,8 +40,27 @@
 #define _SAE_H_
 #include "ieee802_11.h"
 
-int sae_initialize(char *ssid, char *config_directory);
-int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len, 
+#define    SAE_MAX_EC_GROUPS    10
+#define    SAE_MAX_PASSWORD_LEN 80
+
+struct sae_config {
+    int group[SAE_MAX_EC_GROUPS];
+    int num_groups;
+    char pwd[SAE_MAX_PASSWORD_LEN];
+    int debug;
+    int retrans;
+    int pmk_expiry;
+    int open_threshold;
+    int blacklist_timeout;
+    int giveup_threshold;
+};
+
+/* You may choose not to call sae_parse_config and
+ * populate sae_config in some other way before
+ * invoking sae_initialize() */
+int sae_parse_config(char* confdir, struct sae_config *config);
+int sae_initialize(char *ssid, struct sae_config *config);
+int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
                        unsigned char *local_mac_addr);
 void sae_read_config(int signal);
 void sae_dump_db (int signal);

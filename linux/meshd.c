@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -122,7 +122,7 @@ mgmt_frame_in (int fd, void *data)
     if (from.sll_pkttype == PACKET_OUTGOING) {
         return;
     }
-    
+
     frame = (struct ieee80211_mgmt_frame *)buf;
     if (memcmp(frame->sa, inf->bssid, ETH_ALEN) == 0) {
         return;
@@ -147,9 +147,9 @@ mgmt_frame_in (int fd, void *data)
                  * left is how much is left to read in the beacon
                  */
                 while (left > 2) {
-                    el_id = *els++; 
+                    el_id = *els++;
                     left--;
-                    el_len = *els++; 
+                    el_len = *els++;
                     left--;
                     if (el_len > left) {
                         /*
@@ -157,7 +157,7 @@ mgmt_frame_in (int fd, void *data)
                          */
                         break;
                     }
-                    if (el_id == IEEE802_11_IE_SSID) { 
+                    if (el_id == IEEE802_11_IE_SSID) {
                         if (el_len > 32) {
                             /*
                              * again with the messing...
@@ -363,6 +363,7 @@ main (int argc, char **argv)
     char confdir[80], conffile[80], mesh_interface[10];
     char str[80], *ptr;
     FILE *fp;
+    struct sae_config config;
 
     strcpy(confdir, "/usr/local/config");
     for (;;) {
@@ -387,13 +388,13 @@ main (int argc, char **argv)
                 break;
             default:
             case 'h':
-                fprintf(stderr, 
+                fprintf(stderr,
                         "USAGE: %s [-hIb]\n\t-h  show usage, and exit\n"
                         "\t-I  directory of config files\n"
                         "\t-b  run in the background\n",
                         argv[0]);
                 exit(1);
-                
+
         }
     }
 
@@ -476,7 +477,8 @@ main (int argc, char **argv)
     /*
      * initialize SAE...
      */
-    if (sae_initialize(mesh_ssid, confdir) < 0) {
+    sae_parse_config(confdir, &config);
+    if (sae_initialize(mesh_ssid, &config) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(1);
     }
@@ -484,8 +486,10 @@ main (int argc, char **argv)
     /*
      * re-read the SAE config upon receipt of HUP
      */
+#if 0
     act.sa_handler = sae_read_config;
     sigaction(SIGHUP, &act, NULL);
+#endif
     act.sa_handler = sae_dump_db;
     sigaction(SIGUSR1, &act, NULL);
 

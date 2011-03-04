@@ -573,6 +573,7 @@ int main(int argc, char *argv[])
     int daemonize = 0;
     char *outfile = NULL;
     char confdir[80];
+    struct sae_config config;
 
     signal(SIGTERM, term_handle);
 
@@ -625,7 +626,8 @@ int main(int argc, char *argv[])
     if (exitcode)
         goto out;
 
-    if (sae_initialize(mesh_id, confdir) < 0) {
+    sae_parse_config(confdir, &config);
+    if (sae_initialize(mesh_id, &config) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(1);
     }

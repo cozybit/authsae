@@ -1725,7 +1725,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
     unsigned short frame_control, type, auth_alg;
     int need_token;
     struct candidate *peer;
-    enum result ret;
+    enum result ret = ERR_FATAL;
 
     if (bnctx == NULL) {
         /*

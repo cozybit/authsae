@@ -76,6 +76,8 @@ const char rsn_ie[0x14] = {0x30, /* RSN element ID */
                        /* optional capabilities omitted */
                        };
 
+static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *mac);
+
 static void
 debug_msg (const char *fmt, ...)
 {
@@ -191,6 +193,50 @@ int meshd_write_mgmt(char *buf, int len)
     return len;
 }
 
+static int new_candidate_handler(struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    const uint8_t *ie;
+    size_t ie_len;
+    struct ieee80211_mgmt_frame bcn;
+
+    /* check that all the required info exists: source address
+     * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
+     * */
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+            genlmsg_attrlen(gnlh, 0), NULL);
+
+    if (!tb[NL80211_ATTR_MAC] || !tb[NL80211_ATTR_IE])
+        return NL_SKIP;
+
+    ie = nla_data(tb[NL80211_ATTR_IE]);
+    ie_len = nla_len(tb[NL80211_ATTR_IE]);
+
+	/* JC: For now, just do a brute search for the RSN ie in
+	 * these scan results. When we move this to wpa_supplicant
+	 * we'll use the available ie parsing routines
+	 * */
+    if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL) {
+        hexdump("ie dump", (char *)ie, ie_len);
+        return NL_SKIP;
+    }
+
+    memset(&bcn, 0, sizeof(bcn));
+    bcn.frame_control = htole16(
+            (IEEE802_11_FC_TYPE_MGMT << 2 |
+             IEEE802_11_FC_STYPE_BEACON << 4));
+    memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
+
+    new_unauthenticated_peer(&nlcfg, (char *)bcn.sa);
+
+    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL))
+        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
+
+
+    return NL_SKIP;
+}
+
 static int scan_results_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -254,6 +300,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
+#if 0
 static int trigger_scan(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg, *freqs;
@@ -286,6 +333,7 @@ static int trigger_scan(struct netlink_config_s *nlcfg)
 nla_put_failure:
     return -ENOBUFS;
 }
+#endif
 
 static int register_for_auth_frames(struct netlink_config_s *nlcfg)
 {
@@ -353,12 +401,14 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+#if 0
 static void srv_timeout_wrapper(timerid t, void *data)
 {
     trigger_scan(data);
     srv_add_timeout(srvctx, SRV_SEC(60), srv_timeout_wrapper, data);
     return;
 }
+#endif
 
 static void usage(void)
 {
@@ -397,6 +447,10 @@ static int event_handler(struct nl_msg *msg, void *arg)
             break;
         case NL80211_CMD_NEW_STATION:
             debug_msg("NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
+            break;
+        case NL80211_CMD_NEW_PEER_CANDIDATE:
+            debug_msg("NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
+            new_candidate_handler(msg, arg);
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
             debug_msg("NL80211_CMD_NEW_SCAN_RESULTS (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -461,7 +515,47 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int new_authenticated_peer(struct netlink_config_s *nlcfg, char *peer)
+static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_STATION;
+    int ret;
+    char *pret;
+    struct nl80211_sta_flag_update flags;
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    flags.mask = flags.set = 1 << NL80211_STA_FLAG_AUTHENTICATED;
+
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Failed to set auth flag on station: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *peer)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_STATION;
@@ -488,7 +582,8 @@ int new_authenticated_peer(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
             supported_rates);
-    flags.mask = flags.set = 1 << NL80211_STA_FLAG_AUTHORIZED;
+    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED);
+    flags.set = 0;
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
@@ -498,7 +593,7 @@ int new_authenticated_peer(struct netlink_config_s *nlcfg, char *peer)
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        fprintf(stderr,"New authenticated station failed: %d (%s)\n", ret, strerror(-ret));
+        fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
     else
         ret = 0;
 
@@ -601,7 +696,14 @@ void fin(int status, char *peer, char *buf, int len)
     debug_msg("fin: %d, key len:%d\n", status, len);
     if (!status && len) {
         hexdump("pmk", buf, len % 80);
-        new_authenticated_peer(&nlcfg, peer);
+        /* It may be that the kernel does not know about this station yet.
+         * We could either check if it exists or just attempt to create
+         * blindly and let it fail if it already exists.  Doing the latter.
+         */
+        new_unauthenticated_peer(&nlcfg, peer);
+        set_authenticated_flag(&nlcfg, peer);
+
+        /* If auto peer link open is turned off: */
         //open_peer_link(&nlcfg, peer);
     }
 }
@@ -714,7 +816,7 @@ int main(int argc, char *argv[])
         goto out;
 
     /* periodically check for scan results to detect new neighbors */
-    srv_add_timeout(srvctx, SRV_SEC(1), srv_timeout_wrapper, &nlcfg);
+    //srv_add_timeout(srvctx, SRV_SEC(600), srv_timeout_wrapper, &nlcfg);
 
     srv_main_loop(srvctx);
 out:

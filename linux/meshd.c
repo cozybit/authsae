@@ -75,7 +75,7 @@ dump_ssid (struct ieee80211_mgmt_frame *frame, int len)
     unsigned char *ptr;
     int left;
 
-    ptr = frame->beacon.variable;
+    ptr = frame->beacon.u.var8;
     left = len - (IEEE802_11_HDR_LEN + sizeof(frame->beacon));
     while (left > 2) {
         el_id = *ptr++;
@@ -140,7 +140,7 @@ mgmt_frame_in (int fd, void *data)
     if (type == IEEE802_11_FC_TYPE_MGMT) {
         switch (stype) {
             case IEEE802_11_FC_STYPE_BEACON:
-                els = frame->beacon.variable;
+                els = frame->beacon.u.var8;
                 left = framesize - (IEEE802_11_HDR_LEN + sizeof(frame->beacon));
                 /*
                  * els is the next IE in the beacon,
@@ -336,7 +336,7 @@ send_beacon (timerid tid, void *data)
      * not a truely valid beacon but so what, this is a simulator and
      * all we really care about is the ssid
      */
-    el = frame->beacon.variable;
+    el = frame->beacon.u.var8;
     *el = IEEE802_11_IE_SSID;
     el++;
     *el = strlen(mesh_ssid);

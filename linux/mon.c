@@ -99,16 +99,16 @@ mgmt_frame_in (int fd, void *data)
     if (type == IEEE802_11_FC_TYPE_MGMT) {
         switch (stype) {
             case IEEE802_11_FC_STYPE_BEACON:
-                els = frame->beacon.variable;
+                els = frame->beacon.u.var8;
                 left = framesize - (IEEE802_11_HDR_LEN + sizeof(frame->beacon));
                 /*
                  * els is the next IE in the beacon,
                  * left is how much is left to read in the beacon
                  */
                 while (left > 2) {
-                    el_id = *els++; 
+                    el_id = *els++;
                     left--;
-                    el_len = *els++; 
+                    el_len = *els++;
                     left--;
                     if (el_len > left) {
                         /*

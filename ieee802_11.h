@@ -102,13 +102,19 @@ struct ieee80211_mgmt_frame {
 #define SAE_AUTH_CONFIRM                2
             unsigned short auth_seq;
             unsigned short status;
-            unsigned char variable[0];
+            union {
+                unsigned char var8[0];
+                unsigned short var16[0];
+            }u;
         } __attribute__ ((packed)) authenticate;
         struct {
             unsigned char timestamp[8];
             unsigned short interval;
             unsigned short capabilities;
-            unsigned char variable[0];
+            union {
+                unsigned char var8[0];
+                unsigned short var16[0];
+            }u;
         } __attribute__ ((packed)) beacon;
     };
 } __attribute__ ((packed));

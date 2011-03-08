@@ -400,7 +400,7 @@ check_dup (struct candidate *peer, int check_me, struct ieee80211_mgmt_frame *fr
          */
         return 0;
     }
-    ptr = frame->authenticate.variable + sizeof(unsigned short);
+    ptr = frame->authenticate.u.var8 + sizeof(unsigned short);
     if (peer->got_token) {
         /*
          * we know how big the token is because we generated it in the first place!
@@ -423,7 +423,7 @@ check_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
 {
     unsigned short sent_confirm;
 
-    sent_confirm = *(unsigned short *)(frame->authenticate.variable);
+    sent_confirm = *(frame->authenticate.u.var16);
     if ((sent_confirm > peer->rc) && (sent_confirm != COUNTER_INFINITY)) {
         return 1;
     } else {
@@ -453,13 +453,12 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     CN_Init(&ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
 
-    peer->rc = ieee_order(*((unsigned short *)frame->authenticate.variable));
+    peer->rc = ieee_order(*(frame->authenticate.u.var16));
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "processing confirm (%d)\n", peer->rc);
     /*
      * compute the confirm verifier using the over-the-air format of send_conf
      */
-    CN_Update(&ctx, (unsigned char *)&frame->authenticate.variable,
-             sizeof(unsigned short));
+    CN_Update(&ctx, frame->authenticate.u.var8, sizeof(unsigned short));
 
         /* peer's scalar */
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
@@ -511,11 +510,11 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     if (debug & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("peer's confirm",
-                    frame->authenticate.variable,
+                    frame->authenticate.u.var8,
                     SHA256_DIGEST_LENGTH + sizeof(unsigned short));
     }
 
-    if (memcmp(tmp, (frame->authenticate.variable + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
+    if (memcmp(tmp, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
         sae_debug(SAE_DEBUG_ERR, "confirm did not verify!\n");
         BN_free(x);
         BN_free(y);
@@ -563,7 +562,7 @@ confirm_to_peer (struct candidate *peer)
         peer->sc++;
     }
     send_conf = ieee_order(peer->sc);
-    memcpy(frame->authenticate.variable, (unsigned char *)&send_conf, sizeof(unsigned short));
+    memcpy(frame->authenticate.u.var8, (unsigned char *)&send_conf, sizeof(unsigned short));
     len += sizeof(unsigned short);
 
 
@@ -616,11 +615,11 @@ confirm_to_peer (struct candidate *peer)
     BN_bn2bin(y, tmp + offset);
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
-    CN_Final(&ctx, (frame->authenticate.variable + sizeof(unsigned short)));
+    CN_Final(&ctx, (frame->authenticate.u.var8 + sizeof(unsigned short)));
 
     if (debug & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("local confirm",
-                    frame->authenticate.variable,
+                    frame->authenticate.u.var8,
                     SHA256_DIGEST_LENGTH + sizeof(unsigned short));
     }
 
@@ -669,7 +668,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
         sae_debug(SAE_DEBUG_ERR, "unable to create x,y bignums\n");
         return -1;
     }
-    ptr = frame->authenticate.variable;
+    ptr = frame->authenticate.u.var8;
     /*
      * first thing in a commit is the finite cyclic group, skip the group
      */
@@ -840,7 +839,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
     frame->authenticate.alg = ieee_order(SAE_AUTH_ALG);
     frame->authenticate.auth_seq = ieee_order(SAE_AUTH_COMMIT);
     len = IEEE802_11_HDR_LEN + sizeof(frame->authenticate);
-    ptr = frame->authenticate.variable;
+    ptr = frame->authenticate.u.var8;
 
     /*
      * first, indicate what group we're committing with
@@ -977,7 +976,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me)
     H_Init(&ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
     H_Update(&ctx, req->sa, ETH_ALEN);
     H_Update(&ctx, me, ETH_ALEN);
-    H_Final(&ctx, frame->authenticate.variable);
+    H_Final(&ctx, frame->authenticate.u.var8);
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
@@ -1012,7 +1011,7 @@ reject_to_peer (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
     /*
      * indicate what we're rejecting
      */
-    memcpy(rej->authenticate.variable, frame->authenticate.variable, sizeof(unsigned long));
+    memcpy(rej->authenticate.u.var8, frame->authenticate.u.var8, sizeof(unsigned long));
     len += sizeof(unsigned long);
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending REJECTION to " MACSTR "\n", MAC2STR(peer->peer_mac));
@@ -1331,7 +1330,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     /*
                      * grab the group from the frame...
                      */
-                    grp = ieee_order(*((unsigned short *)(frame->authenticate.variable)));
+                    grp = ieee_order(*((frame->authenticate.u.var16)));
                     /*
                      * ...and see if it's supported
                      */
@@ -1389,7 +1388,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         sae_debug(SAE_DEBUG_STATE_MACHINE,
                                   "received a token request, add a token, length %d, and resend commit\n",
                                   (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
-                        commit_to_peer(peer, frame->authenticate.variable,
+                        commit_to_peer(peer, frame->authenticate.u.var8,
                                        (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
                         peer->sync = 0;
                         peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
@@ -1398,7 +1397,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     /*
                      * grab the group from the frame, we need it later
                      */
-                    grp = ieee_order(*((unsigned short *)(frame->authenticate.variable)));
+                    grp = ieee_order(*((frame->authenticate.u.var16)));
                     if (status == WLAN_STATUS_NOT_SUPPORTED_GROUP) {
                         /*
                          * if it's a rejection check whether it's what we sent.
@@ -1535,7 +1534,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     if (peer->sync > giveup_threshold) {
                         return ERR_FATAL;
                     }
-                    grp = ieee_order(*((unsigned short *)(frame->authenticate.variable)));
+                    grp = ieee_order(*(frame->authenticate.u.var16));
                     if (grp == peer->grp_def->group_num) {
                         sae_debug(SAE_DEBUG_STATE_MACHINE, "got COMMIT again, try to resync\n");
                         peer->sync++;
@@ -1642,7 +1641,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
     /*
      * it's a commmit so the first thing is the finite cyclic group
      */
-    alg = ieee_order(*((unsigned short *)(frame->authenticate.variable)));
+    alg = ieee_order(*(frame->authenticate.u.var16));
 
     group_def = gd;
     while (group_def) {
@@ -1669,7 +1668,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
         H_Update(&ctx, frame->sa, ETH_ALEN);
         H_Update(&ctx, me, ETH_ALEN);
         H_Final(&ctx, token);
-        if (memcmp(token, (frame->authenticate.variable + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
+        if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * there's something there but it's not a token, so ask for one.
              *
@@ -1703,7 +1702,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
         H_Update(&ctx, frame->sa, ETH_ALEN);
         H_Update(&ctx, me, ETH_ALEN);
         H_Final(&ctx, token);
-        if (memcmp(token, (frame->authenticate.variable + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
+        if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * bad token
              */

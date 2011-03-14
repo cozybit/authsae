@@ -953,7 +953,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
 }
 
 static int
-request_token (struct ieee80211_mgmt_frame *req, unsigned char *me)
+request_token (struct ieee80211_mgmt_frame *req, unsigned char *me, void *cookie)
 {
     char buf[2048];
     struct ieee80211_mgmt_frame *frame;
@@ -980,7 +980,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me)
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
-    if (meshd_write_mgmt(buf, len, NULL) != len) {
+    if (meshd_write_mgmt(buf, len, cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send a rejection frame to " MACSTR "\n",
                 MAC2STR(req->sa));
         return -1;
@@ -1829,7 +1829,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                                  */
                                 sae_debug(SAE_DEBUG_STATE_MACHINE, "token needed for COMMIT (%d open), requesting one\n",
                                           curr_open);
-                                request_token(frame, me);
+                                request_token(frame, me, cookie);
                                 return 0;
                             } else {
                                 sae_debug(SAE_DEBUG_ERR, "correct token received\n");

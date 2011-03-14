@@ -65,15 +65,15 @@ static char *ifname = NULL;
 static struct netlink_config_s nlcfg;
 service_context srvctx;
 
-const char rsn_ie[0x14] = {0x30, /* RSN element ID */
-                       0x12, /* length */
+const char rsn_ie[0x16] = {0x30, /* RSN element ID */
+                       0x14, /* length */
                        0x1, 0x0, /* Version */
                        0x0, 0x0F, 0xAC, 0x4, /* CCMP for group cipher suite */
                        0x1, 0x0,             /* pairwise suite count */
                        0x0, 0x0F, 0xAC, 0x4, /* CCMP for pairwise cipher suite */
                        0x1, 0x0,             /* authentication suite count */
                        0x0, 0x0F, 0xAC, 0x8, /* SAE for authentication */
-                       /* optional capabilities omitted */
+                       0x0, 0x0,             /* Capabilities */
                        };
 
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *mac);

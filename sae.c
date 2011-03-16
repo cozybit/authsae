@@ -1270,6 +1270,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     peer->pwe = peer->peer_element = peer->my_element = NULL;
     TAILQ_INSERT_TAIL(&peers, peer, entry);
     peer->state = SAE_NOTHING;
+    peer->cookie = cookie;
     curr_open++;
 
     return peer;

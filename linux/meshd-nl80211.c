@@ -540,6 +540,7 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     flags.mask = flags.set = 1 << NL80211_STA_FLAG_AUTHENTICATED;
+    flags.mask = flags.set = 1 << NL80211_STA_FLAG_AUTHORIZED;
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 

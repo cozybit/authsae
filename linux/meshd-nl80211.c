@@ -145,7 +145,8 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
 static void srv_handler_wrapper(int fd, void *data)
 {
     int err;
-    if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0) {
+    if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0 &&
+	 err != -6 /* ignore if station already exists */) {
         fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
         nl2syserr(err);
         perror("srv_handler_wrapper()\n");
@@ -405,6 +406,36 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+static int request_mesh_caps(struct netlink_config_s *nlcfg)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_GET_WIPHY;
+    int ret;
+    char *pret;
+
+    assert(nlcfg);
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, NLM_F_REQUEST, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    /* lame, but it could work */
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        sae_debug(MESHD_DEBUG, "request get mesh config failed: %d (%s)\n", ret,
+                strerror(-ret));
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
 #if 0
 static void srv_timeout_wrapper(timerid t, void *data)
 {
@@ -439,6 +470,16 @@ static int event_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
 
     switch (gnlh->cmd) {
+	    /* test */
+	case NL80211_CMD_NEW_WIPHY:
+			printf("GET_WIPHY replied\n");
+		if (tb[NL80211_ATTR_SUPPORT_MESH_AUTH]) {
+			printf("got mesh capabilities:\n");
+			printf("security: %s\n", nla_get_flag(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]) 
+					? "yes" : "no");
+		}
+	break;
+
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
                 sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -892,6 +933,7 @@ int main(int argc, char *argv[])
 
     /* periodically check for scan results to detect new neighbors */
     //srv_add_timeout(srvctx, SRV_SEC(600), srv_timeout_wrapper, &nlcfg);
+    request_mesh_caps(&nlcfg);
 
     srv_main_loop(srvctx);
 out:

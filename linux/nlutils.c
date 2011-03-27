@@ -251,6 +251,9 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler)
     nl_socket_modify_cb(nlcfg->nl_sock, NL_CB_VALID, NL_CB_CUSTOM,
             event_handler, &nlcfg);
 
+    /* print errors */
+    nl_cb_err(cb, NL_CB_VERBOSE, NULL, NULL);
+
 	return 0;
 
 err4:

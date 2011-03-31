@@ -340,6 +340,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 {
         struct nl_msg *msg;
         uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
+        int i;
 #define IEEE80211_FTYPE_MGMT            0x0000
 #define IEEE80211_STYPE_ACTION          0x00D0
         uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_ACTION;
@@ -348,27 +349,29 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 #ifdef SOON
         char action_codes[3][2] = { {15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
 #endif
-        char action_codes[3][2] = { {30, 0 }};  /* This is what the kernel now gives us */
+        char action_codes[3][2] = { {30, 0 }, {30, 1}, {30, 2}};  /* This is what the kernel now gives us */
 
-        msg = nlmsg_alloc();
-        if (!msg)
-                return -ENOMEM;
+        for (i = 0; i < 3; i++) {
+            msg = nlmsg_alloc();
+            if (!msg)
+                    return -ENOMEM;
 
-        pret = genlmsg_put(msg, 0, 0,
-                genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-        if (pret == NULL)
-                goto nla_put_failure;
+            pret = genlmsg_put(msg, 0, 0,
+                    genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+            if (pret == NULL)
+                    goto nla_put_failure;
 
-        NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-        NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
-        NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[0]), &action_codes[0][0]);
+            NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+            NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
+            NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[i]), action_codes[i]);
 
-        ret = send_nlmsg(nlcfg->nl_sock, msg);
-        if (ret < 0)
-                fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
-                        strerror(-ret));
-        else
-            ret = 0;
+            ret = send_nlmsg(nlcfg->nl_sock, msg);
+            if (ret < 0)
+                    fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
+                            strerror(-ret));
+            else
+                ret = 0;
+        }
 
         return ret;
  nla_put_failure:

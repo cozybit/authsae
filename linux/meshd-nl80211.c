@@ -335,6 +335,45 @@ nla_put_failure:
 }
 #endif
 
+static int register_for_plink_frames(struct netlink_config_s *nlcfg)
+{
+        struct nl_msg *msg;
+        uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
+#define IEEE80211_FTYPE_MGMT            0x0000
+#define IEEE80211_STYPE_ACTION          0x00D0
+        uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_ACTION;
+        int ret;
+        char *pret;
+#ifdef SOON
+        char action_codes[3][2] = { {15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
+#endif
+        char action_codes[3][2] = { {30, 0 }};  /* This is what the kernel now gives us */
+
+        msg = nlmsg_alloc();
+        if (!msg)
+                return -ENOMEM;
+
+        pret = genlmsg_put(msg, 0, 0,
+                genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+        if (pret == NULL)
+                goto nla_put_failure;
+
+        NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+        NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
+        NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[0]), &action_codes[0][0]);
+
+        ret = send_nlmsg(nlcfg->nl_sock, msg);
+        if (ret < 0)
+                fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
+                        strerror(-ret));
+        else
+            ret = 0;
+
+        return ret;
+ nla_put_failure:
+        return -ENOBUFS;
+}
+
 static int register_for_auth_frames(struct netlink_config_s *nlcfg)
 {
         struct nl_msg *msg;
@@ -441,8 +480,15 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (char *)frame, frame_len);
-                if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
-                    fprintf(stderr, "libsae: process_mgmt_frame failed\n");
+                if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
+                                                      IEEE802_11_FC_STYPE_AUTH << 4))) {
+                    if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
+                        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
+                } else if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
+                                                      IEEE802_11_FC_STYPE_ACTION << 4))) {
+                    debug_msg("TODO: handle path selection action frame (%d.%d)\n", now.tv_sec, now.tv_usec);
+                } else
+                    debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
             }
             break;
         case NL80211_CMD_NEW_STATION:
@@ -674,7 +720,12 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!container)
         return -ENOBUFS;
 
-    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_ENABLE_SECURITY);
+    /* We'll be creating stations, not the kernel */
+    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
+
+    /* We'll handle peer link frames */
+    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
+
     NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
     nla_nest_end(msg, container);
 
@@ -811,6 +862,12 @@ int main(int argc, char *argv[])
     exitcode = register_for_auth_frames(&nlcfg);
     if (exitcode)
         goto out;
+
+    exitcode = register_for_plink_frames(&nlcfg);
+    if (exitcode) {
+        fprintf(stderr, "cannot register for plink frame!\n");
+        goto out;
+    }
 
     exitcode = join_mesh_rsn(&nlcfg, mesh_id, strlen(mesh_id));
     if (exitcode)

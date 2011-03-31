@@ -9,7 +9,7 @@ all:	meshd meshd-nl80211 mon
 meshd:	meshd.o ../common.o ../sae.o ../service.o
 	$(CC) -o meshd meshd.o ../common.o ../sae.o ../service.o $(LIBS) -lcrypto
 
-libsae.a: ../common.o ../sae.o ../service.o
+libsae.a: ../common.o ../sae.o ../service.o ../ampe.o
 	ar rcs $@ $^
 
 meshd-nl80211:	meshd-nl80211.o nlutils.o libsae.a

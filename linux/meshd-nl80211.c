@@ -58,6 +58,7 @@
 #include "service.h"
 #include "ieee802_11.h"
 #include "sae.h"
+#include "ampe.h"
 
 
 /* Runtime config variables */
@@ -480,13 +481,24 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 hexdump("rx frame", (char *)frame, frame_len);
+                /* Auth frames go to SAE */
                 if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_AUTH << 4))) {
                     if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
+                /* Action (peer link) frames go to AMPE */
                 } else if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_ACTION << 4))) {
-                    debug_msg("TODO: handle path selection action frame (%d.%d)\n", now.tv_sec, now.tv_usec);
+                    if (process_plink_frame(frame, &frame_len, frame_len))
+                        fprintf(stderr, "libsae: process_plink_frame failed\n");
+                    else {
+                         /* The current 11s draft requires that address 3
+                          * (BSSID) == address2, but frames that we get from
+                          * the kernel may conform to older 11s drafts and use
+                          * a null BSSID. */
+                        memcpy(frame->bssid, frame->sa, ETH_ALEN);
+                        meshd_write_mgmt((char*) frame, frame_len);
+                    }
                 } else
                     debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
             }

@@ -4,5 +4,5 @@ all: linux
 
 clean:
 	rm -f *.o
-	rm -f linux/*.o
-	rm -f freebsd/*.o
+	rm -f linux/*.o linux/meshd-nl80211 linux/meshd
+	rm -f freebsd/*.o freebsd/meshd

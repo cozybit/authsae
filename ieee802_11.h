@@ -116,6 +116,14 @@ struct ieee80211_mgmt_frame {
                 unsigned short var16[0];
             }u;
         } __attribute__ ((packed)) beacon;
+        struct {
+            unsigned char category;
+            unsigned char action;
+            union {
+                unsigned char var8[0];
+                unsigned short var16[0];
+            }u;
+        } __attribute__ ((packed)) action;
     };
 } __attribute__ ((packed));
 

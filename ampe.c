@@ -67,7 +67,19 @@
 #include "sae.h"
 
 int
-process_plink_frame (struct ieee80211_mgmt_frame *frame, int *len, int max_len)
+protect_plink_frame (struct ieee80211_mgmt_frame *frame, int *len, int max_len)
 {
+    /* Henceforth this frame is self-protected */
+    frame->action.category = 15;
+    //frame->action.u.var8[0] = 0xbb;
+    return 0;
+}
+
+int
+verify_plink_frame (struct ieee80211_mgmt_frame *frame, int *len, int max_len)
+{
+    /* Henceforth this frame is un-protected */
+    frame->action.category = 13;
+    //frame->action.u.var8[0] = 0xaa;
     return 0;
 }

@@ -344,12 +344,9 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 #define IEEE80211_FTYPE_MGMT            0x0000
 #define IEEE80211_STYPE_ACTION          0x00D0
         uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_ACTION;
-        int ret;
+        int ret = 0;
         char *pret;
-#ifdef SOON
-        char action_codes[3][2] = { {15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
-#endif
-        char action_codes[3][2] = { {30, 0 }, {30, 1}, {30, 2}};  /* This is what the kernel now gives us */
+        char action_codes[3][2] = {{15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
 
         for (i = 0; i < 3; i++) {
             msg = nlmsg_alloc();
@@ -492,16 +489,16 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 /* Action (peer link) frames go to AMPE */
                 } else if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_ACTION << 4))) {
-                    if (process_plink_frame(frame, &frame_len, frame_len))
-                        fprintf(stderr, "libsae: process_plink_frame failed\n");
-                    else {
-                         /* The current 11s draft requires that address 3
-                          * (BSSID) == address2, but frames that we get from
-                          * the kernel may conform to older 11s drafts and use
-                          * a null BSSID. */
-                        memcpy(frame->bssid, frame->sa, ETH_ALEN);
-                        meshd_write_mgmt((char*) frame, frame_len);
-                    }
+                    /* ingress (to be verified)? */
+                    if (memcmp(frame->da, nlcfg.mymacaddr, ETH_ALEN) == 0) {
+                        fprintf(stderr, "verifying frame\n");
+                        verify_plink_frame(frame, &frame_len, frame_len);
+                    } else if (memcmp(frame->sa, nlcfg.mymacaddr, ETH_ALEN) == 0) {
+                        fprintf(stderr, "protecting frame\n");
+                        protect_plink_frame(frame, &frame_len, frame_len);
+                    } else
+                        debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
+                    meshd_write_mgmt((char*) frame, frame_len);
                 } else
                     debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
             }

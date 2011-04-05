@@ -6,8 +6,8 @@ LDFLAGS=-lnl -lnl-genl -lcrypto -L/usr/local/lib -L.
 
 all:	meshd meshd-nl80211 mon
 
-meshd:	meshd.o ../common.o ../sae.o ../service.o
-	$(CC) -o meshd meshd.o ../common.o ../sae.o ../service.o $(LIBS) -lcrypto
+meshd:	meshd.o ../common.o ../sae.o ../service.o ../ampe.o
+	$(CC) -o meshd meshd.o ../common.o ../sae.o ../service.o ../ampe.o $(LIBS) -lcrypto
 
 libsae.a: ../common.o ../sae.o ../service.o ../ampe.o
 	ar rcs $@ $^

@@ -64,14 +64,10 @@
 #include "ieee802_11.h"
 #include "os_glue.h"
 #include "sae.h"
+#include "ampe.h"
 
 #define COUNTER_INFINITY        65535
 
-#define SAE_DEBUG_ERR           0x01
-#define SAE_DEBUG_PROTOCOL_MSG  0x02
-#define SAE_DEBUG_STATE_MACHINE 0x04
-#define SAE_DEBUG_CRYPTO        0x08
-#define SAE_DEBUG_CRYPTO_VERB   0x10
 
 #define state_to_string(x) (x) == SAE_NOTHING ? "NOTHING" : \
                            (x) == SAE_COMMITTED ? "COMMITTED" : \
@@ -151,7 +147,6 @@ BN_CTX *bnctx = NULL;
 GD *gd;                                 /* group definitions */
 BIO *out;
 int curr_open, open_threshold, retrans;
-unsigned int debug;
 unsigned long blacklist_timeout, giveup_threshold, pmk_expiry;
 unsigned long token_generator;
 #if 0
@@ -205,18 +200,6 @@ pp_a_bignum (char *str, BIGNUM *bn)
     BN_bn2bin(bn, buf);
     print_buffer(str, buf, len);
     free(buf);
-}
-
-static void
-sae_debug (int level, const char *fmt, ...)
-{
-    va_list argptr;
-
-    if (debug & level) {
-        va_start(argptr, fmt);
-        vfprintf(stderr, fmt, argptr);
-        va_end(argptr);
-    }
 }
 
 static int
@@ -511,7 +494,7 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     CN_Final(&ctx, tmp);
 
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("peer's confirm",
                     frame->authenticate.u.var8,
                     SHA256_DIGEST_LENGTH + sizeof(unsigned short));
@@ -620,7 +603,7 @@ confirm_to_peer (struct candidate *peer)
 
     CN_Final(&ctx, (frame->authenticate.u.var8 + sizeof(unsigned short)));
 
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("local confirm",
                     frame->authenticate.u.var8,
                     SHA256_DIGEST_LENGTH + sizeof(unsigned short));
@@ -720,7 +703,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
         goto fail;
     }
 
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         printf("peer's commit:\n");
         pp_a_bignum("peer's scalar", peer->peer_scalar);
         printf("peer's element:\n");
@@ -799,7 +782,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     memcpy(peer->kck, kckpmk, SHA256_DIGEST_LENGTH);
     memcpy(peer->pmk, kckpmk+SHA256_DIGEST_LENGTH, SHA256_DIGEST_LENGTH);
 
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         pp_a_bignum("k", k);
         print_buffer("keyseed", keyseed, SHA256_DIGEST_LENGTH);
         print_buffer("KCK", peer->kck, SHA256_DIGEST_LENGTH);
@@ -872,7 +855,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
          */
         BN_rand_range(peer->private_val, peer->grp_def->order);
         BN_rand_range(mask, peer->grp_def->order);
-        if (debug & SAE_DEBUG_CRYPTO_VERB) {
+        if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
             pp_a_bignum("local private value", peer->private_val);
             pp_a_bignum("local mask value", mask);
         }
@@ -907,7 +890,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
         BN_free(y);
         return -1;
     }
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         printf("local commit:\n");
         pp_a_bignum("my scalar", peer->my_scalar);
         printf("my element:\n");
@@ -1102,7 +1085,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         H_Update(&ctx, &ctr, sizeof(ctr));
         H_Final(&ctx, pwe_digest);
 
-        if (debug & SAE_DEBUG_CRYPTO_VERB) {
+        if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
             if (memcmp(peer->peer_mac, peer->my_mac, ETH_ALEN) > 0) {
                 printf("H(" MACSTR " | " MACSTR ", %s | %d)\n",
                        MAC2STR(peer->peer_mac), MAC2STR(peer->my_mac), grp->password, ctr);
@@ -1138,7 +1121,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
             continue;
         }
 
-        if (debug & SAE_DEBUG_CRYPTO_VERB) {
+        if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
             memset(prfbuf, 0, BN_num_bytes(grp->prime));
             BN_bn2bin(x_candidate, prfbuf + (BN_num_bytes(grp->prime) - BN_num_bytes(x_candidate)));
             print_buffer("candidate x value", prfbuf, BN_num_bytes(grp->prime));
@@ -1177,7 +1160,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         break;
     }
 
-    if (debug & SAE_DEBUG_CRYPTO_VERB) {
+    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         BIGNUM *px = NULL, *py = NULL;
         if (((px = BN_new()) != NULL) &&
             ((py = BN_new()) != NULL)) {
@@ -1574,7 +1557,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      * print out the PMK if we have debugging on for that
                      */
                     if (peer->state != SAE_ACCEPTED) {
-                        if (debug & SAE_DEBUG_CRYPTO) {
+                        if (sae_debug_mask & SAE_DEBUG_CRYPTO) {
                             print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
                         }
                         fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
@@ -1911,6 +1894,9 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                 delete_peer(&peer);
             }
             break;
+        case IEEE802_11_FC_STYPE_ACTION:
+            /* JC: probably pass peer too*/
+            process_ampe_frame(frame, len, cookie);
         default:
             return -1;
     }
@@ -2097,7 +2083,7 @@ JC: Commented out until we decide whether this is needed (in which case we must
     /*
      * set defaults and read in config
      */
-    debug = config->debug;
+    sae_debug_mask = config->debug;
     curr_open = 0;
     open_threshold = config->open_threshold ? config->open_threshold : 5;
     blacklist_timeout = config->blacklist_timeout ? config->blacklist_timeout

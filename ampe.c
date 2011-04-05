@@ -65,21 +65,30 @@
 #include "ieee802_11.h"
 #include "os_glue.h"
 #include "sae.h"
+#include "ampe.h"
 
-int
-protect_plink_frame (struct ieee80211_mgmt_frame *frame, int *len, int max_len)
+TAILQ_HEAD(nincompoop, ampe_candidate) candidates;
+extern service_context srvctx;
+
+static struct ampe_candidate*
+create_candidate (unsigned char *her_mac, unsigned char *my_mac, void *cookie)
 {
-    /* Henceforth this frame is self-protected */
-    frame->action.category = 15;
-    //frame->action.u.var8[0] = 0xbb;
-    return 0;
+    struct ampe_candidate *cand;
+
+    if ((cand = (struct ampe_candidate*) malloc(sizeof(struct ampe_candidate))) == NULL) {
+        sae_debug(0x20, "can't malloc space for candidate!\n");
+        return NULL;
+    }
+    memset(cand, 0, sizeof(cand));
+    memcpy(cand->local_mac, my_mac, ETH_ALEN);
+    memcpy(cand->mac, her_mac, ETH_ALEN);
+    cand->state = PLINK_LISTEN;
+
+    return cand;
 }
 
-int
-verify_plink_frame (struct ieee80211_mgmt_frame *frame, int *len, int max_len)
+int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie)
 {
-    /* Henceforth this frame is un-protected */
-    frame->action.category = 13;
-    //frame->action.u.var8[0] = 0xaa;
+    create_candidate (NULL, NULL, NULL);
     return 0;
 }

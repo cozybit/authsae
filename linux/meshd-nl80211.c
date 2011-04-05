@@ -58,7 +58,6 @@
 #include "service.h"
 #include "ieee802_11.h"
 #include "sae.h"
-#include "ampe.h"
 
 
 /* Runtime config variables */
@@ -486,19 +485,11 @@ static int event_handler(struct nl_msg *msg, void *arg)
                                                       IEEE802_11_FC_STYPE_AUTH << 4))) {
                     if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
-                /* Action (peer link) frames go to AMPE */
+                /* Action (peer link) also go to SAE */
                 } else if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_ACTION << 4))) {
-                    /* ingress (to be verified)? */
-                    if (memcmp(frame->da, nlcfg.mymacaddr, ETH_ALEN) == 0) {
-                        fprintf(stderr, "verifying frame\n");
-                        verify_plink_frame(frame, &frame_len, frame_len);
-                    } else if (memcmp(frame->sa, nlcfg.mymacaddr, ETH_ALEN) == 0) {
-                        fprintf(stderr, "protecting frame\n");
-                        protect_plink_frame(frame, &frame_len, frame_len);
-                    } else
-                        debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
-                    meshd_write_mgmt((char*) frame, frame_len);
+                    if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
+                        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else
                     debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
             }

@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -35,9 +35,16 @@
  * this code cannot simply be copied and put under a different distribution
  * license (including the GNU public license).
  */
+//#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
 
 #include <stdio.h>
 #include "common.h"
+
+unsigned int sae_debug_mask;
 
 /*
  * parser_buffer()
@@ -72,4 +79,15 @@ parse_buffer (char *buf, char **val)
     *val = ptr;
 
     return 1;
+}
+
+void sae_debug (int level, const char *fmt, ...)
+{
+    va_list argptr;
+
+    if (sae_debug_mask & level) {
+        va_start(argptr, fmt);
+        vfprintf(stderr, fmt, argptr);
+        va_end(argptr);
+    }
 }

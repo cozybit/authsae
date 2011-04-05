@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -50,4 +50,12 @@
 #define MESHD_11g       3
 int parse_buffer(char *, char **);
 
+#define SAE_DEBUG_ERR           0x01
+#define SAE_DEBUG_PROTOCOL_MSG  0x02
+#define SAE_DEBUG_STATE_MACHINE 0x04
+#define SAE_DEBUG_CRYPTO        0x08
+#define SAE_DEBUG_CRYPTO_VERB   0x10
+#define AMPE_DEBUG_CANDIDATES   0x20
+extern unsigned int sae_debug_mask;
+void sae_debug (int level, const char *fmt, ...);
 #endif  /* _COMMON_H_ */

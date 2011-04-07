@@ -436,6 +436,45 @@ static int request_mesh_caps(struct netlink_config_s *nlcfg)
 nla_put_failure:
     return -ENOBUFS;
 }
+
+int install_mesh_keys(struct netlink_config_s *nlcfg, char *peer, char *pmk)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_NEW_KEY;
+    int ret;
+    char *pret;
+    unsigned char ptk[16] = { 0 };
+    unsigned char seq[6] = { 0 };
+
+    memcpy(ptk, pmk, 16);
+    assert(nlcfg);
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
+    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);		/* might need MIC stuff as well */
+    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);			/* 0 is ok, right? */
+    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
+                strerror(-ret));
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 #if 0
 static void srv_timeout_wrapper(timerid t, void *data)
 {
@@ -479,7 +518,6 @@ static int event_handler(struct nl_msg *msg, void *arg)
 					? "yes" : "no");
 		}
 	break;
-
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
                 sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -809,6 +847,7 @@ void fin(int status, char *peer, char *buf, int len)
          */
         //new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
+	install_mesh_keys(&nlcfg, peer, buf);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */

@@ -118,7 +118,7 @@ struct ieee80211_mgmt_frame {
         } __attribute__ ((packed)) beacon;
         struct {
             unsigned char category;
-            unsigned char action;
+            unsigned char action_code;
             union {
                 unsigned char var8[0];
                 unsigned short var16[0];
@@ -127,4 +127,10 @@ struct ieee80211_mgmt_frame {
     };
 } __attribute__ ((packed));
 
+
+enum plink_action_code {
+        PLINK_OPEN = 1,
+        PLINK_CONFIRM,
+        PLINK_CLOSE
+};
 #endif  /* _FRAME_H_ */

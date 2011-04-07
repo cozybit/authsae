@@ -23,6 +23,7 @@ struct ampe_state {
     unsigned short llid;
     unsigned short plid;
     unsigned short reason;
+    unsigned short retries;
     void *cookie;
 };
 

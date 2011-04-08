@@ -119,6 +119,12 @@ struct ieee80211_mgmt_frame {
         struct {
             unsigned char category;
             unsigned char action_code;
+            /* PLINK_OPEN has these fields before IES:*/
+            /*  Capability (2 bytes) */
+            /* PLINK_CONFIRM has these fields before IES:*/
+            /*  Capability (2 bytes) */
+            /*  AID (2 bytes) */
+            /* PLINK_CLOSE has no additional fixed length fields */
             union {
                 unsigned char var8[0];
                 unsigned short var16[0];
@@ -127,10 +133,48 @@ struct ieee80211_mgmt_frame {
     };
 } __attribute__ ((packed));
 
-
 enum plink_action_code {
         PLINK_OPEN = 1,
         PLINK_CONFIRM,
         PLINK_CLOSE
 };
+
+enum ieee_ie_ids {
+    IEEE80211_EID_RSN = 48,
+    IEEE80211_EID_MESH_CONFIG = 113,
+    IEEE80211_EID_MESH_ID = 114,
+    IEEE80211_EID_MESH_PEERING = 117,
+};
+
+enum ieee_categories {
+    IEEE80211_CATEGORY_MESH_ACTION = 13,
+    IEEE80211_CATEGORY_SELF_PROTECTED = 15,
+};
+
+struct mesh_peering_ie {
+    u8 eid;
+    u8 len;
+    le16 llid;
+    union {
+        le16 plid;
+        le16 reason;    /* may be in var[0] if plid is present */
+    };
+    u8 var[0];
+};
+
+struct info_elems {
+    unsigned char *rsn;
+    unsigned char rsn_len;
+
+    unsigned char *mesh_peering;
+    unsigned char mesh_peering_len;
+
+    unsigned char *mesh_id;
+    unsigned char mesh_id_len;
+
+    unsigned char *mesh_config;
+    unsigned char mesh_config_len;
+};
+
+void parse_ies(unsigned char *start, int len, struct info_elems *elems);
 #endif  /* _FRAME_H_ */

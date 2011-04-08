@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
+ * Copyright (c) cozybit Inc., 2011
  *
  *  Copyright holder grants permission for redistribution and use in source
  *  and binary forms, with or without modification, provided that the
@@ -43,6 +44,7 @@
 
 #include <stdio.h>
 #include "common.h"
+#include "ieee802_11.h"
 
 unsigned int sae_debug_mask;
 
@@ -89,5 +91,47 @@ void sae_debug (int level, const char *fmt, ...)
         va_start(argptr, fmt);
         vfprintf(stderr, fmt, argptr);
         va_end(argptr);
+    }
+}
+
+void parse_ies(unsigned char *start, int len, struct info_elems *elems)
+{
+    int left = len;
+    unsigned char *pos = start;
+
+    memset(elems, 0, sizeof(*elems));
+
+    while (left >= 2) {
+        unsigned char id, elen;
+
+        id = *pos++;
+        elen = *pos++;
+        left -= 2;
+
+        if (elen > left)
+            break;
+
+        switch (id) {
+            case IEEE80211_EID_RSN:
+                elems->rsn = pos;
+                elems->rsn_len = elen;
+                break;
+            case IEEE80211_EID_MESH_ID:
+                elems->mesh_id = pos;
+                elems->mesh_id_len = elen;
+                break;
+            case IEEE80211_EID_MESH_PEERING:
+                elems->mesh_peering = pos;
+                elems->mesh_peering_len = elen;
+                break;
+            case IEEE80211_EID_MESH_CONFIG:
+                elems->mesh_config = pos;
+                elems->mesh_config_len = elen;
+                break;
+            default:
+                break;
+        }
+        left -= elen;
+        pos += elen;
     }
 }

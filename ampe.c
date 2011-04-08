@@ -44,12 +44,8 @@
 #include <sys/time.h>
 #include <sys/queue.h>
 #include <net/if.h>
-#include <openssl/bn.h>
-#include <openssl/sha.h>
-#include <openssl/ec.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/rand.h>
+#include <assert.h>
+
 #include "service.h"
 #include "common.h"
 #include "ieee802_11.h"
@@ -99,6 +95,17 @@ enum plink_event {
         CLS_IGNR
 };
 
+struct ampe_state* find_by_address(unsigned char *mac)
+{
+    struct ampe_state *cand;
+
+    TAILQ_FOREACH(cand, &candidates, entry) {
+        if (memcmp(cand->mac, mac, ETH_ALEN) == 0)
+            return cand;
+    }
+    return NULL;
+}
+
 static struct ampe_state* create_candidate (unsigned char *her_mac, unsigned char *my_mac, void *cookie)
 {
     struct ampe_state *cand;
@@ -111,13 +118,81 @@ static struct ampe_state* create_candidate (unsigned char *her_mac, unsigned cha
     memcpy(cand->local_mac, my_mac, ETH_ALEN);
     memcpy(cand->mac, her_mac, ETH_ALEN);
     cand->state = PLINK_LISTEN;
-
     return cand;
 }
 
 static int plink_free_count() {
     sae_debug(AMPE_DEBUG_CANDIDATES, "TODO: return available peer link slots");
     return 99;
+}
+
+static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
+    int len, u16 *ie_len)
+{
+    int offset;
+    switch(frame->action.action_code) {
+        case PLINK_OPEN:
+            offset = 2;
+        case PLINK_CONFIRM:
+            offset = 4;
+        case PLINK_CLOSE:
+            offset = 0;
+    }
+    if (ie_len)
+        *ie_len = len - 24 - sizeof(frame->action) - offset;
+    return (frame->action.u.var8 + offset);
+}
+
+static int plink_frame_tx(enum plink_action_code action, unsigned char *da,
+        le16 llid, le16 plid, le16 reason) {
+        unsigned char *buf;
+        struct ieee80211_mgmt_frame *mgmt;
+        int include_plid = 0;
+        int ie_len;
+        struct mesh_peering_ie;
+
+        /* XXX: calculate the right size */
+        buf = calloc(1, 400);
+        if (!buf)
+                return -1;
+
+        mgmt = (struct ieee80211_mgmt_frame *) buf;
+        mgmt->frame_control = htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
+                                    IEEE802_11_FC_STYPE_ACTION << 4));
+
+        memcpy(mgmt->da, da, ETH_ALEN);
+        // XXX: our address
+        //memcpy(mgmt->sa, sdata->vif.addr, ETH_ALEN);
+        // XXX: our address
+        //memcpy(mgmt->bssid, sdata->vif.addr, ETH_ALEN);
+        mgmt->action.category = IEEE80211_CATEGORY_SELF_PROTECTED;
+        mgmt->action.action_code = action;
+
+        /* Add Mesh ID element */
+
+        /* Add Mesh Peering element */
+        switch (action) {
+        case PLINK_OPEN:
+                ie_len = 6;
+                break;
+        case PLINK_CONFIRM:
+                ie_len = 8;
+                include_plid = 1;
+                break;
+        case PLINK_CLOSE:
+                if (!plid)
+                        ie_len = 8;
+                else {
+                        ie_len = 10;
+                        include_plid = 1;
+                }
+                break;
+        default:
+            assert(0 == 1);
+        }
+
+        //ieee80211_tx_buf(buf, len);
+        return 0;
 }
 
 static void fsm_step(struct ampe_state *cand, enum plink_event event)
@@ -136,10 +211,8 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//get_random_bytes(&llid, 2);
 			//cand->llid = llid;
 			//mesh_plink_timer_set(cand, dot11MeshRetryTimeout(sdata));
-			//mesh_plink_frame_tx(sdata, PLINK_OPEN, cand->mac, llid,
-			//		    0, 0);
-			//mesh_plink_frame_tx(sdata, PLINK_CONFIRM, cand->mac,
-		                            //llid, plid, 0);
+			plink_frame_tx(PLINK_OPEN, cand->mac, llid, 0, 0);
+			plink_frame_tx(PLINK_CONFIRM, cand->mac, llid, plid, 0);
 			break;
 		default:
 			break;
@@ -161,16 +234,14 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//	cand->ignore_plink_timer = true;
 
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CLOSE, cand->mac, llid,
-			//		    plid, reason);
+			plink_frame_tx(PLINK_CLOSE, cand->mac, llid, plid, reason);
 			break;
 		case OPN_ACPT:
 			/* retry timer is left untouched */
 			cand->state = PLINK_OPN_RCVD;
 			cand->plid = plid;
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CONFIRM, cand->mac, llid,
-			//		    plid, 0);
+			plink_frame_tx(PLINK_CONFIRM, cand->mac, llid, plid, 0);
 			break;
 		case CNF_ACPT:
 			cand->state = PLINK_CNF_RCVD;
@@ -199,13 +270,11 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//	cand->ignore_plink_timer = true;
 
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CLOSE, cand->mac, llid,
-			//		    plid, reason);
+			plink_frame_tx(PLINK_CLOSE, cand->mac, llid, plid, reason);
 			break;
 		case OPN_ACPT:
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CONFIRM, cand->mac, llid,
-			//		    plid, 0);
+			plink_frame_tx(PLINK_CONFIRM, cand->mac, llid, plid, 0);
 			break;
 		case CNF_ACPT:
 			//del_timer(&cand->plink_timer);
@@ -235,8 +304,7 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//	cand->ignore_plink_timer = true;
 
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CLOSE, cand->mac, llid,
-			//		    plid, reason);
+			plink_frame_tx(PLINK_CLOSE, cand->mac, llid, plid, reason);
 			break;
 		case OPN_ACPT:
 			//del_timer(&cand->plink_timer);
@@ -245,8 +313,7 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
 			sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink with %pM ESTABLISHED\n",
 				cand->mac);
-			//mesh_plink_frame_tx(sdata, PLINK_CONFIRM, cand->mac, llid,
-			//		    plid, 0);
+			plink_frame_tx(PLINK_CONFIRM, cand->mac, llid, plid, 0);
 			break;
 		default:
 			break;
@@ -264,13 +331,11 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 			//mod_plink_timer(cand, dot11MeshHoldingTimeout(sdata));
 			//if (deactivated)
 		    //	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
-			//mesh_plink_frame_tx(sdata, PLINK_CLOSE, cand->mac, llid,
-			//		    plid, reason);
+			plink_frame_tx(PLINK_CLOSE, cand->mac, llid, plid, reason);
 			break;
 		case OPN_ACPT:
 			llid = cand->llid;
-			//mesh_plink_frame_tx(sdata, PLINK_CONFIRM, cand->mac, llid,
-			//		    plid, 0);
+			plink_frame_tx(PLINK_CONFIRM, cand->mac, llid, plid, 0);
 			break;
 		default:
 			break;
@@ -289,8 +354,7 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 		case CNF_RJCT:
 			llid = cand->llid;
 			reason = cand->reason;
-			//mesh_plink_frame_tx(sdata, PLINK_CLOSE, cand->mac,
-			//		    llid, plid, reason);
+			plink_frame_tx(PLINK_CLOSE, cand->mac, llid, plid, reason);
 			break;
 		default:
             break;
@@ -302,17 +366,32 @@ static void fsm_step(struct ampe_state *cand, enum plink_event event)
 	}
 }
 
+#define PLINK_GET_LLID(p) (p + 4)
+#define PLINK_GET_PLID(p) (p + 6)
 
-/* return status: 0 unless something really bad happened
+/**
+ * process_ampe_frame - process an ampe frame
+ * @frame:     The full frame
+ * @len:       The full frame length
+ * @cookie:    Opaque cookie that will be returned to the caller along with
+ *             frames to be transmitted.
+ *
+ * Returns 0 unless something really horrible happened.  In other words, even
+ * the frame could not be processed or it was corrupted, the function still
+ * returns 0.
  */
-int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie)
+int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
+                        unsigned char *me, void *cookie)
 {
+    struct info_elems elems;
     unsigned char ftype;
 	struct ampe_state *cand = NULL;
 	enum plink_event event;
 	int matches_local = 1;
 	unsigned char ie_len = 0;
 	unsigned short plid = 0, llid = 0, reason;
+    unsigned char *ies;
+    unsigned short ies_len;
 	static const char *mplstates[] = {
 		[PLINK_LISTEN] = "LISTEN",
 		[PLINK_OPN_SNT] = "OPN-SNT",
@@ -323,35 +402,24 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie
 		[PLINK_BLOCKED] = "BLOCKED"
 	};
 
-	/* need action_code, aux */
-	//if (len < IEEE80211_MIN_ACTION_SIZE + 3)
-	//	return 0;
+	/* management header, category, action code, mesh id and peering mgmt*/
+	if (len < 24 + 1 + 1 + 2 + 2)
+		return 0;
 
 	//if (is_multicast_ether_addr(mgmt->da)) {
 	//	sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: ignore frame to multicast address");
 	//	return 0;
 	//}
 
-	//baseaddr = mgmt->u.action.u.plink_action.variable;
-	//baselen = (u8 *) mgmt->u.action.u.plink_action.variable - (u8 *) mgmt;
-	//if (mgmt->u.action.u.plink_action.action_code == PLINK_CONFIRM) {
-	//	baseaddr += 4;
-	//	baselen += 4;
-	//}
-/* 	ieee802_11_parse_elems(baseaddr, len - baselen, &elems);
- * 	if (!elems.peer_link) {
- * 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary peer link ie\n");
- * 		return 0;
- * 	}
- * 	if (elems.rsn_len &&
- * 			sdata->u.mesh.security == IEEE80211_MESH_SEC_NONE) {
- * 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: can't establish link with secure peer\n");
- * 		return 0;
- * 	}
- */
+	ies = start_of_ies(mgmt, len, &ies_len);
+	parse_ies(ies, ies_len, &elems);
+	if (!elems.mesh_peering || !elems.rsn) {
+		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary peer link ie\n");
+		return 0;
+	}
 
-	ftype = frame->action.action_code;
-//	ie_len = elems.peer_link_len;
+	ftype = mgmt->action.action_code;
+	ie_len = elems.mesh_peering_len;
 	if ((ftype == PLINK_OPEN && ie_len != 6) ||
 	    (ftype == PLINK_CONFIRM && ie_len != 8) ||
 	    (ftype == PLINK_CLOSE && ie_len != 8 && ie_len != 10)) {
@@ -360,21 +428,19 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie
 		return 0;
 	}
 
-/* 	if (ftype != PLINK_CLOSE && (!elems.mesh_id || !elems.mesh_config)) {
- * 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary ie\n");
- * 		return 0;
- * 	}
- */
+    if (ftype != PLINK_CLOSE && (!elems.mesh_id || !elems.mesh_config)) {
+        sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary ie\n");
+        return 0;
+    }
+
 	/* Note the lines below are correct, the llid in the frame is the plid
 	 * from the point of view of this host.
 	 */
-/* 	memcpy(&plid, PLINK_GET_LLID(elems.peer_link), 2);
- * 	if (ftype == PLINK_CONFIRM || (ftype == PLINK_CLOSE && ie_len == 10))
- * 		memcpy(&llid, PLINK_GET_PLID(elems.peer_link), 2);
- */
+ 	memcpy(&plid, PLINK_GET_LLID(elems.mesh_peering), 2);
+    if (ftype == PLINK_CONFIRM || (ftype == PLINK_CLOSE && ie_len == 10))
+        memcpy(&llid, PLINK_GET_PLID(elems.mesh_peering), 2);
 
-
-	//cand = find_by_address(frame->sa);
+	cand = find_by_address(mgmt->sa);
 	if (!cand && ftype != PLINK_OPEN) {
 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: cls or cnf from unknown peer\n");
 		return 0;
@@ -410,8 +476,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie
 	if (!cand && !matches_local) {
 		reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
 		llid = 0;
-//		mesh_plink_frame_tx(sdata, PLINK_CLOSE, mgmt->sa, llid,
-//				    plid, reason);
+		plink_frame_tx(PLINK_CLOSE, mgmt->sa, llid, plid, reason);
 		return 0;
 	} else if (!cand) {
 		/* ftype == PLINK_OPEN */
@@ -423,7 +488,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie
 
 
 //		rates = ieee80211_sta_get_rates(local, &elems, rx_status->band);
-		cand = create_candidate(frame->sa, NULL, NULL);
+		cand = create_candidate(mgmt->sa, me, cookie);
 		if (!cand) {
 			sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink error: plink table full\n");
 			return 0;
@@ -471,7 +536,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie
 	}
 
 	sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink (peer, state, llid, plid, event): %pM %s %d %d %d\n",
-		frame->sa, mplstates[cand->state],
+		mgmt->sa, mplstates[cand->state],
 		le16toh(cand->llid), le16toh(cand->plid),
 		event);
 	reason = 0;

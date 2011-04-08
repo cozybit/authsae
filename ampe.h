@@ -13,6 +13,7 @@ enum plink_state {
 
 struct ampe_state {
     TAILQ_ENTRY(ampe_state) entry;
+#define SHA256_DIGEST_LENGTH	32
     unsigned char pmk[SHA256_DIGEST_LENGTH];
     unsigned char kck[SHA256_DIGEST_LENGTH];
     timerid t0;
@@ -27,5 +28,5 @@ struct ampe_state {
     void *cookie;
 };
 
-int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, void *cookie);
+int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie);
 #endif

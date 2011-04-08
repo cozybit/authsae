@@ -58,4 +58,14 @@ int parse_buffer(char *, char **);
 #define AMPE_DEBUG_CANDIDATES   0x20
 extern unsigned int sae_debug_mask;
 void sae_debug (int level, const char *fmt, ...);
+
+#ifndef u8
+#define u8 unsigned char
+#endif
+#ifndef le16
+#define le16 unsigned short
+#endif
+#ifndef u16
+#define u16 unsigned short
+#endif
 #endif  /* _COMMON_H_ */

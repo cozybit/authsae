@@ -56,8 +56,11 @@ int parse_buffer(char *, char **);
 #define SAE_DEBUG_CRYPTO        0x08
 #define SAE_DEBUG_CRYPTO_VERB   0x10
 #define AMPE_DEBUG_CANDIDATES   0x20
+#define MESHD_DEBUG             0x40
 extern unsigned int sae_debug_mask;
 void sae_debug (int level, const char *fmt, ...);
+void sae_hexdump(int level, const char *label, const char *start, int
+        len);
 
 #ifndef u8
 #define u8 unsigned char

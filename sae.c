@@ -1896,7 +1896,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
             break;
         case IEEE802_11_FC_STYPE_ACTION:
             /* JC: probably pass peer too*/
-            process_ampe_frame(frame, len, cookie);
+            process_ampe_frame(frame, len, me, cookie);
         default:
             return -1;
     }

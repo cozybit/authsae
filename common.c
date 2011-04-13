@@ -94,6 +94,26 @@ void sae_debug (int level, const char *fmt, ...)
     }
 }
 
+void sae_hexdump(int level, const char *label, const char *start, int len)
+{
+    const char *pos;
+    int i;
+
+    if (sae_debug_mask & level) {
+        fprintf(stderr, "----------\n");
+        fprintf(stderr, "%s hexdump", label);
+        pos = start;
+        for (i=0; i<len; i++) {
+            if (!(i%20)) fprintf(stderr, "\n");
+            fprintf(stderr, "%02x ", (unsigned char) *pos++);
+        }
+        fprintf(stderr, "\n----------\n\n");
+        fflush(stdout);
+    }
+    return;
+}
+
+
 void parse_ies(unsigned char *start, int len, struct info_elems *elems)
 {
     int left = len;

@@ -152,14 +152,14 @@ enum ieee_categories {
 };
 
 struct mesh_peering_ie {
-    u8 eid;
-    u8 len;
-    le16 llid;
+    unsigned char eid;
+    unsigned char len;
+    unsigned short llid;
     union {
-        le16 plid;
-        le16 reason;    /* may be in var[0] if plid is present */
+        unsigned short plid;
+        unsigned short reason;    /* may be in var[0] if plid is present */
     };
-    u8 var[0];
+    unsigned char var[0];
 };
 
 struct info_elems {

@@ -58,6 +58,8 @@
 #include "service.h"
 #include "ieee802_11.h"
 #include "sae.h"
+#include "ampe.h"
+#include "common.h"
 
 
 /* Runtime config variables */
@@ -78,16 +80,6 @@ const char rsn_ie[0x16] = {0x30, /* RSN element ID */
 
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *mac);
 
-static void
-debug_msg (const char *fmt, ...)
-{
-    va_list argptr;
-
-    va_start(argptr, fmt);
-    vfprintf(stderr, fmt, argptr);
-    va_end(argptr);
-}
-
 int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {
     int fd;
@@ -98,7 +90,7 @@ int get_mac_addr(const char * ifname, uint8_t *macaddr)
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
     if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
-        debug_msg("meshd: failed to read mac address for %s\n", ifname);
+        sae_debug(MESHD_DEBUG, "meshd: failed to read mac address for %s\n", ifname);
         perror("meshd");
         return -1;
     }
@@ -122,25 +114,6 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
             return &haystack[hl];
     }
     return NULL;
-}
-
-static void hexdump(const char *label, const char *start, int len)
-{
-    const char *pos;
-    int i;
-    struct timeval now;
-
-    gettimeofday(&now, NULL);
-    debug_msg("----------\n");
-    debug_msg("%s hexdump: %d.%d", label, now.tv_sec, now.tv_usec);
-    pos = start;
-    for (i=0; i<len; i++) {
-        if (!(i%20)) debug_msg("\n");
-        debug_msg("%02x ", (unsigned char) *pos++);
-    }
-    debug_msg("\n----------\n\n");
-    fflush(stdout);
-    return;
 }
 
 static void srv_handler_wrapper(int fd, void *data)
@@ -178,10 +151,10 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        debug_msg("tx frame failed: %d (%s)\n", ret,
+        sae_debug(MESHD_DEBUG, "tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     else
-        hexdump("tx frame", frame, len);
+        sae_hexdump(MESHD_DEBUG, "tx frame", frame, len);
     return ret;
 nla_put_failure:
     return -ENOBUFS;
@@ -218,7 +191,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
 	 * we'll use the available ie parsing routines
 	 * */
     if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL) {
-        hexdump("ie dump", (char *)ie, ie_len);
+        sae_hexdump(MESHD_DEBUG, "ie dump", (char *)ie, ie_len);
         return NL_SKIP;
     }
 
@@ -299,41 +272,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
 
     return NL_SKIP;
 }
-
-#if 0
-static int trigger_scan(struct netlink_config_s *nlcfg)
-{
-    struct nl_msg *msg, *freqs;
-    uint8_t cmd = NL80211_CMD_TRIGGER_SCAN;
-    int ret;
-    char *pret;
-
-    msg = nlmsg_alloc();
-    freqs = nlmsg_alloc();
-
-    if (!msg || !freqs)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0,
-        cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT_U32(freqs, 1, nlcfg->freq);
-    nla_put_nested(msg, NL80211_ATTR_SCAN_FREQUENCIES, freqs);
-    nlmsg_free(freqs);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        debug_msg("Scan failed: %d (%s)\n", ret,
-                strerror(-ret));
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-#endif
 
 static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 {
@@ -433,7 +371,7 @@ static int request_scan_results(struct netlink_config_s *nlcfg)
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        debug_msg("Scan results request failed: %d (%s)\n", ret,
+        sae_debug(MESHD_DEBUG, "Scan results request failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -451,7 +389,7 @@ static void srv_timeout_wrapper(timerid t, void *data)
 
 static void usage(void)
 {
-    debug_msg("\n\n"
+    sae_debug(MESHD_DEBUG, "\n\n"
             "usage:\n"
             "  meshd-nl80211 [-B] [-i<ifname>]\n\n");
 }
@@ -476,10 +414,10 @@ static int event_handler(struct nl_msg *msg, void *arg)
     switch (gnlh->cmd) {
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
-                debug_msg("NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
+                sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
-                hexdump("rx frame", (char *)frame, frame_len);
+                sae_hexdump(MESHD_DEBUG, "rx frame", (char *)frame, frame_len);
                 /* Auth frames go to SAE */
                 if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_AUTH << 4))) {
@@ -491,36 +429,36 @@ static int event_handler(struct nl_msg *msg, void *arg)
                     if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else
-                    debug_msg("got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
+                    sae_debug(MESHD_DEBUG, "got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            debug_msg("NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
             break;
         case NL80211_CMD_NEW_PEER_CANDIDATE:
-            debug_msg("NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
             new_candidate_handler(msg, arg);
             break;
         case NL80211_CMD_NEW_SCAN_RESULTS:
-            debug_msg("NL80211_CMD_NEW_SCAN_RESULTS (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_SCAN_RESULTS (%d.%d)\n", now.tv_sec, now.tv_usec);
             if (tb[NL80211_ATTR_GENERATION]) {
-                debug_msg("retrieving results...\n");
+                sae_debug(MESHD_DEBUG, "retrieving results...\n");
                 return scan_results_handler(msg, arg);
             } else {
-                debug_msg("requesting results\n");
+                sae_debug(MESHD_DEBUG, "requesting results\n");
                 request_scan_results(&nlcfg);
             }
             break;
         case NL80211_CMD_TRIGGER_SCAN:
-            debug_msg("NL80211_CMD_TRIGGER_SCAN (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_TRIGGER_SCAN (%d.%d)\n", now.tv_sec, now.tv_usec);
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
-            debug_msg("NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
             if (!tb[NL80211_ATTR_ACK] || !tb[NL80211_ATTR_FRAME])
-                debug_msg("tx frame failed!");
+                sae_debug(MESHD_DEBUG, "tx frame failed!");
             break;
         default:
-            debug_msg("Ignored event (%d)\n", gnlh->cmd);
+            sae_debug(MESHD_DEBUG, "Ignored event (%d)\n", gnlh->cmd);
             break;
     }
 
@@ -701,7 +639,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!mesh_id || !mesh_id_len)
         return -EINVAL;
 
-    debug_msg("meshd: Staring mesh with mesh id = %s\n", mesh_id);
+    sae_debug(MESHD_DEBUG, "meshd: Staring mesh with mesh id = %s\n", mesh_id);
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
@@ -714,7 +652,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     if (!container)
         return -ENOBUFS;
 
-    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 1);
+    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
     nla_nest_end(msg, container);
 
     container = nla_nest_start(msg,
@@ -748,9 +686,9 @@ nla_put_failure:
 
 void fin(int status, char *peer, char *buf, int len)
 {
-    debug_msg("fin: %d, key len:%d\n", status, len);
+    sae_debug(MESHD_DEBUG, "fin: %d, key len:%d\n", status, len);
     if (!status && len) {
-        hexdump("pmk", buf, len % 80);
+        sae_hexdump(MESHD_DEBUG, "pmk", buf, len % 80);
         /* It may be that the kernel does not know about this station yet.
          * We could either check if it exists or just attempt to create
          * blindly and let it fail if it already exists.  Doing the latter.
@@ -758,8 +696,11 @@ void fin(int status, char *peer, char *buf, int len)
         new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
 
-        /* If auto peer link open is turned off: */
+        /* If auto peer link open is turned off  but we want the
+         * kernel to run the peering protocol */
         //open_peer_link(&nlcfg, peer);
+        /* Userspace initiates the peering */
+        start_peer_link((unsigned char *) peer, (unsigned char *) nlcfg.mymacaddr, NULL);
     }
 }
 

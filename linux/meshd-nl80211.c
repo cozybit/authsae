@@ -80,6 +80,32 @@ const char rsn_ie[0x16] = {0x30, /* RSN element ID */
 
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *mac);
 
+/* Undo libnl's error code translation.  See nl_syserr2nlerr */
+static void nl2syserr(int error)
+{
+        error = abs(error);
+
+        switch (error) {
+        case NLE_BAD_SOCK:		fprintf(stderr, "EBADF or ENOTSOCK\n"); break;
+        case NLE_EXIST:			fprintf(stderr, "EADDRINUSE or EEXIST\n"); break;
+        case NLE_NOADDR:		fprintf(stderr, "EADDRNOTAVAIL\n"); break;
+        case NLE_OBJ_NOTFOUND:	fprintf(stderr, "ENOENT\n"); break;
+        case NLE_INTR:			fprintf(stderr, "EINTR\n"); break;
+        case NLE_AGAIN:			fprintf(stderr, "EAGAIN\n"); break;
+        case NLE_INVAL:			fprintf(stderr, "EINVAL, ENOPROTOOPT or EFAULT\n"); break;
+        case NLE_NOACCESS:		fprintf(stderr, "EACCES\n"); break;
+        case NLE_NOMEM:			fprintf(stderr, "ENOMEM or ENOBUFS\n"); break;
+        case NLE_AF_NOSUPPORT:	fprintf(stderr, "EAFNOSUPPORT\n"); break;
+        case NLE_PROTO_MISMATCH:fprintf(stderr, "EPROTONOSUPPORT\n"); break;
+        case NLE_OPNOTSUPP:		fprintf(stderr, "EOPNOTSUPP\n"); break;
+        case NLE_PERM:			fprintf(stderr, "EPERM\n"); break;
+        case NLE_BUSY:			fprintf(stderr, "EBUSY\n"); break;
+        case NLE_RANGE:			fprintf(stderr, "ERANGE\n"); break;
+        default:                fprintf(stderr, "UNKNOWN NL ERROR\n"); break;
+        }
+        return;
+}
+
 int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {
     int fd;
@@ -121,6 +147,7 @@ static void srv_handler_wrapper(int fd, void *data)
     int err;
     if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0) {
         fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
+        nl2syserr(err);
         perror("srv_handler_wrapper()\n");
     }
     fflush(stdout);

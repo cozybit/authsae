@@ -720,7 +720,7 @@ void fin(int status, char *peer, char *buf, int len)
          * We could either check if it exists or just attempt to create
          * blindly and let it fail if it already exists.  Doing the latter.
          */
-        new_unauthenticated_peer(&nlcfg, peer);
+        //new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
 
         /* If auto peer link open is turned off  but we want the

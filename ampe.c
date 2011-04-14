@@ -465,6 +465,12 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	//	return 0;
 	//}
 
+    /*  JC: for now, just bypass everything and establish the plink */
+    sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: short cutting "
+            "AMPE and jumping directly into ESTAB state\n");
+    estab_peer_link(mgmt->sa);
+    return 0;
+
 	ies = start_of_ies(mgmt, len, &ies_len);
 	parse_ies(ies, ies_len, &elems);
 	if (!elems.mesh_peering || !elems.rsn) {

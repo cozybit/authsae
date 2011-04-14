@@ -11,6 +11,10 @@ enum plink_state {
     PLINK_BLOCKED
 };
 
+/*  meshd calls these:  */
 int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie);
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
+
+/*  and implements these:  */
+void estab_peer_link(unsigned char *peer);
 #endif

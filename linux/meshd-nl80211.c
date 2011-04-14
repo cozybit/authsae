@@ -570,6 +570,42 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+static int set_plink_state(struct netlink_config_s *nlcfg, char *peer, int state)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_STATION;
+    int ret;
+    char *pret;
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_STATE, state);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *peer)
 {
     struct nl_msg *msg;
@@ -709,6 +745,16 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     return ret;
 nla_put_failure:
     return -ENOBUFS;
+}
+
+void estab_peer_link(unsigned char *peer)
+{
+    if (peer) {
+        sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
+/* from include/net/cfg80211.h */
+#define PLINK_ESTAB 5
+        set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
+    }
 }
 
 void fin(int status, char *peer, char *buf, int len)

@@ -239,6 +239,11 @@ fin (unsigned short reason, unsigned char *mac, unsigned char *key, int keylen)
     }
 }
 
+void estab_peer_link(unsigned char *peer)
+{
+    printf("TODO: implement estab_peer_link\n");
+}
+
 static void
 add_interface (char *ptr)
 {

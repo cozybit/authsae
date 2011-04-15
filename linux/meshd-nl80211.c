@@ -752,7 +752,7 @@ void estab_peer_link(unsigned char *peer)
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 /* from include/net/cfg80211.h */
-#define PLINK_ESTAB 5
+#define PLINK_ESTAB 4
         set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
     }
 }

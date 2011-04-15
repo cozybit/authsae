@@ -28,9 +28,7 @@
 #include <linux/filter.h>
 #include <errno.h>
 #include <linux/if_ether.h>
-
-//#include <linux/nl80211.h>
-#include "nl80211.h"
+#include "nl80211-copy.h"
 
 
 struct netlink_config_s {

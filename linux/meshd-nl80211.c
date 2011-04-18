@@ -437,7 +437,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int install_mesh_keys(struct netlink_config_s *nlcfg, char *peer, char *pmk)
+int install_mesh_data_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_KEY;
@@ -449,6 +449,7 @@ int install_mesh_keys(struct netlink_config_s *nlcfg, char *peer, char *pmk)
     memcpy(ptk, pmk, 16);
     assert(nlcfg);
 
+    /* first, install new key, apparently this becomes the default automatically */
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
@@ -459,9 +460,10 @@ int install_mesh_keys(struct netlink_config_s *nlcfg, char *peer, char *pmk)
     if (pret == NULL)
         goto nla_put_failure;
 
+   // NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);		/* default uni and multicast key */
     NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);		/* might need MIC stuff as well */
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);			/* 0 is ok, right? */
+    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);
+    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
     NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
@@ -475,6 +477,68 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+int install_mesh_mgmt_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_NEW_KEY;
+    int ret;
+    char *pret;
+    unsigned char ptk[16] = { 0 };
+    unsigned char seq[6] = { 0 };
+
+    memcpy(ptk, pmk, 16);
+    assert(nlcfg);
+
+    /* add multicast managment key (IGTK), just adding this key with attr
+       DEFAULT_MGMT does not make it the default mgmt key. We need to use SET_KEY for
+       that. */
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC06);	/* AES-CMAC */
+    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);
+    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for IGTK */
+    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
+                strerror(-ret));
+
+    /* make it the default mgmt key */
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    cmd = NL80211_CMD_SET_KEY;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT_MGMT);		/* IGTK */
+    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for mgmt */
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
+                strerror(-ret));
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
 #if 0
 static void srv_timeout_wrapper(timerid t, void *data)
 {
@@ -633,6 +697,7 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+				(1 << NL80211_STA_FLAG_MFP) |
                                 (1 << NL80211_STA_FLAG_AUTHORIZED);
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
@@ -847,7 +912,8 @@ void fin(int status, char *peer, char *buf, int len)
          */
         //new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
-	install_mesh_keys(&nlcfg, peer, buf);
+	install_mesh_data_key(&nlcfg, peer, buf);
+	install_mesh_mgmt_key(&nlcfg, peer, buf);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */

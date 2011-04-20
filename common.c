@@ -128,6 +128,8 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
         elen = *pos++;
         left -= 2;
 
+        fprintf(stdout, "parse_ies pos=%p elen=%d\n", pos, elen);
+
         if (elen > left)
             break;
 

@@ -578,7 +578,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
 			printf("GET_WIPHY replied\n");
 		if (tb[NL80211_ATTR_SUPPORT_MESH_AUTH]) {
 			printf("got mesh capabilities:\n");
-			printf("security: %s\n", nla_get_flag(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]) 
+			printf("security: %s\n", nla_get_flag(tb[NL80211_ATTR_SUPPORT_MESH_AUTH])
 					? "yes" : "no");
 		}
 	break;
@@ -912,8 +912,8 @@ void fin(int status, char *peer, char *buf, int len)
          */
         //new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
-	install_mesh_data_key(&nlcfg, peer, buf);
-	install_mesh_mgmt_key(&nlcfg, peer, buf);
+	//install_mesh_data_key(&nlcfg, peer, buf);
+	//install_mesh_mgmt_key(&nlcfg, peer, buf);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */

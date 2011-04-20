@@ -163,12 +163,13 @@ static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
 
 static int plink_frame_tx(struct ampe_state *cand, enum
         plink_action_code action, unsigned short reason)
-{ unsigned char *buf;
+{
+        unsigned char *buf;
         struct ieee80211_mgmt_frame *mgmt;
-        int include_plid = 0;
-        int ie_len;
+        unsigned char *plen;
         int len;
         struct mesh_peering_ie;
+        unsigned char *ies;
 
         /* XXX: calculate the right size */
         len = 400;
@@ -186,28 +187,55 @@ static int plink_frame_tx(struct ampe_state *cand, enum
         mgmt->action.category = IEEE80211_CATEGORY_SELF_PROTECTED;
         mgmt->action.action_code = action;
 
-        /* Add Mesh ID element */
-
-        /* Add Mesh Peering element */
         switch (action) {
         case PLINK_OPEN:
-                ie_len = 6;
+                ies = mgmt->action.u.var8 + 2;
                 break;
         case PLINK_CONFIRM:
-                ie_len = 8;
-                include_plid = 1;
+                ies = mgmt->action.u.var8 + 4;
                 break;
         case PLINK_CLOSE:
-                if (!cand->plid)
-                        ie_len = 8;
-                else {
-                        ie_len = 10;
-                        include_plid = 1;
-                }
+                ies = mgmt->action.u.var8;
                 break;
         default:
             assert(0 == 1);
         }
+
+        /* Add Mesh ID element */
+        *ies++ = IEEE80211_EID_MESH_ID;
+        /*  TODO: add mesh id here */
+        *ies++ = strlen("HARDCODED");
+        strncpy((char *) ies, "HARDCODED", strlen("HARDCODED"));
+        ies += strlen("HARDCODED");
+
+        /* Add mesh peering */
+        *ies++ = IEEE80211_EID_MESH_PEERING;
+        plen = ies++;
+        memcpy(ies, &cand->llid, 2);
+        ies += 2;
+        *plen = 2;
+        if (cand->plid) {
+            memcpy(ies, &cand->llid, 2);
+            ies += 2;
+            *plen += 2;
+        }
+        if (reason) {
+            memcpy(ies, &cand->plid, 2);
+            ies += 2;
+            *plen += 2;
+        }
+
+        /*  TODO: Add PMK field to mesh peering element here */
+
+        /* Add mesh config */
+        *ies++ = IEEE80211_EID_MESH_CONFIG;
+        *ies++ = 8;
+        /*  TODO: IIRC all the defaults are 0. Double check */
+        memset(ies, 0, 8);
+        ies += 8;
+        *plen = 2;
+
+        /*  TODO: Add PMK field to mesh peering element here */
 
         if (meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
             sae_debug(SAE_DEBUG_ERR, "can't send an authentication "
@@ -422,6 +450,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
 
 	return plink_frame_tx(cand, PLINK_OPEN, 0);
 }
+
 /**
  * process_ampe_frame - process an ampe frame
  * @frame:     The full frame
@@ -465,33 +494,38 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	//	return 0;
 	//}
 
-    /*  JC: for now, just bypass everything and establish the plink */
-    sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: short cutting "
-            "AMPE and jumping directly into ESTAB state\n");
-    estab_peer_link(mgmt->sa);
-    return 0;
 
 	ies = start_of_ies(mgmt, len, &ies_len);
 	parse_ies(ies, ies_len, &elems);
-	if (!elems.mesh_peering || !elems.rsn) {
+	if (!elems.mesh_peering) {  // || !elems.rsn) {
 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary peer link ie\n");
 		return 0;
 	}
 
 	ftype = mgmt->action.action_code;
 	ie_len = elems.mesh_peering_len;
-	if ((ftype == PLINK_OPEN && ie_len != 6) ||
-	    (ftype == PLINK_CONFIRM && ie_len != 8) ||
-	    (ftype == PLINK_CLOSE && ie_len != 8 && ie_len != 10)) {
+
+    /*  TODO: This hard coded lenghts need reviewing  */
+	if ((ftype == PLINK_OPEN && ie_len != 2) ||
+	    (ftype == PLINK_CONFIRM && ie_len != 6) ||
+	    (ftype == PLINK_CLOSE && ie_len != 6 && ie_len != 10)) {
 		sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: incorrect plink ie length %d %d\n",
 		    ftype, ie_len);
 		return 0;
 	}
 
     if (ftype != PLINK_CLOSE && (!elems.mesh_id || !elems.mesh_config)) {
-        sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary ie\n");
+        sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: missing necessary ie %p %p\n", elems.mesh_id, elems.mesh_config);
         return 0;
     }
+
+    /*  JC: for now, just bypass everything and establish the plink */
+    sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: short cutting "
+            "AMPE and jumping directly into ESTAB state\n");
+    estab_peer_link(mgmt->sa);
+    return 0;
+
+
 
 	/* Note the lines below are correct, the llid in the frame is the plid
 	 * from the point of view of this host.

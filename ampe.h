@@ -12,6 +12,7 @@ enum plink_state {
 };
 
 /*  meshd calls these:  */
+int ampe_initialize(unsigned char *meshid, unsigned char meshid_len);
 int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie);
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 

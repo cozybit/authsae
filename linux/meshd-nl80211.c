@@ -198,9 +198,10 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-    const uint8_t *ie;
+    unsigned char *ie;
     size_t ie_len;
     struct ieee80211_mgmt_frame bcn;
+    struct info_elems elems;
 
     /* check that all the required info exists: source address
      * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
@@ -214,12 +215,10 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     ie = nla_data(tb[NL80211_ATTR_IE]);
     ie_len = nla_len(tb[NL80211_ATTR_IE]);
 
-	/* JC: For now, just do a brute search for the RSN ie in
-	 * these scan results. When we move this to wpa_supplicant
-	 * we'll use the available ie parsing routines
-	 * */
-    if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL) {
+    parse_ies(ie, ie_len, &elems);
+    if (elems.rsn == NULL) {
         sae_hexdump(MESHD_DEBUG, "ie dump", (char *)ie, ie_len);
+        sae_hexdump(AMPE_DEBUG_CANDIDATES, "new candidate ie", (char *)ie, ie_len);
         return NL_SKIP;
     }
 
@@ -993,6 +992,11 @@ int main(int argc, char *argv[])
     sae_parse_config(confdir, &config);
     if (sae_initialize(mesh_id, &config) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
+        exit(1);
+    }
+
+    if (ampe_initialize((unsigned char *) mesh_id, strlen(mesh_id)) < 0) {
+        fprintf(stderr, "%s: cannot configure AMPE!\n", argv[0]);
         exit(1);
     }
 

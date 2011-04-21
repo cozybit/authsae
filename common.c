@@ -128,7 +128,7 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
         elen = *pos++;
         left -= 2;
 
-        fprintf(stderr, "parse_ies pos=%p elen=%d\n", pos, elen);
+        fprintf(stderr, "parse_ies id=%d elen=%d\n", id, elen);
 
         if (elen > left)
             break;

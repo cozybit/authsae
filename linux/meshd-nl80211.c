@@ -61,9 +61,37 @@
 #include "ampe.h"
 #include "common.h"
 
+/*  Notes on peer station lifecycle:
+ *
+ *  Stations in this context are either mesh neighbors, peer candidates or
+ *  candidates.
+ *
+ *  Stations are created in the unauthenticated kernel when a
+ *  NEW_PEER_CANDIDATE is received from the kernel.  Creating the
+ *  unauthenticated station supresses further NEW_PEER_CANDIDATE (otherwise
+ *  we would keep getting the event for every beacon received).
+ *
+ *  A sae invokes a meshd callback when a new station needs to be created.
+ *  Failure to authenticate involves the destruction of a station.
+ *
+ *  Every station in the kernel exists also in userspace, in the 'peers' list
+ *  maintained by sae.c and updated by ampe.c
+ *
+ *  SAE determines when a station is authenticated.  The kernel is informed
+ *  of that by setting the AUTH flag on the station.
+ *
+ *  AMPE determines the peering state of a station.  AMPE invokes a meshd
+ *  callback when a station needs to change its state.
+ */
 
 /* Runtime config variables */
 static char *ifname = NULL;
+
+struct mesh_config {
+    unsigned char id[32];
+    unsigned char len;
+} meshcfg;
+
 static struct netlink_config_s nlcfg;
 service_context srvctx;
 
@@ -77,8 +105,6 @@ const char rsn_ie[0x16] = {0x30, /* RSN element ID */
                        0x0, 0x0F, 0xAC, 0x8, /* SAE for authentication */
                        0x0, 0x0,             /* Capabilities */
                        };
-
-static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *mac);
 
 /* Undo libnl's error code translation.  See nl_syserr2nlerr */
 static void nl2syserr(int error)
@@ -145,11 +171,10 @@ static const char * memmem(const char *haystack, int haystack_len, const char *n
 static void srv_handler_wrapper(int fd, void *data)
 {
     int err;
-    if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0 &&
-	 err != -6 /* ignore if station already exists */) {
-        fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
+    if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0) {
+        //fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
         nl2syserr(err);
-        perror("srv_handler_wrapper()\n");
+        //perror("srv_handler_wrapper()\n");
     }
     fflush(stdout);
 }
@@ -160,6 +185,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
     int ret = 0;
     char *pret;
 
+    sae_debug(MESHD_DEBUG, "%s(%p, %p, %d)\n", __FUNCTION__, nlcfg, frame, len);
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
@@ -167,7 +193,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
     if (!frame || !len)
         return -EINVAL;
 
-    pret = genlmsg_put(msg, 0, 0,
+    pret = genlmsg_put(msg, 0, NL_AUTO_SEQ,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
 
     if (pret == NULL)
@@ -178,11 +204,13 @@ static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
     NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "tx frame (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     else
-        sae_hexdump(MESHD_DEBUG, "tx frame", frame, len);
+        sae_hexdump(MESHD_DEBUG, "tx frame (seq num=%d)", frame, len);
     return ret;
 nla_put_failure:
     return -ENOBUFS;
@@ -204,7 +232,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     struct info_elems elems;
 
     /* check that all the required info exists: source address
-     * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
+     * (arrives as bssid), meshid, mesh config(TODO!) and RSN
      * */
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
@@ -217,8 +245,12 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
 
     parse_ies(ie, ie_len, &elems);
     if (elems.rsn == NULL) {
-        sae_hexdump(MESHD_DEBUG, "ie dump", (char *)ie, ie_len);
-        sae_hexdump(AMPE_DEBUG_CANDIDATES, "new candidate ie", (char *)ie, ie_len);
+        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
+        return NL_SKIP;
+    }
+    if (elems.mesh_id == NULL || elems.mesh_id_len != meshcfg.len ||
+            memcmp(elems.mesh_id, meshcfg.id, meshcfg.len) != 0) {
+        sae_debug(MESHD_DEBUG, "Candidate from different Mesh ID\n");
         return NL_SKIP;
     }
 
@@ -227,8 +259,6 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
             (IEEE802_11_FC_TYPE_MGMT << 2 |
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
-
-    new_unauthenticated_peer(&nlcfg, (char *)bcn.sa);
 
     if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL))
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
@@ -657,8 +687,11 @@ int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+
+    /*
 #define    PLINK_ACTION_OPEN    1
     NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_ACTION, PLINK_ACTION_OPEN);
+    */
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
@@ -703,6 +736,8 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
 
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "set auth flag (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
     if (ret < 0)
         fprintf(stderr,"Failed to set auth flag on station: %d (%s)\n", ret, strerror(-ret));
     else
@@ -739,6 +774,8 @@ static int set_plink_state(struct netlink_config_s *nlcfg, char *peer, int state
     NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_STATE, state);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "set plink state (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
     if (ret < 0)
         fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -749,7 +786,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *peer)
+static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, unsigned char *peer)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_STATION;
@@ -786,6 +823,8 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "new unauthed sta (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
     if (ret < 0)
         fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -870,7 +909,7 @@ int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len
     /* We'll be creating stations, not the kernel */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
 
-    /* We'll handle peer link frames */
+    /* We'll handle peer state transitions */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
 
     NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
@@ -900,16 +939,16 @@ void estab_peer_link(unsigned char *peer)
     }
 }
 
+void peer_created(unsigned char *peer)
+{
+        new_unauthenticated_peer(&nlcfg, peer);
+}
+
 void fin(int status, char *peer, char *buf, int len)
 {
     sae_debug(MESHD_DEBUG, "fin: %d, key len:%d\n", status, len);
     if (!status && len) {
         sae_hexdump(MESHD_DEBUG, "pmk", buf, len % 80);
-        /* It may be that the kernel does not know about this station yet.
-         * We could either check if it exists or just attempt to create
-         * blindly and let it fail if it already exists.  Doing the latter.
-         */
-        //new_unauthenticated_peer(&nlcfg, peer);
         set_authenticated_flag(&nlcfg, peer);
 	//install_mesh_data_key(&nlcfg, peer, buf);
 	//install_mesh_mgmt_key(&nlcfg, peer, buf);
@@ -1039,6 +1078,9 @@ int main(int argc, char *argv[])
     exitcode = join_mesh_rsn(&nlcfg, mesh_id, strlen(mesh_id));
     if (exitcode)
         goto out;
+
+    meshcfg.len = strlen(mesh_id);
+    memcpy(meshcfg.id, mesh_id, meshcfg.len);
 
     /* periodically check for scan results to detect new neighbors */
     //srv_add_timeout(srvctx, SRV_SEC(600), srv_timeout_wrapper, &nlcfg);

@@ -1259,6 +1259,8 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     peer->cookie = cookie;
     curr_open++;
 
+    peer_created(her_mac);
+
     return peer;
 }
 

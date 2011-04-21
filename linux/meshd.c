@@ -239,6 +239,11 @@ fin (unsigned short reason, unsigned char *mac, unsigned char *key, int keylen)
     }
 }
 
+void peer_created(unsigned char *peer)
+{
+    printf("SAE notification that a peer was created\n");
+}
+
 void estab_peer_link(unsigned char *peer)
 {
     printf("TODO: implement estab_peer_link\n");

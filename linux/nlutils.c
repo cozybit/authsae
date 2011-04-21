@@ -53,6 +53,7 @@ int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg)
                 goto out;
 
         err = nl_send_auto_complete(nl_sock, msg);
+
  out:
         nl_cb_put(cb);
         nlmsg_free(msg);

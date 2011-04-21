@@ -576,20 +576,17 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 
 	if (!cand && !matches_local) {
         struct ampe_state tmp;
-        sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: MESH_CAPABILITY_POLICY_VIOLATION\n");
 		reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         create_tmp_cand_from_frame(mgmt, &tmp);
 		plink_frame_tx(&tmp, PLINK_CLOSE, reason);
 		return 0;
 	} else if (!cand) {
-		/* ftype == PLINK_OPEN */
-
-        sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink: ftype == PLINK_OPEN\n");
+        sae_debug(AMPE_DEBUG_CANDIDATES,
+                "Mesh plink: !cand and ftype == PLINK_OPEN\n");
 		if (!plink_free_count()) {
 			sae_debug(AMPE_DEBUG_CANDIDATES, "Mesh plink error: no more free plinks\n");
 			return 0;
 		}
-
 
 //		rates = ieee80211_sta_get_rates(local, &elems, rx_status->band);
 		cand = create_candidate(mgmt->sa, me, cookie);

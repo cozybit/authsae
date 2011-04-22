@@ -604,12 +604,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
     switch (gnlh->cmd) {
 	    /* test */
 	case NL80211_CMD_NEW_WIPHY:
-			printf("GET_WIPHY replied\n");
-		if (tb[NL80211_ATTR_SUPPORT_MESH_AUTH]) {
-			printf("got mesh capabilities:\n");
-			printf("security: %s\n", nla_get_flag(tb[NL80211_ATTR_SUPPORT_MESH_AUTH])
-					? "yes" : "no");
-		}
+        assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
 	break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
@@ -1034,7 +1029,7 @@ int main(int argc, char *argv[])
     }
 
     /* TODO: move these to a config file */
-    ampe_conf.retry_timeout_ms = 10;
+    ampe_conf.retry_timeout_ms = 1000;
     ampe_conf.holding_timeout_ms = 1000;
     ampe_conf.confirm_timeout_ms = 1000;
     ampe_conf.max_retries = 10;

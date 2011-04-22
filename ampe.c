@@ -278,7 +278,6 @@ static int plink_frame_tx(struct candidate *cand, enum
 static void fsm_step(struct candidate *cand, enum plink_event event)
 {
     unsigned short reason = 0;
-    le16 plid = 0, llid = 0;
 
 	switch (cand->link_state) {
 	case PLINK_LISTEN:
@@ -287,10 +286,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			fsm_restart(cand);
 			break;
 		case OPN_ACPT:
-			cand->link_state = PLINK_OPN_RCVD;
-			cand->peer_lid = plid;
-			RAND_bytes((unsigned char *) &llid, 2);
-			cand->my_lid = llid;
             cand->timeout = config.retry_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_OPEN, 0);
@@ -311,24 +306,19 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-			//if (!mod_plink_timer(cand,
-			//		     dot11MeshHoldingTimeout(sdata)))
-			//	cand->ignore_plink_timer = true;
-
+            cand->timeout = config.holding_timeout_ms;
+            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
 			/* retry timer is left untouched */
 			cand->link_state = PLINK_OPN_RCVD;
-			cand->peer_lid = plid;
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
 			break;
 		case CNF_ACPT:
 			cand->link_state = PLINK_CNF_RCVD;
-			//if (!mod_plink_timer(cand,
-			//		     dot11MeshConfirmTimeout(sdata)))
-			//	cand->ignore_plink_timer = true;
-
+            cand->timeout = config.confirm_timeout_ms;
+            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			break;
 		default:
 			break;
@@ -345,10 +335,8 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-			//if (!mod_plink_timer(cand,
-			//		     dot11MeshHoldingTimeout(sdata)))
-			//	cand->ignore_plink_timer = true;
-
+            cand->timeout = config.holding_timeout_ms;
+            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
@@ -360,8 +348,8 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
             estab_peer_link(cand->peer_mac, cand->cookie);
-            sae_debug(AMPE_DEBUG_FSM, "Mesh plink with "
-                    MACSTR " ESTABLISHED\n", MAC2STR(cand->peer_mac));
+            sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
+                    MACSTR " established\n", MAC2STR(cand->peer_mac));
 			break;
 		default:
 			break;
@@ -378,16 +366,14 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-			//if (!mod_plink_timer(cand,
-			//		     dot11MeshHoldingTimeout(sdata)))
-			//	cand->ignore_plink_timer = true;
-
+            cand->timeout = config.holding_timeout_ms;
+            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
-			//del_timer(&cand->plink_timer);
 			cand->link_state = PLINK_ESTAB;
             estab_peer_link(cand->peer_mac, cand->cookie);
+            //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
 			sae_debug(AMPE_DEBUG_FSM, "Mesh plink with "
@@ -404,9 +390,10 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case CLS_ACPT:
 			reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
-			//deactivated = __mesh_plink_deactivate(cand);
 			cand->link_state = PLINK_HOLDING;
-			//mod_plink_timer(cand, dot11MeshHoldingTimeout(sdata));
+            cand->timeout = config.holding_timeout_ms;
+            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            //TODO: update the number of available peer "slots" in mesh config
 			//if (deactivated)
 		    //	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
@@ -505,6 +492,18 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	unsigned short plid = 0, llid = 0, reason;
     unsigned char *ies;
     unsigned short ies_len;
+
+#define FAKE_LOSS_PROBABILITY 0
+#if (FAKE_LOSS_PROBABILITY > 0)
+    do {
+        unsigned short dice;
+        dice = RAND_bytes((unsigned char *) &dice, sizeof(dice));
+        if ((dice % 100) < FAKE_LOSS_PROBABILITY) {
+            sae_debug(AMPE_DEBUG_FSM, "Frame dropped\n");
+            return 0;
+        }
+    } while (0);
+#endif
 
 	/* management header, category, action code, mesh id and peering mgmt*/
 	if (len < 24 + 1 + 1 + 2 + 2)

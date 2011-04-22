@@ -489,7 +489,7 @@ int install_mesh_data_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
     if (pret == NULL)
         goto nla_put_failure;
 
-   // NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);		/* default uni and multicast key */
+    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);		/* default uni and multicast key */
     NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
     NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);
     NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
@@ -726,7 +726,6 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
-		//		(1 << NL80211_STA_FLAG_MFP) |
                                 (1 << NL80211_STA_FLAG_AUTHORIZED);
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
@@ -949,8 +948,8 @@ void fin(int status, char *peer, char *buf, int len)
     if (!status && len) {
         sae_hexdump(MESHD_DEBUG, "pmk", buf, len % 80);
         set_authenticated_flag(&nlcfg, peer);
-	//install_mesh_data_key(&nlcfg, peer, buf);
-	//install_mesh_mgmt_key(&nlcfg, peer, buf);
+	    //install_mesh_data_key(&nlcfg, peer, buf);
+	    //install_mesh_mgmt_key(&nlcfg, peer, buf);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */
@@ -975,6 +974,7 @@ int main(int argc, char *argv[])
     char *outfile = NULL;
     char confdir[80];
     struct sae_config config;
+    struct ampe_config ampe_conf;
 
     signal(SIGTERM, term_handle);
 
@@ -1033,7 +1033,14 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if (ampe_initialize((unsigned char *) mesh_id, strlen(mesh_id)) < 0) {
+    /* TODO: move these to a config file */
+    ampe_conf.retry_timeout_ms = 10;
+    ampe_conf.holding_timeout_ms = 1000;
+    ampe_conf.confirm_timeout_ms = 1000;
+    ampe_conf.max_retries = 10;
+
+    if (ampe_initialize((unsigned char *) mesh_id, strlen(mesh_id),
+                &ampe_conf) < 0) {
         fprintf(stderr, "%s: cannot configure AMPE!\n", argv[0]);
         exit(1);
     }

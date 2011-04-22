@@ -44,6 +44,7 @@ struct candidate {
     unsigned short peer_lid;
     unsigned short reason;
     unsigned short retries;
+    unsigned int timeout;
     void *cookie;
 };
 

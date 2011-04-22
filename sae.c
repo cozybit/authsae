@@ -65,6 +65,7 @@
 #include "os_glue.h"
 #include "sae.h"
 #include "ampe.h"
+#include "peers.h"
 
 #define COUNTER_INFINITY        65535
 
@@ -93,44 +94,6 @@
 #define CN_Init(ctx,x,l) HMAC_Init((ctx), (x), (l), EVP_sha256())
 #define CN_Update(ctx,x,l) HMAC_Update((ctx),(x),(l))
 #define CN_Final(ctx,x) HMAC_Final((ctx), (x), &function_mdlen)
-
-typedef struct group_def_ {
-    unsigned short group_num;
-    EC_GROUP *group;
-    BIGNUM *order;
-    BIGNUM *prime;
-    char password[80];
-    struct group_def_ *next;
-} GD;
-
-struct candidate {
-    TAILQ_ENTRY(candidate) entry;
-    GD *grp_def;
-    EC_POINT *pwe;
-    unsigned char pmk[SHA256_DIGEST_LENGTH];
-    unsigned char kck[SHA256_DIGEST_LENGTH];
-    BIGNUM *private_val;
-    BIGNUM *peer_scalar;
-    BIGNUM *my_scalar;
-    EC_POINT *peer_element;
-    EC_POINT *my_element;
-    unsigned long beacons;
-    unsigned int failed_auth;
-    timerid t0;
-    timerid t1;
-#define SAE_NOTHING             0
-#define SAE_COMMITTED           1
-#define SAE_CONFIRMED           2
-#define SAE_ACCEPTED            3
-    unsigned short state;
-    unsigned short got_token;
-    unsigned short sync;
-    unsigned short sc;
-    unsigned short rc;
-    unsigned char peer_mac[ETH_ALEN];
-    unsigned char my_mac[ETH_ALEN];
-    void *cookie;
-};
 
 extern service_context srvctx;
 /*
@@ -1897,8 +1860,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
             }
             break;
         case IEEE802_11_FC_STYPE_ACTION:
-            /* JC: probably pass peer too*/
-            process_ampe_frame(frame, len, me, cookie);
+            return process_ampe_frame(frame, len, me, cookie);
         default:
             return -1;
     }

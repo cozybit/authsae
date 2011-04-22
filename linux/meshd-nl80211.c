@@ -618,14 +618,11 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 sae_hexdump(MESHD_DEBUG, "rx frame", (char *)frame, frame_len);
                 /* Auth frames go to SAE */
-                if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
-                                                      IEEE802_11_FC_STYPE_AUTH << 4))) {
-                    if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
-                        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
-                /* Action (peer link) also go to SAE */
-                } else if (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
-                                                      IEEE802_11_FC_STYPE_ACTION << 4))) {
-                    if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, NULL))
+                if ((frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
+                                                      IEEE802_11_FC_STYPE_AUTH << 4))) ||
+                     (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
+                                                      IEEE802_11_FC_STYPE_ACTION << 4)))) {
+                    if (process_mgmt_frame(frame, frame_len, nlcfg.mymacaddr, &nlcfg))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else
                     sae_debug(MESHD_DEBUG, "got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -929,8 +926,10 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-void estab_peer_link(unsigned char *peer)
+void estab_peer_link(unsigned char *peer, void *cookie)
 {
+    assert(cookie == &nlcfg);
+
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 /* from include/net/cfg80211.h */

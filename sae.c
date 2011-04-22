@@ -1204,7 +1204,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
         sae_debug(SAE_DEBUG_ERR, "can't malloc space for candidate!\n");
         return NULL;
     }
-    memset(peer, 0, sizeof(peer));
+    memset(peer, 0, sizeof(*peer));
     memcpy(peer->my_mac, my_mac, ETH_ALEN);
     memcpy(peer->peer_mac, her_mac, ETH_ALEN);
     if (((peer->peer_scalar = BN_new()) == NULL) ||

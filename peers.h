@@ -16,6 +16,7 @@ struct candidate {
     EC_POINT *pwe;
     unsigned char pmk[SHA256_DIGEST_LENGTH];
     unsigned char kck[SHA256_DIGEST_LENGTH];
+    unsigned char aek[SHA256_DIGEST_LENGTH];
     BIGNUM *private_val;
     BIGNUM *peer_scalar;
     BIGNUM *my_scalar;
@@ -45,6 +46,7 @@ struct candidate {
     unsigned short reason;
     unsigned short retries;
     unsigned int timeout;
+    siv_ctx sivctx;
     void *cookie;
 };
 

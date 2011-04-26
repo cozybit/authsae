@@ -58,6 +58,7 @@
 #include "os_glue.h"
 #include "sae.h"
 #include "ampe.h"
+#include "crypto/siv.h"
 #include "peers.h"
 
 /* Peer link cancel reasons */
@@ -199,6 +200,24 @@ static void plink_timer(timerid id, void *data)
 	}
 }
 
+static void protect_frame(unsigned char *buf, struct candidate *cand, int *len)
+{
+    struct ieee80211_mgmt_frame *frame;
+    unsigned char output[32];
+    unsigned char counter[AES_BLOCK_SIZE];
+
+    assert(len && cand && buf);
+
+    frame = (struct ieee80211_mgmt_frame *) buf;
+    siv_init(&cand->sivctx, cand->aek, SIV_256);
+    siv_encrypt(&cand->sivctx, (unsigned char *) &frame->action, output,
+            *len - ((unsigned char*) &frame->action - buf),
+            counter, 3,
+            "ONE", 3,
+            "TWO", 3,
+            "THREE", 5);
+}
+
 static int plink_frame_tx(struct candidate *cand, enum
         plink_action_code action, unsigned short reason)
 {
@@ -266,6 +285,8 @@ static int plink_frame_tx(struct candidate *cand, enum
         /*  TODO: Add PMK field to mesh peering element here */
 
         len = ies - buf;
+
+        protect_frame(buf, cand, &len);
 
         if (meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
             sae_debug(SAE_DEBUG_ERR, "can't send an authentication "

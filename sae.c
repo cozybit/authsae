@@ -65,6 +65,7 @@
 #include "os_glue.h"
 #include "sae.h"
 #include "ampe.h"
+#include "crypto/siv.h"
 #include "peers.h"
 
 #define COUNTER_INFINITY        65535

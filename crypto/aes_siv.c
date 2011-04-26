@@ -1,8 +1,8 @@
 /*
  * Copyright (c) The Industrial Lounge, 2007
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
- *  THIS SOFTWARE IS PROVIDED BY THE INDUSTRIAL LOUNGE ``AS IS'' 
- *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE INDUSTRIAL LOUNGE ``AS IS''
+ *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -189,7 +189,7 @@ s2v_final (siv_ctx *ctx, const unsigned char *X, int xlen, unsigned char *digest
 	 */
 	memcpy(padX, X, xlen);
 	pad(padX, xlen);
-	
+
 	times_two(T, ctx->T);
 	xor(T, padX);
 	aes_cmac(ctx, T, AES_BLOCK_SIZE, digest);
@@ -268,7 +268,7 @@ s2v_final (siv_ctx *ctx, const unsigned char *X, int xlen, unsigned char *digest
             xor(C, T);
             AES_ecb_encrypt(C, digest, &ctx->s2v_sched, AES_ENCRYPT);
         }
-        
+
     }
     return 0;
 }
@@ -337,7 +337,7 @@ siv_init (siv_ctx *ctx, const unsigned char *key, int keylen)
     memset(ctx->benchmark, 0, AES_BLOCK_SIZE);
     aes_cmac(ctx, zero, AES_BLOCK_SIZE, ctx->T);
     return 1;
-}    
+}
 
 /*
  * siv_restart()
@@ -355,7 +355,7 @@ siv_restart (siv_ctx *ctx)
 /*
  * s2v_benchmark()
  *	save intermediate T state for optimization
- */ 
+ */
 void
 s2v_benchmark (siv_ctx *ctx)
 {
@@ -386,12 +386,12 @@ vprf (siv_ctx *ctx, unsigned char *outp, const int nad, ...)
         siv_restart(ctx);
         va_start(ap, nad);
         while (numad > 1) {
-            ad = va_arg(ap, char *);
+            ad = (unsigned char *) va_arg(ap, char *);
             adlen = va_arg(ap, int);
             s2v_update(ctx, ad, adlen);
             numad--;
         }
-        ad = va_arg(ap, char *);
+        ad = (unsigned char *) va_arg(ap, char *);
         adlen = va_arg(ap, int);
         s2v_final(ctx, ad, adlen, outp);
     }
@@ -442,7 +442,7 @@ siv_aes_ctr (siv_ctx *ctx, const unsigned char *p, const int lenp,
  */
 int
 siv_encrypt (siv_ctx *ctx, const unsigned char *p, unsigned char *c,
-             const int len, unsigned char *counter, 
+             const int len, unsigned char *counter,
              const int nad, ...)
 {
     va_list ap;
@@ -453,7 +453,7 @@ siv_encrypt (siv_ctx *ctx, const unsigned char *p, unsigned char *c,
     if (numad) {
         va_start(ap, nad);
         while (numad) {
-            ad = va_arg(ap, char *);
+            ad = (unsigned char *) va_arg(ap, char *);
             adlen = va_arg(ap, int);
             s2v_update(ctx, ad, adlen);
             numad--;
@@ -463,7 +463,7 @@ siv_encrypt (siv_ctx *ctx, const unsigned char *p, unsigned char *c,
     memcpy(counter, ctr, AES_BLOCK_SIZE);
     siv_aes_ctr(ctx, p, len, c, ctr);
     /*
-     * the only part of the context that is carried along with 
+     * the only part of the context that is carried along with
      * subsequent calls to siv_encrypt() are the keys, so reset
      * everything else.
      */
@@ -481,7 +481,7 @@ siv_encrypt (siv_ctx *ctx, const unsigned char *p, unsigned char *c,
  */
 int
 siv_decrypt (siv_ctx *ctx, const unsigned char *c, unsigned char *p,
-             const int len, unsigned char *counter, 
+             const int len, unsigned char *counter,
              const int nad, ...)
 {
     va_list ap;
@@ -494,7 +494,7 @@ siv_decrypt (siv_ctx *ctx, const unsigned char *c, unsigned char *p,
     if (numad) {
         va_start(ap, nad);
         while (numad) {
-            ad = va_arg(ap, char *);
+            ad = (unsigned char *) va_arg(ap, char *);
             adlen = va_arg(ap, int);
             s2v_update(ctx, ad, adlen);
             numad--;
@@ -503,7 +503,7 @@ siv_decrypt (siv_ctx *ctx, const unsigned char *c, unsigned char *p,
     s2v_final(ctx, p, len, ctr);
 
     /*
-     * the only part of the context that is carried along with 
+     * the only part of the context that is carried along with
      * subsequent calls to siv_decrypt() are the keys, so reset
      * everything else.
      */

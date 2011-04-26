@@ -64,5 +64,8 @@ int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
                        unsigned char *local_mac_addr, void *cookie);
 void sae_read_config(int signal);
 void sae_dump_db (int signal);
+int prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
+     unsigned char *context, int contextlen,
+     unsigned char *result, int resultbitlen);
 
 #endif  /* _SAE_H_ */

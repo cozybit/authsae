@@ -166,7 +166,7 @@ pp_a_bignum (char *str, BIGNUM *bn)
     free(buf);
 }
 
-static int
+int
 prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
      unsigned char *context, int contextlen,
      unsigned char *result, int resultbitlen)

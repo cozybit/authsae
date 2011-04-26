@@ -75,6 +75,7 @@
 static unsigned char *meshid[32];
 static unsigned char meshid_len;
 static struct ampe_config config;
+static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };
 
 /*  For debugging use */
 static const char *mplstates[] = {
@@ -453,6 +454,24 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 #define PLINK_GET_LLID(p) (p + 0)
 #define PLINK_GET_PLID(p) (p + 2)
 
+static void derive_aek(struct candidate *cand)
+{
+    unsigned char context[16];
+
+    memcpy(context, akm_suite_selector, 4);
+    if (memcmp(cand->my_mac, cand->peer_mac, ETH_ALEN) < 0) {
+        memcpy(context + 4, cand->my_mac, ETH_ALEN);
+        memcpy(context + 10, cand->peer_mac, ETH_ALEN);
+    } else {
+        memcpy(context + 4, cand->peer_mac, ETH_ALEN);
+        memcpy(context + 10, cand->my_mac, ETH_ALEN);
+    }
+
+    prf(cand->pmk, SHA256_DIGEST_LENGTH,
+        (unsigned char *)"AEK Derivation", strlen("AEK Derivation"),
+        context, sizeof(context),
+        cand->aek, SHA256_DIGEST_LENGTH * 8);
+}
 
 /**
  * start_peer_link - attempt to establish a peer link
@@ -474,6 +493,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
             return -EPERM;
 	}
 
+    derive_aek(cand);
 
     RAND_bytes((unsigned char *) &llid, 2);
     cand->cookie = cookie;

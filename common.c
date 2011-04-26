@@ -94,9 +94,9 @@ void sae_debug (int level, const char *fmt, ...)
     }
 }
 
-void sae_hexdump(int level, const char *label, const char *start, int len)
+void sae_hexdump(int level, const char *label, const unsigned char *start, int len)
 {
-    const char *pos;
+    const unsigned char *pos;
     int i;
 
     if (sae_debug_mask & level) {
@@ -149,6 +149,10 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
             case IEEE80211_EID_MESH_CONFIG:
                 elems->mesh_config = pos;
                 elems->mesh_config_len = elen;
+                break;
+            case IEEE80211_EID_AMPE:
+                elems->ampe = (struct ampe_ie *) pos;
+                elems->ampe_len = elen;
                 break;
             default:
                 break;

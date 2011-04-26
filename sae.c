@@ -736,6 +736,8 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     memset(tmp, 0, offset);
     BN_bn2bin(nsum, tmp + offset);
 
+    memcpy(peer->pmkid, tmp, 16);
+
     prf(keyseed, SHA256_DIGEST_LENGTH,
         (unsigned char *)"SAE KCK and PMK", strlen("SAE KCK and PMK"),
         tmp, BN_num_bytes(peer->grp_def->order),

@@ -14,6 +14,7 @@ struct candidate {
     TAILQ_ENTRY(candidate) entry;
     GD *grp_def;
     EC_POINT *pwe;
+    unsigned char pmkid[16];
     unsigned char pmk[SHA256_DIGEST_LENGTH];
     unsigned char kck[SHA256_DIGEST_LENGTH];
     unsigned char aek[SHA256_DIGEST_LENGTH];
@@ -41,11 +42,15 @@ struct candidate {
     timerid t2;
     timerid t3;
     enum plink_state link_state;
-    unsigned short my_lid;
-    unsigned short peer_lid;
+    le16 my_lid;
+    le16 peer_lid;
+    unsigned char my_nonce[32];
+    unsigned char peer_nonce[32];
     unsigned short reason;
     unsigned short retries;
     unsigned int timeout;
+    unsigned char mtk[16];
+    unsigned char mgtk[16];
     siv_ctx sivctx;
     void *cookie;
 };

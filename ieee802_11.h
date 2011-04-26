@@ -144,6 +144,7 @@ enum ieee_ie_ids {
     IEEE80211_EID_MESH_CONFIG = 113,
     IEEE80211_EID_MESH_ID = 114,
     IEEE80211_EID_MESH_PEERING = 117,
+    IEEE80211_EID_AMPE = 139,
 };
 
 enum ieee_categories {
@@ -151,16 +152,13 @@ enum ieee_categories {
     IEEE80211_CATEGORY_SELF_PROTECTED = 15,
 };
 
-struct mesh_peering_ie {
-    unsigned char eid;
-    unsigned char len;
-    unsigned short llid;
-    union {
-        unsigned short plid;
-        unsigned short reason;    /* may be in var[0] if plid is present */
-    };
-    unsigned char var[0];
-};
+struct ampe_ie {
+    unsigned char selected_pairwise_suite[4];
+    unsigned char local_nonce[32];
+    unsigned char peer_nonce[32];
+    unsigned char key_replay_cnt[8];
+    unsigned char gtk[0];
+} __attribute__ ((packed));
 
 struct info_elems {
     unsigned char *rsn;
@@ -174,6 +172,9 @@ struct info_elems {
 
     unsigned char *mesh_config;
     unsigned char mesh_config_len;
+
+    struct ampe_ie *ampe;
+    unsigned char ampe_len;
 };
 
 void parse_ies(unsigned char *start, int len, struct info_elems *elems);

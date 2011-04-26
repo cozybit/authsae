@@ -75,7 +75,8 @@
 static unsigned char *meshid[32];
 static unsigned char meshid_len;
 static struct ampe_config config;
-static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };
+static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
+static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 
 /*  For debugging use */
 static const char *mplstates[] = {
@@ -201,22 +202,33 @@ static void plink_timer(timerid id, void *data)
 	}
 }
 
-static void protect_frame(unsigned char *buf, struct candidate *cand, int *len)
+void protect_frame(struct candidate *cand, unsigned char *buf, int len)
 {
-    struct ieee80211_mgmt_frame *frame;
+    struct ieee80211_mgmt_frame *mgmt;
     unsigned char output[32];
     unsigned char counter[AES_BLOCK_SIZE];
+    unsigned char *ies;
+    unsigned short ies_len;
+    struct info_elems elems;
 
     assert(len && cand && buf);
 
-    frame = (struct ieee80211_mgmt_frame *) buf;
+    /*  Find mesh peering ie */
+    mgmt = (struct ieee80211_mgmt_frame *) buf;
+	ies = start_of_ies(mgmt, len, &ies_len);
+	parse_ies(ies, ies_len, &elems);
+	if (!elems.mesh_peering) {
+		sae_debug(AMPE_DEBUG_FSM, "protect frame: missing mesh peering ie\n");
+		return;
+	}
+
     siv_init(&cand->sivctx, cand->aek, SIV_256);
-    siv_encrypt(&cand->sivctx, (unsigned char *) &frame->action, output,
-            *len - ((unsigned char*) &frame->action - buf),
+    siv_encrypt(&cand->sivctx, elems.mesh_peering, output,
+            elems.mesh_peering_len,
             counter, 3,
-            "ONE", 3,
-            "TWO", 3,
-            "THREE", 5);
+            cand->my_mac, ETH_ALEN,
+            cand->peer_mac, ETH_ALEN,
+            &mgmt->action, len - 24);
 }
 
 static int plink_frame_tx(struct candidate *cand, enum
@@ -224,15 +236,14 @@ static int plink_frame_tx(struct candidate *cand, enum
 {
         unsigned char *buf;
         struct ieee80211_mgmt_frame *mgmt;
-        unsigned char *plen;
+        unsigned char *ie_len;
         int len;
-        struct mesh_peering_ie;
         unsigned char *ies;
 
         assert(cand);
 
         /* XXX: calculate the right size */
-        len = 400;
+        len = 1000;
         buf = calloc(1, len);
         if (!buf)
                 return -1;
@@ -257,24 +268,27 @@ static int plink_frame_tx(struct candidate *cand, enum
         memcpy((char *) ies, meshid, meshid_len);
         ies += meshid_len;
 
-        /* Add mesh peering */
+        /* Add mesh peering: llid, plid, reason and pmk */
         *ies++ = IEEE80211_EID_MESH_PEERING;
-        plen = ies++;
+        ie_len = ies++;
         memcpy(ies, &cand->my_lid, 2);
         ies += 2;
-        *plen = 2;
+        *ie_len = 2;
         if (cand->peer_lid) {
             memcpy(ies, &cand->peer_lid, 2);
             ies += 2;
-            *plen += 2;
+            *ie_len += 2;
         }
         if (reason) {
             memcpy(ies, &cand->reason, 2);
             ies += 2;
-            *plen += 2;
+            *ie_len += 2;
         }
 
-        /*  TODO: Add PMK field to mesh peering element here */
+        /*  Add chosen PMK */
+        memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
+        ies += sizeof(cand->pmkid);
+        *ie_len += sizeof(cand->pmkid);
 
         /* Add mesh config */
         *ies++ = IEEE80211_EID_MESH_CONFIG;
@@ -283,11 +297,20 @@ static int plink_frame_tx(struct candidate *cand, enum
         memset(ies, 0, 8);
         ies += 8;
 
-        /*  TODO: Add PMK field to mesh peering element here */
+        /* Add AMPE IE */
+        *ies++ = IEEE80211_EID_AMPE;
+        *ies++ = 68;
+        memcpy(ies, pw_suite_selector, 4);
+        ies += 4;
+        memcpy(ies, cand->my_nonce, 32);
+        ies += 32;
+        memcpy(ies, cand->peer_nonce, 32);
+        ies += 32;
+        /*  TODO: Add key replay and GTK fields */
 
         len = ies - buf;
 
-        protect_frame(buf, cand, &len);
+        protect_frame(cand, buf, len);
 
         if (meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
             sae_debug(SAE_DEBUG_ERR, "can't send an authentication "
@@ -296,6 +319,53 @@ static int plink_frame_tx(struct candidate *cand, enum
         free(buf);
         return 0;
 }
+
+static void derive_mtk(struct candidate *cand)
+{
+    unsigned char context[84];
+    unsigned char *p;
+
+    p = context;
+    if (memcmp(cand->my_nonce, cand->peer_nonce, 32)) {
+        memcpy(p, cand->my_nonce, 32);
+        memcpy(p + 32, cand->peer_nonce, 32);
+    } else {
+        memcpy(p, cand->peer_nonce, 32);
+        memcpy(p + 32, cand->my_nonce, 32);
+    }
+    p += 64;
+
+    if (le16toh(cand->my_lid) < le16toh(cand->peer_lid)) {
+        memcpy(p, &cand->my_lid, 2);
+        memcpy(p + 2, &cand->peer_lid, 2);
+    } else {
+        memcpy(p, &cand->peer_lid, 2);
+        memcpy(p + 2, &cand->my_lid, 2);
+    }
+    p += 4;
+
+    memcpy(p, akm_suite_selector, sizeof(akm_suite_selector));
+    p += sizeof(akm_suite_selector);
+
+    if (memcmp(cand->my_mac, cand->peer_mac, ETH_ALEN) < 0) {
+        memcpy(p, cand->my_mac, ETH_ALEN);
+        memcpy(p + ETH_ALEN, cand->peer_mac, ETH_ALEN);
+    } else {
+        memcpy(p, cand->peer_mac, ETH_ALEN);
+        memcpy(p + ETH_ALEN, cand->my_mac, ETH_ALEN);
+    }
+    p += 12;
+
+    assert(p - context <= sizeof(context));
+
+    prf(cand->mtk, SHA256_DIGEST_LENGTH,
+        (unsigned char *)"Temporal Key Derivation", strlen("Temporal Key Derivation"),
+        context, sizeof(context),
+        cand->aek, SHA256_DIGEST_LENGTH * 8);
+
+    sae_hexdump(AMPE_DEBUG_KEYS, "aek: ", cand->aek, sizeof(cand->aek));
+}
+
 
 static void fsm_step(struct candidate *cand, enum plink_event event)
 {
@@ -369,7 +439,10 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->link_state = PLINK_ESTAB;
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
-            estab_peer_link(cand->peer_mac, cand->cookie);
+            derive_mtk(cand);
+            // TODO: for now give everyone the same all-zeros mgtk
+            memset(cand->mgtk, 0, sizeof(cand->mgtk));
+            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->cookie);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
 			break;
@@ -394,7 +467,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case OPN_ACPT:
 			cand->link_state = PLINK_ESTAB;
-            estab_peer_link(cand->peer_mac, cand->cookie);
+            // TODO: for now give everyone the same all-zeros mgtk
+            memset(cand->mgtk, 0, sizeof(cand->mgtk));
+            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->cookie);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
@@ -496,6 +571,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
     derive_aek(cand);
 
     RAND_bytes((unsigned char *) &llid, 2);
+    RAND_bytes(cand->my_nonce, 32);
     cand->cookie = cookie;
 	cand->my_lid = llid;
 	cand->peer_lid = 0;
@@ -566,10 +642,9 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	ftype = mgmt->action.action_code;
 	ie_len = elems.mesh_peering_len;
 
-    /*  TODO: This hard coded lenghts need reviewing  */
-	if ((ftype == PLINK_OPEN && ie_len != 2) ||
-	    (ftype == PLINK_CONFIRM && ie_len != 4) ||
-	    (ftype == PLINK_CLOSE && ie_len != 4 && ie_len != 6)) {
+	if ((ftype == PLINK_OPEN && ie_len != 18) ||
+	    (ftype == PLINK_CONFIRM && ie_len != 20) ||
+	    (ftype == PLINK_CLOSE && ie_len != 20 && ie_len != 22)) {
 		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: incorrect plink ie length %d %d\n",
 		    ftype, ie_len);
 		return 0;
@@ -592,6 +667,8 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         return 0;
     }
 
+    /* The local nonce in the frame is the peer from the POV of this host. */
+ 	memcpy(cand->peer_nonce, elems.ampe->local_nonce, 32);
     cand->cookie = cookie;
 
 	if (cand->link_state == PLINK_BLOCKED) {

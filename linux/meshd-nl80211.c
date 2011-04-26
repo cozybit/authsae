@@ -154,20 +154,6 @@ int get_mac_addr(const char * ifname, uint8_t *macaddr)
     return 0;
 }
 
-
-static const char * memmem(const char *haystack, int haystack_len, const char *needle, int needle_len)
-{
-    int hl, nl;
-    for (hl = 0; hl<=haystack_len - needle_len; hl++) {
-        for (nl = 0; nl<needle_len; nl++)
-            if (haystack[hl+nl] != needle[nl])
-                break;
-        if (nl == needle_len)
-            return &haystack[hl];
-    }
-    return NULL;
-}
-
 static void srv_handler_wrapper(int fd, void *data)
 {
     int err;
@@ -179,7 +165,7 @@ static void srv_handler_wrapper(int fd, void *data)
     fflush(stdout);
 }
 
-static int tx_frame(struct netlink_config_s *nlcfg, char *frame, int len) {
+static int tx_frame(struct netlink_config_s *nlcfg, unsigned char *frame, int len) {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_FRAME;
     int ret = 0;
@@ -218,7 +204,7 @@ nla_put_failure:
 
 int meshd_write_mgmt(char *buf, int len)
 {
-    tx_frame(&nlcfg, buf, len);
+    tx_frame(&nlcfg, (unsigned char *) buf, len);
     return len;
 }
 
@@ -285,9 +271,10 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         [NL80211_BSS_SEEN_MS_AGO] = { .type = NLA_U32 },
         [NL80211_BSS_BEACON_IES] = { .type = NLA_UNSPEC },
     };
-    const uint8_t *ie;
+    unsigned char *ie;
     size_t ie_len;
     struct ieee80211_mgmt_frame bcn;
+    struct info_elems elems;
 
     /* check that all the required info exists: source address
      * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
@@ -311,12 +298,11 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
     ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
 
-	/* JC: For now, just do a brute search for the RSN ie in
-	 * these scan results. When we move this to wpa_supplicant
-	 * we'll use the available ie parsing routines
-	 * */
-    if (memmem((const char *) ie, ie_len, rsn_ie, sizeof(rsn_ie)) == NULL)
+    parse_ies(ie, ie_len, &elems);
+    if (elems.rsn == NULL) {
+        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
         return NL_SKIP;
+    }
 
     memset(&bcn, 0, sizeof(bcn));
     bcn.frame_control = htole16(
@@ -466,16 +452,14 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int install_mesh_data_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
+int install_mesh_data_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *mtk)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_KEY;
     int ret;
     char *pret;
-    unsigned char ptk[16] = { 0 };
     unsigned char seq[6] = { 0 };
 
-    memcpy(ptk, pmk, 16);
     assert(nlcfg);
 
     /* first, install new key, apparently this becomes the default automatically */
@@ -491,7 +475,7 @@ int install_mesh_data_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
 
     NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);		/* default uni and multicast key */
     NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);
+    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mtk);
     NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
     NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
@@ -506,16 +490,14 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int install_mesh_mgmt_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
+int install_mesh_mgmt_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *mgtk)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_KEY;
     int ret;
     char *pret;
-    unsigned char ptk[16] = { 0 };
     unsigned char seq[6] = { 0 };
 
-    memcpy(ptk, pmk, 16);
     assert(nlcfg);
 
     /* add multicast managment key (IGTK), just adding this key with attr
@@ -532,7 +514,7 @@ int install_mesh_mgmt_key(struct netlink_config_s *nlcfg, char *peer, char *pmk)
         goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC06);	/* AES-CMAC */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, ptk);
+    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mgtk);
     NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for IGTK */
     NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
@@ -611,7 +593,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
-                sae_hexdump(MESHD_DEBUG, "rx frame", (char *)frame, frame_len);
+                sae_hexdump(MESHD_DEBUG, "rx frame", (unsigned char *) frame, frame_len);
                 /* Auth frames go to SAE */
                 if ((frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
                                                       IEEE802_11_FC_STYPE_AUTH << 4))) ||
@@ -721,6 +703,7 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+                                (1 << NL80211_STA_FLAG_MFP) |
                                 (1 << NL80211_STA_FLAG_AUTHORIZED);
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
@@ -920,12 +903,16 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-void estab_peer_link(unsigned char *peer, void *cookie)
+void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len, void *cookie)
 {
     assert(cookie == &nlcfg);
 
+    assert(mtk_len == 16 && mgtk_len == 16);
+
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
+	    install_mesh_data_key(&nlcfg, peer, mtk);
+	    install_mesh_mgmt_key(&nlcfg, peer, mgtk);
 /* from include/net/cfg80211.h */
 #define PLINK_ESTAB 4
         set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
@@ -941,10 +928,8 @@ void fin(int status, char *peer, char *buf, int len)
 {
     sae_debug(MESHD_DEBUG, "fin: %d, key len:%d\n", status, len);
     if (!status && len) {
-        sae_hexdump(MESHD_DEBUG, "pmk", buf, len % 80);
+        sae_hexdump(AMPE_DEBUG_KEYS, "pmk", (unsigned char *)buf, len % 80);
         set_authenticated_flag(&nlcfg, peer);
-	    //install_mesh_data_key(&nlcfg, peer, buf);
-	    //install_mesh_mgmt_key(&nlcfg, peer, buf);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */

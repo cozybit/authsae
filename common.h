@@ -58,9 +58,10 @@ int parse_buffer(char *, char **);
 #define AMPE_DEBUG_CANDIDATES   0x20
 #define MESHD_DEBUG             0x40
 #define AMPE_DEBUG_FSM          0x80
+#define AMPE_DEBUG_KEYS        0x100
 extern unsigned int sae_debug_mask;
 void sae_debug (int level, const char *fmt, ...);
-void sae_hexdump(int level, const char *label, const char *start, int
+void sae_hexdump(int level, const char *label, const unsigned char *start, int
         len);
 
 #ifndef u8
@@ -71,5 +72,8 @@ void sae_hexdump(int level, const char *label, const char *start, int
 #endif
 #ifndef u16
 #define u16 unsigned short
+#endif
+#ifndef le32
+#define le32 unsigned int
 #endif
 #endif  /* _COMMON_H_ */

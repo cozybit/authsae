@@ -244,7 +244,7 @@ void peer_created(unsigned char *peer)
     printf("SAE notification that a peer was created\n");
 }
 
-void estab_peer_link(unsigned char *peer)
+void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len, void *cookie)
 {
     printf("TODO: implement estab_peer_link\n");
 }

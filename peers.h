@@ -17,7 +17,6 @@ struct candidate {
     unsigned char pmkid[16];
     unsigned char pmk[SHA256_DIGEST_LENGTH];
     unsigned char kck[SHA256_DIGEST_LENGTH];
-    unsigned char aek[SHA256_DIGEST_LENGTH];
     BIGNUM *private_val;
     BIGNUM *peer_scalar;
     BIGNUM *my_scalar;
@@ -49,6 +48,7 @@ struct candidate {
     unsigned short reason;
     unsigned short retries;
     unsigned int timeout;
+    unsigned char aek[SHA256_DIGEST_LENGTH];
     unsigned char mtk[16];
     unsigned char mgtk[16];
     siv_ctx sivctx;

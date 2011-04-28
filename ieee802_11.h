@@ -141,11 +141,11 @@ enum plink_action_code {
 
 enum ieee_ie_ids {
     IEEE80211_EID_RSN = 48,
-    IEEE80211_EID_MIC = 76,
     IEEE80211_EID_MESH_CONFIG = 113,
     IEEE80211_EID_MESH_ID = 114,
     IEEE80211_EID_MESH_PEERING = 117,
     IEEE80211_EID_AMPE = 139,
+    IEEE80211_EID_MIC = 140,
 };
 
 enum ieee_categories {

@@ -678,7 +678,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int set_authenticated_flag(struct netlink_config_s *nlcfg, char *peer)
+static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char *peer)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_SET_STATION;
@@ -913,6 +913,9 @@ void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsig
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 	    install_mesh_data_key(&nlcfg, peer, mtk);
 	    install_mesh_mgmt_key(&nlcfg, peer, mgtk);
+        /*  TODO: we should set AUTH in fin, and MFP here, which
+         *  requires splitting the next function in two. */
+        set_authenticated_flag(&nlcfg, peer);
 /* from include/net/cfg80211.h */
 #define PLINK_ESTAB 4
         set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
@@ -931,7 +934,6 @@ void fin(int status, char *peer, char *buf, int len)
             MAC2STR(nlcfg.mymacaddr));
     if (!status && len) {
         sae_hexdump(AMPE_DEBUG_KEYS, "pmk", (unsigned char *)buf, len % 80);
-        set_authenticated_flag(&nlcfg, peer);
 
         /* If auto peer link open is turned off  but we want the
          * kernel to run the peering protocol */

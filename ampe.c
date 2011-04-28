@@ -77,6 +77,7 @@ static unsigned char meshid_len;
 static struct ampe_config config;
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
+static const unsigned char null_nonce[32] = { 0 };
 
 /*  For debugging use */
 static const char *mplstates[] = {
@@ -305,7 +306,7 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     sae_debug(AMPE_DEBUG_KEYS, "Protecting frame from " MACSTR " to " MACSTR "\n",
             MAC2STR(cand->my_mac), MAC2STR(cand->peer_mac));
     sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %d\n",
-            AMPE_IE_BODY_SIZE + 2, cat_to_mic_len);
+            cat_to_mic_len, AMPE_IE_BODY_SIZE + 2);
 
     sae_hexdump(AMPE_DEBUG_KEYS, "SIV- Put AAD[3]: ", (unsigned char *) &mgmt->action, cat_to_mic_len);
 
@@ -363,7 +364,12 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 
     parse_ies(clear_ampe_ie, ampe_ie_len, &ies_parsed);
 
-    /* The local nonce in the frame is the peer from the POV of this host. */
+    if (memcmp(ies_parsed.ampe->peer_nonce, null_nonce, 32) != 0 &&
+        memcmp(ies_parsed.ampe->peer_nonce, cand->my_nonce, 32) != 0) {
+        sae_hexdump(AMPE_DEBUG_KEYS, "IE peer_nonce ", ies_parsed.ampe->peer_nonce, 32);
+        sae_debug(AMPE_DEBUG_KEYS, "Unexpected nonce\n");
+        return -1;
+    }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
 
     free(clear_ampe_ie);

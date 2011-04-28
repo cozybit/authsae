@@ -378,7 +378,8 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
-    memcpy(cand->mgtk, ies_parsed.ampe->mgtk, 16);
+    memcpy(cand->mgtk, ies_parsed.ampe->mgtk, sizeof(cand->mgtk));
+    sae_hexdump(AMPE_DEBUG_KEYS, "Received mgtk: ", cand->mgtk, sizeof(cand->mgtk));
     cand->mgtk_expiration = le32toh(*((unsigned int *)
             ies_parsed.ampe->key_expiration));
     free(clear_ampe_ie);
@@ -883,5 +884,6 @@ int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_confi
         memcpy(meshid, mesh_id, len);
         memcpy(&config, aconfig, sizeof(config));
         RAND_bytes(mgtk_tx, 16);
+        sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
         return 0;
 }

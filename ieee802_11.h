@@ -157,8 +157,9 @@ struct ampe_ie {
     unsigned char selected_pairwise_suite[4];
     unsigned char local_nonce[32];
     unsigned char peer_nonce[32];
-    unsigned char key_replay_cnt[8];
-    unsigned char gtk[0];
+    unsigned char mgtk[16];
+    unsigned char key_rsc[8];
+    unsigned char key_expiration[4];
 } __attribute__ ((packed));
 
 struct info_elems {

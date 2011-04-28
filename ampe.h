@@ -24,5 +24,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, unsigned cha
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 
 /*  and implements these:  */
-void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len, void *cookie);
+void estab_peer_link(unsigned char *peer, unsigned char *mtk,
+        int mtk_len, unsigned char *mgtk, int mgtk_len,
+        unsigned int mgtk_expiration, void *cookie);
 #endif

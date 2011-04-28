@@ -51,6 +51,7 @@ struct candidate {
     unsigned char aek[SHA256_DIGEST_LENGTH];
     unsigned char mtk[16];
     unsigned char mgtk[16];
+    unsigned int mgtk_expiration;
     siv_ctx sivctx;
     void *cookie;
 };

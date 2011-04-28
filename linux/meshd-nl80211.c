@@ -903,7 +903,8 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len, void *cookie)
+void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len,
+        unsigned int mgtk_expiration, void *cookie)
 {
     assert(cookie == &nlcfg);
 

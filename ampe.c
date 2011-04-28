@@ -72,8 +72,9 @@
 #define MESH_SECURITY_INCONSISTENT_PARAMS       59
 #define MESH_SECURITY_INVALID_CAPABILITY        60
 
-static unsigned char *meshid[32];
+static unsigned char meshid[32];
 static unsigned char meshid_len;
+static unsigned char mgtk_tx[16];
 static struct ampe_config config;
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
@@ -145,7 +146,7 @@ static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
 
 static void derive_aek(struct candidate *cand)
 {
-    unsigned char context[16];
+    unsigned char context[AES_BLOCK_SIZE];
 
     memcpy(context, akm_suite_selector, 4);
     if (memcmp(cand->my_mac, cand->peer_mac, ETH_ALEN) < 0) {
@@ -262,15 +263,14 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     assert(mic_start && cand && mgmt && len);
 
-#define AMPE_IE_BODY_SIZE    68         /*  TODO: this is without GTK data */
 #define MIC_IE_BODY_SIZE     AES_BLOCK_SIZE
 
-    if (mic_start + MIC_IE_BODY_SIZE + 2 + AMPE_IE_BODY_SIZE + 2 - (unsigned char *) mgmt > *len) {
+    if (mic_start + MIC_IE_BODY_SIZE + 2 + sizeof(struct ampe_ie) + 2 - (unsigned char *) mgmt > *len) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: buffer too small\n");
         return -EINVAL;
     }
 
-    clear_ampe_ie = malloc(AMPE_IE_BODY_SIZE + 2);
+    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
     if (!clear_ampe_ie) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: out of memory\n");
         return -ENOMEM;
@@ -279,14 +279,19 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     /*  IE: AMPE */
     ie = clear_ampe_ie;
     *ie++ = IEEE80211_EID_AMPE;
-    *ie++ = AMPE_IE_BODY_SIZE;
+    *ie++ = sizeof(struct ampe_ie);
     memcpy(ie, pw_suite_selector, 4);
     ie += 4;
     memcpy(ie, cand->my_nonce, 32);
     ie += 32;
     memcpy(ie, cand->peer_nonce, 32);
     ie += 32;
-    /*  TODO: Add key replay and GTK fields */
+    memcpy(ie, mgtk_tx, 16);
+    ie += 16;
+    memset(ie, 0, 8);           /*  TODO: Populate Key RSC */
+    ie += 8;
+    memset(ie, 0xff, 4);        /*  expire in 13 decades or so */
+    ie += 4;
 
     /* IE: MIC */
     ie = mic_start;
@@ -295,23 +300,24 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     cat_to_mic_len = mic_start - (unsigned char *) &mgmt->action;
     siv_encrypt(&cand->sivctx, clear_ampe_ie, ie + MIC_IE_BODY_SIZE,
-            AMPE_IE_BODY_SIZE + 2,
+            sizeof(struct ampe_ie) + 2,
             ie, 3,
             cand->my_mac, ETH_ALEN,
             cand->peer_mac, ETH_ALEN,
             &mgmt->action, mic_start - (unsigned char *) &mgmt->action);
 
-    *len = mic_start - (unsigned char *) mgmt + AMPE_IE_BODY_SIZE + 2 + MIC_IE_BODY_SIZE + 2;
+    *len = mic_start - (unsigned char *) mgmt + sizeof(struct ampe_ie) + 2 + MIC_IE_BODY_SIZE + 2;
 
     sae_debug(AMPE_DEBUG_KEYS, "Protecting frame from " MACSTR " to " MACSTR "\n",
             MAC2STR(cand->my_mac), MAC2STR(cand->peer_mac));
     sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %d\n",
-            cat_to_mic_len, AMPE_IE_BODY_SIZE + 2);
+            cat_to_mic_len, sizeof(struct ampe_ie) + 2);
 
     sae_hexdump(AMPE_DEBUG_KEYS, "SIV- Put AAD[3]: ", (unsigned char *) &mgmt->action, cat_to_mic_len);
 
     free(clear_ampe_ie);
 
+#undef MIC_IE_BODY_SIZE
     return 0;
 }
 
@@ -324,22 +330,23 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 
     assert(len && cand && mgmt);
 
-    clear_ampe_ie = malloc(AMPE_IE_BODY_SIZE + 2);
+    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
     if (!clear_ampe_ie) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
         return -1;
     }
 
     /*
-     *  Note on the lengths passed to siv_decrypt below:
-     *  arg 4 is the length of the ciphertext (the encrypted AMPE IE), that
-     *  needs to be inferred from the total frame size
-     *  arg 12 is the length of the contents of the frame from the category
-     *  (inclusive) to the mic (exclusive)
+     *  ampe_ie_len is the length of the ciphertext (the encrypted AMPE IE)
+     *  and it needs to be inferred from the total frame size
      */
     ampe_ie_len = len - (elems->mic + elems->mic_len - (unsigned char *)mgmt),
+    /*
+     *  cat_to_mic_len is the length of the contents of the frame from the category
+     *  (inclusive) to the mic (exclusive)
+     */
     cat_to_mic_len = elems->mic - 2 - (unsigned char *) &mgmt->action;
-    r = siv_decrypt(&cand->sivctx, elems->mic + MIC_IE_BODY_SIZE, clear_ampe_ie,
+    r = siv_decrypt(&cand->sivctx, elems->mic + elems->mic_len, clear_ampe_ie,
             ampe_ie_len,
             elems->mic, 3,
             cand->peer_mac, ETH_ALEN,
@@ -371,7 +378,9 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
-
+    memcpy(cand->mgtk, ies_parsed.ampe->mgtk, 16);
+    cand->mgtk_expiration = le32toh(*((unsigned int *)
+            ies_parsed.ampe->key_expiration));
     free(clear_ampe_ie);
     return -1;
 }
@@ -575,9 +584,11 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
             derive_mtk(cand);
-            // TODO: for now give everyone the same all-zeros mgtk
+            // TODO: For now zero mgtk (look for another memset like this down in this file)
             memset(cand->mgtk, 0, sizeof(cand->mgtk));
-            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->cookie);
+            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk),
+                    cand->mgtk, sizeof(cand->mgtk),
+                    cand->mgtk_expiration, cand->cookie);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
 			break;
@@ -602,9 +613,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case OPN_ACPT:
 			cand->link_state = PLINK_ESTAB;
-            // TODO: for now give everyone the same all-zeros mgtk
+            // TODO: For now zero mgtk (look for another memset like this above in this file)
             memset(cand->mgtk, 0, sizeof(cand->mgtk));
-            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->cookie);
+            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->mgtk_expiration, cand->cookie);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
@@ -871,5 +882,6 @@ int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_confi
         meshid_len = len;
         memcpy(meshid, mesh_id, len);
         memcpy(&config, aconfig, sizeof(config));
+        RAND_bytes(mgtk_tx, 16);
         return 0;
 }

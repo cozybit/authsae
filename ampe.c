@@ -585,9 +585,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
             derive_mtk(cand);
-            // TODO: For now zero mgtk (look for another memset like this down in this file)
-            memset(cand->mgtk, 0, sizeof(cand->mgtk));
-            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk),
+            estab_peer_link(cand->peer_mac,
+                    cand->mtk, sizeof(cand->mtk),
+                    mgtk_tx, sizeof(mgtk_tx),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration, cand->cookie);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
@@ -614,9 +614,11 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case OPN_ACPT:
 			cand->link_state = PLINK_ESTAB;
-            // TODO: For now zero mgtk (look for another memset like this above in this file)
-            memset(cand->mgtk, 0, sizeof(cand->mgtk));
-            estab_peer_link(cand->peer_mac, cand->mtk, sizeof(cand->mtk), cand->mgtk, sizeof(cand->mgtk), cand->mgtk_expiration, cand->cookie);
+            estab_peer_link(cand->peer_mac,
+                    cand->mtk, sizeof(cand->mtk),
+                    mgtk_tx, sizeof(mgtk_tx),
+                    cand->mgtk, sizeof(cand->mgtk),
+                    cand->mgtk_expiration, cand->cookie);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);

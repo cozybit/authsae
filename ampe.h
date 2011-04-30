@@ -26,5 +26,6 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 /*  and implements these:  */
 void estab_peer_link(unsigned char *peer, unsigned char *mtk,
         int mtk_len, unsigned char *mgtk, int mgtk_len,
+        unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration, void *cookie);
 #endif

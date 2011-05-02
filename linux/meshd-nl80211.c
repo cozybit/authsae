@@ -87,6 +87,10 @@
 /* Runtime config variables */
 static char *ifname = NULL;
 
+/*  As defined in DATA_RATE row of table 6.5.5.2 of IEEE802.11mb */
+static char default_sup_rates[] = { 2, 3, 4, 5, 6, 9, 11, 12, 18, 22, 24, 27, 36, 44, 48, 54, 66, 72, 96, 108 };
+
+
 struct mesh_config {
     unsigned char id[32];
     unsigned char len;
@@ -1015,6 +1019,9 @@ int main(int argc, char *argv[])
     ampe_conf.holding_timeout_ms = 1000;
     ampe_conf.confirm_timeout_ms = 1000;
     ampe_conf.max_retries = 10;
+    assert(sizeof(default_sup_rates) < sizeof(ampe_conf.rates));
+    memset(ampe_conf.rates, 0, sizeof(ampe_conf.rates));
+    memcpy(ampe_conf.rates, default_sup_rates, sizeof(default_sup_rates));
 
     if (ampe_initialize((unsigned char *) mesh_id, strlen(mesh_id),
                 &ampe_conf) < 0) {

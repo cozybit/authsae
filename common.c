@@ -134,6 +134,14 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
             break;
 
         switch (id) {
+            case IEEE80211_EID_SUPPORTED_RATES:
+                elems->sup_rates = pos;
+                elems->sup_rates_len = elen;
+                break;
+            case IEEE80211_EID_EXTENDED_SUP_RATES:
+                elems->ext_rates = pos;
+                elems->ext_rates_len = elen;
+                break;
             case IEEE80211_EID_RSN:
                 elems->rsn = pos;
                 elems->rsn_len = elen;

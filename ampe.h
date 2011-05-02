@@ -16,6 +16,8 @@ struct ampe_config {
     unsigned int holding_timeout_ms;
     unsigned int confirm_timeout_ms;
     unsigned int max_retries;
+#define MAX_SUPP_RATES 32
+    unsigned char rates[MAX_SUPP_RATES];
 };
 
 /*  meshd calls these:  */

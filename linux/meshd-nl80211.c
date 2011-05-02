@@ -452,9 +452,9 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int install_mesh_bcast_tx_data_key(struct netlink_config_s *nlcfg, unsigned char *mgtk)
+static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned int cipher, unsigned int keytype, unsigned char keyidx, unsigned char *keydata)
 {
-    struct nl_msg *msg, *types;
+    struct nl_msg *msg, *key;
     uint8_t cmd = NL80211_CMD_NEW_KEY;
     int ret;
     char *pret;
@@ -462,9 +462,10 @@ int install_mesh_bcast_tx_data_key(struct netlink_config_s *nlcfg, unsigned char
 
     assert(nlcfg);
 
-    /* first, install new key, apparently this becomes the default automatically */
+    /* first, install new key, then make it the default for broadcast */
     msg = nlmsg_alloc();
-    if (!msg)
+    key = nlmsg_alloc();
+    if (!msg || !key)
         return -ENOMEM;
 
     pret = genlmsg_put(msg, 0, 0,
@@ -473,154 +474,29 @@ int install_mesh_bcast_tx_data_key(struct netlink_config_s *nlcfg, unsigned char
     if (pret == NULL)
         goto nla_put_failure;
 
-    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);		/* default uni and multicast key */
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mgtk);
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
-    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    types = nlmsg_alloc();
-    if (!types)
-            goto nla_put_failure;
-    NLA_PUT_FLAG(types, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
-    ret = nla_put_nested(msg, NL80211_ATTR_KEY_DEFAULT_TYPES,
-                         types);
-    nlmsg_free(types);
+    NLA_PUT_U32(key, NL80211_KEY_CIPHER, cipher);
+    NLA_PUT(key, NL80211_KEY_DATA, 16, keydata);
+    NLA_PUT_U8(key, NL80211_KEY_IDX, keyidx);
+    NLA_PUT(key, NL80211_KEY_SEQ, 6, seq);
+    NLA_PUT_U32(key, NL80211_KEY_TYPE, keytype);
+    ret = nla_put_nested(msg, NL80211_ATTR_KEY, key);
+    nlmsg_free(key);
     if (ret)
             goto nla_put_failure;
 
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
-                strerror(-ret));
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-
-int install_mesh_bcast_rx_data_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *mgtk)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_KEY;
-    int ret;
-    char *pret;
-    unsigned char seq[6] = { 0 };
-
-    assert(nlcfg);
-
-    /* first, install new key, apparently this becomes the default automatically */
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mgtk);
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
-    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_TYPE, NL80211_KEYTYPE_GROUP);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
-                strerror(-ret));
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-
-static int install_mesh_data_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *mtk)
-{
-    struct nl_msg *msg, *types;
-    uint8_t cmd = NL80211_CMD_NEW_KEY;
-    int ret;
-    char *pret;
-    unsigned char seq[6] = { 0 };
-
-    assert(nlcfg);
-
-    /* first, install new key, apparently this becomes the default automatically */
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    /* This is the default key for unicast traffic */
-    types = nlmsg_alloc();
-    if (!types)
-            goto nla_put_failure;
-    NLA_PUT_FLAG(types, NL80211_KEY_DEFAULT_TYPE_UNICAST);
-    ret = nla_put_nested(msg, NL80211_ATTR_KEY_DEFAULT_TYPES,
-                         types);
-    nlmsg_free(types);
-    if (ret)
-            goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC04);	/* CCMP */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mtk);
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 0);
-    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
-                strerror(-ret));
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-
-int install_mesh_mgmt_rx_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *mgtk)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_KEY;
-    int ret;
-    char *pret;
-    unsigned char seq[6] = { 0 };
-
-    assert(nlcfg);
-
-    /* add multicast managment key (IGTK), just adding this key with attr
-       DEFAULT_MGMT does not make it the default mgmt key. We need to use SET_KEY for
-       that. */
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC06);	/* AES-CMAC */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mgtk);
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for IGTK */
-    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    if (peer)
+        NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
                 strerror(-ret));
 
-    /* make it the default mgmt key */
+    if (peer)
+        return 0;
+
+    /* make it the default bcast key */
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
@@ -633,80 +509,19 @@ int install_mesh_mgmt_rx_key(struct netlink_config_s *nlcfg, unsigned char *peer
     if (pret == NULL)
         goto nla_put_failure;
 
-    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT_MGMT);		/* IGTK */
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for mgmt */
+    NLA_PUT_FLAG(msg, (keyidx == 0) ? NL80211_ATTR_KEY_DEFAULT : NL80211_ATTR_KEY_DEFAULT_MGMT);
+    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, keyidx);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
                 strerror(-ret));
-
     return ret;
 nla_put_failure:
     return -ENOBUFS;
 }
 
-int install_mesh_mgmt_key(struct netlink_config_s *nlcfg, unsigned char *mgtk)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_KEY;
-    int ret;
-    char *pret;
-    unsigned char seq[6] = { 0 };
-
-    assert(nlcfg);
-
-    /* add multicast managment key (IGTK), just adding this key with attr
-       DEFAULT_MGMT does not make it the default mgmt key. We need to use SET_KEY for
-       that. */
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_KEY_CIPHER, 0x000FAC06);	/* AES-CMAC */
-    NLA_PUT(msg, NL80211_ATTR_KEY_DATA, 16, mgtk);
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for IGTK */
-    NLA_PUT(msg, NL80211_ATTR_KEY_SEQ, 6, seq);
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
-                strerror(-ret));
-
-    /* make it the default mgmt key */
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    cmd = NL80211_CMD_SET_KEY;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT_MGMT);		/* IGTK */
-    NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, 4);			/* 4 <= key_idx <= 5 for mgmt */
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
-                strerror(-ret));
-
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
 #if 0
 static void srv_timeout_wrapper(timerid t, void *data)
 {
@@ -1073,26 +888,23 @@ void estab_peer_link(unsigned char *peer,
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 
-        memset(mgtk, 0, mgtk_len);
-        memset(peer_mgtk, 0, mgtk_len);
+#define CIPHER_CCMP 0x000FAC04
+#define CIPHER_AES_CMAC 0x000FAC06
 
         /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
-	    install_mesh_data_key(&nlcfg, peer, mtk);
+	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
         /* key to protect integrity of multicast mgmt frames tx*/
-	    install_mesh_mgmt_key(&nlcfg, mgtk);
+	    install_key(&nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk);
 
-        /* to encrypt/decrypt unicast mgmt traffic to/from this peer */
-	    /* VERIFY: the previous function does that */
+        /* key to encrypt multicast data traffic */
+	    install_key(&nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk);
 
-        /* to encrypt multicast data traffic */
-	    //install_mesh_bcast_tx_data_key(&nlcfg, mgtk);
-
-        /* to decrypt multicast data traffic from this peer */
-	    //install_mesh_bcast_rx_data_key(&nlcfg, peer, peer_mgtk);
+        /* key to decrypt multicast data traffic from this peer */
+	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, peer_mgtk);
 
         /* to check integrity of multicast mgmt frames from this peer */
-	    //install_mesh_mgmt_rx_key(&nlcfg, peer, peer_mgtk);
+	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
 
         /*  TODO: we should set sta AUTH flag in fin(), and MFP flag here,
          *  which requires splitting the next function in two. */

@@ -595,7 +595,10 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     mgtk_tx, sizeof(mgtk_tx),
                     cand->mgtk, sizeof(cand->mgtk),
-                    cand->mgtk_expiration, cand->cookie);
+                    cand->mgtk_expiration,
+                    cand->sup_rates,
+                    cand->sup_rates_len,
+                    cand->cookie);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
 			break;
@@ -624,7 +627,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     mgtk_tx, sizeof(mgtk_tx),
                     cand->mgtk, sizeof(cand->mgtk),
-                    cand->mgtk_expiration, cand->cookie);
+                    cand->mgtk_expiration, cand->sup_rates,
+                    cand->sup_rates_len,
+                    cand->cookie);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
@@ -806,9 +811,12 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     if (elems.sup_rates) {
         memcpy(cand->sup_rates, elems.sup_rates,
                 elems.sup_rates_len);
-        if (elems.ext_rates)
+        cand->sup_rates_len = elems.sup_rates_len;
+        if (elems.ext_rates) {
             memcpy(cand->sup_rates + elems.sup_rates_len,
                     elems.ext_rates, elems.ext_rates_len);
+            cand->sup_rates_len += elems.ext_rates_len;
+        }
     }
 
     check_frame_protection(cand, mgmt, len, &elems);

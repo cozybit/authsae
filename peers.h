@@ -53,6 +53,7 @@ struct candidate {
     unsigned char mgtk[16];
     unsigned int mgtk_expiration;
     unsigned char sup_rates[MAX_SUPP_RATES];
+    unsigned short sup_rates_len;
     siv_ctx sivctx;
     void *cookie;
 };

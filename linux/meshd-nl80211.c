@@ -466,7 +466,6 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
 
     assert(nlcfg);
 
-    /* first, install new key, then make it the default for broadcast */
     msg = nlmsg_alloc();
     key = nlmsg_alloc();
     if (!msg || !key)
@@ -500,7 +499,6 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     if (peer)
         return 0;
 
-    /* make it the default bcast key */
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
@@ -525,15 +523,6 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
 nla_put_failure:
     return -ENOBUFS;
 }
-
-#if 0
-static void srv_timeout_wrapper(timerid t, void *data)
-{
-    trigger_scan(data);
-    srv_add_timeout(srvctx, SRV_SEC(60), srv_timeout_wrapper, data);
-    return;
-}
-#endif
 
 static void usage(void)
 {
@@ -646,6 +635,42 @@ int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *rates, int rates_len)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_STATION;
+    int ret;
+    char *pret;
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, rates_len, rates);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Failed to set supported rates on station: %d (%s)\n", ret, strerror(-ret));
     else
         ret = 0;
 
@@ -818,6 +843,37 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
+int leave_mesh(struct netlink_config_s *nlcfg)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_LEAVE_MESH;
+    int ret;
+    char *pret;
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    /*  Suppress netlink error in case we are not connected to mesh */
+    nlcfg->supress_error = -ENOTCONN;
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr,"Mesh leave failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
 {
     struct nl_msg *msg;
@@ -883,7 +939,10 @@ void estab_peer_link(unsigned char *peer,
         unsigned char *mtk, int mtk_len,
         unsigned char *mgtk, int mgtk_len,
         unsigned char *peer_mgtk, int peer_mgtk_len,
-        unsigned int mgtk_expiration, void *cookie)
+        unsigned int mgtk_expiration,
+        unsigned char *rates,
+        unsigned short rates_len,
+        void *cookie)
 {
     assert(cookie == &nlcfg);
 
@@ -910,9 +969,10 @@ void estab_peer_link(unsigned char *peer,
         /* to check integrity of multicast mgmt frames from this peer */
 	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
 
-        /*  TODO: we should set sta AUTH flag in fin(), and MFP flag here,
-         *  which requires splitting the next function in two. */
+        set_supported_rates(&nlcfg, peer, rates, rates_len);
+
         set_authenticated_flag(&nlcfg, peer);
+
 /* from include/net/cfg80211.h */
 #define PLINK_ESTAB 4
         set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
@@ -1065,6 +1125,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
+    leave_mesh(&nlcfg);
     exitcode = join_mesh_rsn(&nlcfg, mesh_id, strlen(mesh_id));
     if (exitcode)
         goto out;
@@ -1072,8 +1133,6 @@ int main(int argc, char *argv[])
     meshcfg.len = strlen(mesh_id);
     memcpy(meshcfg.id, mesh_id, meshcfg.len);
 
-    /* periodically check for scan results to detect new neighbors */
-    //srv_add_timeout(srvctx, SRV_SEC(600), srv_timeout_wrapper, &nlcfg);
     request_mesh_caps(&nlcfg);
 
     srv_main_loop(srvctx);

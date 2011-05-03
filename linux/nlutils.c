@@ -37,25 +37,22 @@ static int finish_handler(struct nl_msg *msg, void *arg)
 static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
         void *arg)
 {
-    int *ret = arg;
-    *ret = err->error;
-    fprintf(stderr, "nl error handler called\n");
+    struct netlink_config_s *nlcfg = arg;
+    if (arg && err && nlcfg->supress_error &&
+            nlcfg->supress_error != err->error) {
+        fprintf(stderr, "Unexpected error %d ", err->error);
+        fprintf(stderr, "(expected %d)\n", nlcfg->supress_error);
+    }
+    nlcfg->supress_error = 0;
     return NL_SKIP;
 }
 
 int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg)
 {
-        struct nl_cb *cb;
         int err = -ENOMEM;
-
-        cb = nl_cb_clone(nl_socket_get_cb(nl_sock));
-        if (!cb)
-                goto out;
 
         err = nl_send_auto_complete(nl_sock, msg);
 
- out:
-        nl_cb_put(cb);
         nlmsg_free(msg);
         return err;
 }
@@ -253,7 +250,7 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler)
             event_handler, &nlcfg);
 
     /* print errors */
-    nl_cb_err(cb, NL_CB_VERBOSE, NULL, NULL);
+    nl_cb_err(cb, NL_CB_CUSTOM, error_handler, nlcfg);
 
 	return 0;
 

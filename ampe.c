@@ -436,7 +436,7 @@ static int plink_frame_tx(struct candidate *cand, enum
         memcpy(ies, &cand->my_lid, 2);
         ies += 2;
         *ie_len = 2;
-        if (cand->peer_lid) {
+        if (cand->peer_lid && (action != PLINK_OPEN)) {
             memcpy(ies, &cand->peer_lid, 2);
             ies += 2;
             *ie_len += 2;

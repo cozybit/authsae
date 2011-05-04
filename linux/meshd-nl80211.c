@@ -991,11 +991,6 @@ void fin(int status, char *peer, char *buf, int len)
             MAC2STR(nlcfg.mymacaddr));
     if (!status && len) {
         sae_hexdump(AMPE_DEBUG_KEYS, "pmk", (unsigned char *)buf, len % 80);
-
-        /* If auto peer link open is turned off  but we want the
-         * kernel to run the peering protocol */
-        //open_peer_link(&nlcfg, peer);
-        /* Userspace initiates the peering */
         start_peer_link((unsigned char *) peer, (unsigned char *) nlcfg.mymacaddr, NULL);
     }
 }

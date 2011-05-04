@@ -113,9 +113,9 @@ const char rsn_ie[0x16] = {0x30, /* RSN element ID */
 /* Undo libnl's error code translation.  See nl_syserr2nlerr */
 static void nl2syserr(int error)
 {
-        error = abs(error);
+    error = abs(error);
 
-        switch (error) {
+    switch (error) {
         case NLE_BAD_SOCK:		fprintf(stderr, "EBADF or ENOTSOCK\n"); break;
         case NLE_EXIST:			fprintf(stderr, "EADDRINUSE or EEXIST\n"); break;
         case NLE_NOADDR:		fprintf(stderr, "EADDRNOTAVAIL\n"); break;
@@ -132,8 +132,8 @@ static void nl2syserr(int error)
         case NLE_BUSY:			fprintf(stderr, "EBUSY\n"); break;
         case NLE_RANGE:			fprintf(stderr, "ERANGE\n"); break;
         default:                fprintf(stderr, "UNKNOWN NL ERROR\n"); break;
-        }
-        return;
+    }
+    return;
 }
 
 int get_mac_addr(const char * ifname, uint8_t *macaddr)
@@ -322,77 +322,77 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
 
 static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 {
-        struct nl_msg *msg;
-        uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
-        int i;
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
+    int i;
 #define IEEE80211_FTYPE_MGMT            0x0000
 #define IEEE80211_STYPE_ACTION          0x00D0
-        uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_ACTION;
-        int ret = 0;
-        char *pret;
-        char action_codes[3][2] = {{15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
+    uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_ACTION;
+    int ret = 0;
+    char *pret;
+    char action_codes[3][2] = {{15, 1 }, {15, 2}, {15, 3}};  /* 11s draft 10.0, Table 7-24, Self-Protected */
 
-        for (i = 0; i < 3; i++) {
-            msg = nlmsg_alloc();
-            if (!msg)
-                    return -ENOMEM;
-
-            pret = genlmsg_put(msg, 0, 0,
-                    genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-            if (pret == NULL)
-                    goto nla_put_failure;
-
-            NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-            NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
-            NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[i]), action_codes[i]);
-
-            ret = send_nlmsg(nlcfg->nl_sock, msg);
-            if (ret < 0)
-                    fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
-                            strerror(-ret));
-            else
-                ret = 0;
-        }
-
-        return ret;
- nla_put_failure:
-        return -ENOBUFS;
-}
-
-static int register_for_auth_frames(struct netlink_config_s *nlcfg)
-{
-        struct nl_msg *msg;
-        uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
-#define IEEE80211_FTYPE_MGMT            0x0000
-#define IEEE80211_STYPE_AUTH            0x00B0
-        uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_AUTH;
-        int ret;
-        char *pret;
-        char auth_algo[1] = { 0x3};     /* SAE */
-
+    for (i = 0; i < 3; i++) {
         msg = nlmsg_alloc();
         if (!msg)
-                return -ENOMEM;
+            return -ENOMEM;
 
         pret = genlmsg_put(msg, 0, 0,
                 genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
         if (pret == NULL)
-                goto nla_put_failure;
+            goto nla_put_failure;
 
         NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
         NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
-        NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
+        NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[i]), action_codes[i]);
 
         ret = send_nlmsg(nlcfg->nl_sock, msg);
         if (ret < 0)
-                fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
-                        strerror(-ret));
+            fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
+                    strerror(-ret));
         else
             ret = 0;
+    }
 
-        return ret;
- nla_put_failure:
-        return -ENOBUFS;
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+static int register_for_auth_frames(struct netlink_config_s *nlcfg)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
+#define IEEE80211_FTYPE_MGMT            0x0000
+#define IEEE80211_STYPE_AUTH            0x00B0
+    uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_AUTH;
+    int ret;
+    char *pret;
+    char auth_algo[1] = { 0x3};     /* SAE */
+
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
+    NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    if (ret < 0)
+        fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
+                strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
 }
 
 static int request_scan_results(struct netlink_config_s *nlcfg)

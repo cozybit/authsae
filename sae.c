@@ -1754,7 +1754,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                 break;
             }
             peer = find_peer(frame->sa, 0);
-            switch (frame->authenticate.auth_seq) {
+            switch (ieee_order(frame->authenticate.auth_seq)) {
                 case SAE_AUTH_COMMIT:
                     if ((peer != NULL) && (peer->state != SAE_ACCEPTED)) {
                         ret = process_authentication_frame(peer, frame, len);

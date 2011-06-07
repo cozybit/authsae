@@ -912,9 +912,8 @@ int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_confi
         RAND_bytes(mgtk_tx, 16);
         sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
 
-        assert(aconfig->rates[sizeof(aconfig->rates)] == 0);
         /* We can do this because valid supported rates non null and the array is null terminated */
-        sup_rates_len = strlen((char *) aconfig->rates);
+        sup_rates_len = strnlen((char *) aconfig->rates, sizeof(aconfig->rates));
         if (sup_rates_len <= 8) {
             /*  rates fit into a the supported rates IE */
             sta_fixed_ies_len = 2 + sup_rates_len;
@@ -922,7 +921,7 @@ int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_confi
             *sta_fixed_ies = IEEE80211_EID_SUPPORTED_RATES;
             *(sta_fixed_ies+1) = sup_rates_len;
             memcpy(sta_fixed_ies+2, aconfig->rates, sup_rates_len);
-        } else {
+        } else if (sup_rates_len < sizeof(aconfig->rates)) {
             /*  rates overflow onto the extended supported rates IE */
             sta_fixed_ies_len = 4 + sup_rates_len;
             sta_fixed_ies = malloc(sta_fixed_ies_len);
@@ -932,7 +931,11 @@ int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_confi
             *(sta_fixed_ies + 10) = IEEE80211_EID_EXTENDED_SUP_RATES;
             *(sta_fixed_ies + 11) = sup_rates_len - 8;
             memcpy(sta_fixed_ies + 12, aconfig->rates + 8, sup_rates_len - 8);
+        } else {
+            sae_debug(SAE_DEBUG_ERR, "ampe_config->rates should be null-terminated");
+            return -1;
         }
+
         sae_hexdump(MESHD_DEBUG , "Fixed Information Elements in this STA", sta_fixed_ies, sta_fixed_ies_len);
         return 0;
 }

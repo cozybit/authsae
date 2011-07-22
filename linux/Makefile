@@ -1,8 +1,9 @@
 #
-CC=	gcc
-CFLAGS=	-g -DLINUX -Wall -Werror  -I../../openssl-1.0.0-beta2/include -I..
+CC ?=	gcc
+CFLAGS +=	-g -DLINUX -Wall -Werror  -I../../openssl-1.0.0-beta2/include -I..
 LIBS= -L../../openssl-1.0.0-beta2
-LDFLAGS=-lnl -lnl-genl -lcrypto -L/usr/local/lib -L.
+LDFLAGS +=-lnl -lnl-genl -lcrypto -L/usr/local/lib -L.
+PREFIX ?= /usr/
 
 all:	meshd meshd-nl80211 mon
 
@@ -17,6 +18,9 @@ meshd-nl80211:	meshd-nl80211.o nlutils.o libsae.a
 
 mon:	mon.o ../service.o ../common.o
 	$(CC) -o mon mon.o ../service.o ../common.o
+
+install: meshd meshd-nl80211 mon
+	cp $^ $(PREFIX)/bin/
 
 clean:
 	rm -f meshd *.o ../*.o *~ *.a

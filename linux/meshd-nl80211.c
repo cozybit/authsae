@@ -1065,6 +1065,24 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     return 0;
 }
 
+/* given the channel, find the freq in megahertz.  Borrowed from iw:
+ * Copyright (c) 2007, 2008	Johannes Berg
+ * Copyright (c) 2007		Andy Lutomirski
+ * Copyright (c) 2007		Mike Kershaw
+ * Copyright (c) 2008-2009		Luis R. Rodriguez
+ */
+static int channel_to_freq(int chan)
+{
+	if (chan < 14)
+		return 2407 + chan * 5;
+
+	if (chan == 14)
+		return 2484;
+
+	/* FIXME: dot11ChannelStartingFactor (802.11-2007 17.3.8.3.2) */
+	return (chan + 1000) * 5;
+}
+
 int main(int argc, char *argv[])
 {
     int c;
@@ -1168,8 +1186,9 @@ int main(int argc, char *argv[])
     if (meshd_conf.channel == 0)
         meshd_conf.channel = 1;
 
-    if (! nlcfg.freq)
-        nlcfg.freq = 2412;
+    nlcfg.freq = channel_to_freq(meshd_conf.channel);
+    if (nlcfg.freq == -1)
+        return -1;
 
     /* TODO: Check if ifname is of type mesh and if it's up.
      * For now this is assumed to be true.

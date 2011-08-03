@@ -51,6 +51,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <libconfig.h>
 
 #include "nlutils.h"
 
@@ -84,17 +85,23 @@
  *  callback when a station needs to change its state.
  */
 
-/* Runtime config variables */
-static char *ifname = NULL;
-
 /*  As defined in DATA_RATE row of table 6.5.5.2 of IEEE802.11mb */
 static char default_sup_rates[] = { 2, 3, 4, 5, 6, 9, 11, 12, 18, 22, 24, 27, 36, 44, 48, 54, 66, 72, 96, 108 };
 
-
-struct mesh_config {
-    unsigned char id[32];
-    unsigned char len;
-} meshcfg;
+/* TODO: this should be in a separate file where it can be used by all the
+ * meshd implementations.
+ */
+struct meshd_config {
+    char interface[IFNAMSIZ + 1];
+    char meshid[MESHD_MAX_SSID_LEN + 1];
+    int meshid_len;
+    int passive;
+    int beacon;
+    int mediaopt;
+    int channel;
+    int band;
+    int debug;
+} meshd_conf;
 
 static struct netlink_config_s nlcfg;
 service_context srvctx;
@@ -238,8 +245,8 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
         sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
         return NL_SKIP;
     }
-    if (elems.mesh_id == NULL || elems.mesh_id_len != meshcfg.len ||
-            memcmp(elems.mesh_id, meshcfg.id, meshcfg.len) != 0) {
+    if (elems.mesh_id == NULL || elems.mesh_id_len != meshd_conf.meshid_len ||
+            memcmp(elems.mesh_id, meshd_conf.meshid, meshd_conf.meshid_len) != 0) {
         sae_debug(MESHD_DEBUG, "Candidate from different Mesh ID\n");
         return NL_SKIP;
     }
@@ -527,8 +534,15 @@ nla_put_failure:
 static void usage(void)
 {
     sae_debug(MESHD_DEBUG, "\n\n"
-            "usage:\n"
-            "  meshd-nl80211 [-B] [-i<ifname>]\n\n");
+"usage: meshd-nl80211 [options]\n\n"
+"    -h               print this message\n"
+"    -c <conffile>    configuration file (see authsae.sample.conf for examle)\n"
+"    -o <outfile>     output log file\n"
+"    -B               run in the background (i.e., daemonize)\n"
+"    -i <interface>   override interface value in config file\n"
+"    -m <meshid>      override mesh id provided in config file\n"
+""
+);
 }
 
 static int event_handler(struct nl_msg *msg, void *arg)
@@ -1000,27 +1014,82 @@ void term_handle(int i)
     exit(1);
 }
 
+/* TODO: This config stuff should be in a common file to be shared by other
+ * meshd implementations
+ */
+
+static int
+meshd_parse_libconfig (struct config_setting_t *meshd_section,
+                       struct meshd_config *config)
+{
+    char *str;
+
+    memset(config, 0, sizeof(struct meshd_config));
+
+    if (config_setting_lookup_string(meshd_section, "interface",  (const char **)&str)) {
+        strncpy(config->interface, str, IFNAMSIZ + 1);
+        if (config->interface[IFNAMSIZ] != 0) {
+            fprintf(stderr, "Interface name is too long\n");
+            return -1;
+        }
+    }
+
+    if (config_setting_lookup_string(meshd_section, "meshid", (const char **)&str)) {
+        strncpy(config->meshid, str, MESHD_MAX_SSID_LEN);
+        if (config->meshid[MESHD_MAX_SSID_LEN] != 0) {
+            fprintf(stderr, "WARNING: Truncating meshid\n");
+            config->meshid[MESHD_MAX_SSID_LEN] = 0;
+        }
+        config->meshid_len = strlen(config->meshid);
+    }
+
+    config_setting_lookup_int(meshd_section, "passive", (long int *)&config->passive);
+    config_setting_lookup_int(meshd_section, "beacon", (long int *)&config->beacon);
+    config_setting_lookup_int(meshd_section, "debug", (long int *)&config->debug);
+    config_setting_lookup_int(meshd_section, "mediaopt", (long int *)&config->mediaopt);
+    config_setting_lookup_int(meshd_section, "channel", (long int *)&config->channel);
+    config->band = MESHD_11b;
+
+    if (config_setting_lookup_string(meshd_section, "band", (const char **)&str)) {
+        if (strncmp(str, "11a", 3) == 0) {
+            config->band = MESHD_11a;
+        } else if (strncmp(str, "11b", 3) == 0) {
+            config->band = MESHD_11b;
+        } else if (strncmp(str, "11g", 3) == 0) {
+            config->band = MESHD_11g;
+        } else {
+            fprintf(stderr, "Invalid meshd band %s\n", str);
+        }
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     int c;
     int exitcode = 0;
-    char *mesh_id;
+    char *mesh_id = NULL;
     struct nl_sock *nlsock;
     int daemonize = 0;
     char *outfile = NULL;
-    char confdir[80];
-    struct sae_config config;
+    char *conffile = NULL;
+    struct sae_config sae_conf;
     struct ampe_config ampe_conf;
+    char *ifname = NULL;
 
     signal(SIGTERM, term_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));
 
     for (;;) {
-        c = getopt(argc, argv, "I:o:Bi:s:f:");
+        c = getopt(argc, argv, "hc:o:Bi:s:");
         if (c < 0)
             break;
         switch (c) {
+            case 'h':
+                usage();
+                return 0;
             case 'B':
                 daemonize = 1;
                 break;
@@ -1029,16 +1098,12 @@ int main(int argc, char *argv[])
                 break;
             case 'i':
                 ifname = optarg;
-                nlcfg.ifindex = if_nametoindex(ifname);
-                break;
-            case 'f':
-                nlcfg.freq = atoi(optarg);
                 break;
             case 's':
                 mesh_id = optarg;
                 break;
-            case 'I':
-                strncpy(confdir, optarg, sizeof(confdir));
+            case 'c':
+                conffile = optarg;
                 break;
             default:
                 usage();
@@ -1046,25 +1111,75 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (ifname == NULL || confdir == NULL) {
-        usage();
-        exitcode = -EINVAL;
-        goto out;
+    if (conffile) {
+        struct config_t cfg;
+        struct config_setting_t *section;
+
+        config_init(&cfg);
+        if (!config_read_file(&cfg, conffile)) {
+            fprintf(stderr, "Failed to load config file %s: %s\n", conffile,
+                    config_error_text(&cfg));
+            return -1;
+        }
+        section = config_lookup(&cfg, "authsae.sae");
+        if (section == NULL) {
+            fprintf(stderr, "Config file has not sae section\n");
+            return -1;
+        }
+
+        if (sae_parse_libconfig(section, &sae_conf) != 0) {
+            fprintf(stderr, "Failed to parse SAE configuration.\n");
+            return -1;
+        }
+
+        section = config_lookup(&cfg, "authsae.meshd");
+        if (section == NULL) {
+            fprintf(stderr, "Config file has not meshd section\n");
+            return -1;
+        }
+        if (meshd_parse_libconfig(section, &meshd_conf) != 0) {
+            fprintf(stderr, "Failed to parse meshd configuration.\n");
+            return -1;
+        }
+
+        config_destroy(&cfg);
     }
 
+    /* command line args override config file */
+    if (mesh_id) {
+        if (strlen(mesh_id) > MESHD_MAX_SSID_LEN) {
+            fprintf(stderr, "mesh id %s is too long\n", mesh_id);
+            return -1;
+        }
+        strcpy(meshd_conf.meshid, mesh_id);
+        meshd_conf.meshid_len = strlen(mesh_id);
+    }
+
+    if (ifname) {
+        if (strlen(ifname) > IFNAMSIZ) {
+            fprintf(stderr, "ifname %s is too long\n", ifname);
+            return -1;
+        }
+        strcpy(meshd_conf.interface, ifname);
+    }
+    nlcfg.ifindex = if_nametoindex(meshd_conf.interface);
+
+    /* default to channel 1 */
+    if (meshd_conf.channel == 0)
+        meshd_conf.channel = 1;
+
     if (! nlcfg.freq)
-        nlcfg.freq = 2412;      /* default to channel 1 */
+        nlcfg.freq = 2412;
 
     /* TODO: Check if ifname is of type mesh and if it's up.
      * For now this is assumed to be true.
      */
 
-    exitcode = get_mac_addr(ifname, nlcfg.mymacaddr);
+    exitcode = get_mac_addr(meshd_conf.interface, nlcfg.mymacaddr);
     if (exitcode)
         goto out;
 
-    sae_parse_config(confdir, &config);
-    if (sae_initialize(mesh_id, &config) < 0) {
+    if (sae_initialize(meshd_conf.meshid, &sae_conf) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(1);
     }
@@ -1078,7 +1193,7 @@ int main(int argc, char *argv[])
     memset(ampe_conf.rates, 0, sizeof(ampe_conf.rates));
     memcpy(ampe_conf.rates, default_sup_rates, sizeof(default_sup_rates));
 
-    if (ampe_initialize((unsigned char *) mesh_id, strlen(mesh_id),
+    if (ampe_initialize((unsigned char *)meshd_conf.meshid, meshd_conf.meshid_len,
                 &ampe_conf) < 0) {
         fprintf(stderr, "%s: cannot configure AMPE!\n", argv[0]);
         exit(1);
@@ -1121,16 +1236,17 @@ int main(int argc, char *argv[])
     }
 
     leave_mesh(&nlcfg);
-    exitcode = join_mesh_rsn(&nlcfg, mesh_id, strlen(mesh_id));
-    if (exitcode)
+    exitcode = join_mesh_rsn(&nlcfg, meshd_conf.meshid, meshd_conf.meshid_len);
+    if (exitcode) {
+        fprintf(stderr, "Failed to join mesh\n");
         goto out;
-
-    meshcfg.len = strlen(mesh_id);
-    memcpy(meshcfg.id, mesh_id, meshcfg.len);
+    }
 
     request_mesh_caps(&nlcfg);
 
     srv_main_loop(srvctx);
 out:
+    if (exitcode != 0)
+        fprintf(stderr, "Failed: %d\n", exitcode);
     return exitcode;
 }

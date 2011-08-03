@@ -2003,6 +2003,42 @@ sae_parse_config (char *confdir, struct sae_config* config)
     return 0;
 }
 
+int
+sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* config)
+{
+    struct config_setting_t *setting, *group;
+    char *pwd;
+
+    memset(config, 0, sizeof(struct sae_config));
+    config_setting_lookup_int(sae_section, "debug", (long int *)&config->debug);
+    setting = config_setting_get_member(sae_section, "group");
+    if (setting != NULL) {
+        while (1) {
+            group = config_setting_get_elem(setting, config->num_groups);
+            if (!group)
+                break;
+            config->group[config->num_groups] =
+                config_setting_get_int_elem(setting, config->num_groups);
+            config->num_groups++;
+            if (config->num_groups == SAE_MAX_EC_GROUPS)
+                break;
+        }
+    }
+    if (config_setting_lookup_string(sae_section, "password", (const char **)&pwd)) {
+        strncpy(config->pwd, pwd, SAE_MAX_PASSWORD_LEN);
+        if (config->pwd[SAE_MAX_PASSWORD_LEN - 1] != 0) {
+            fprintf(stderr, "WARNING: Truncating password\n");
+            config->pwd[SAE_MAX_PASSWORD_LEN - 1] = 0;
+        }
+    }
+    config_setting_lookup_int(sae_section, "retrans", (long int *)&config->retrans);
+    config_setting_lookup_int(sae_section, "lifetime", (long int *)&config->pmk_expiry);
+    config_setting_lookup_int(sae_section, "thresh", (long int *)&config->open_threshold);
+    config_setting_lookup_int(sae_section, "blacklist", (long int *)&config->blacklist_timeout);
+    config_setting_lookup_int(sae_section, "giveup", (long int *)&config->giveup_threshold);
+    return 0;
+}
+
 void
 sae_dump_db (int unused)
 {

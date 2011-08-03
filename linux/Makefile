@@ -1,20 +1,19 @@
 #
 CC ?=	gcc
 CFLAGS +=	-g -DLINUX -Wall -Werror  -I../../openssl-1.0.0-beta2/include -I..
-LIBS= -L../../openssl-1.0.0-beta2
-LDFLAGS +=-lnl -lnl-genl -lcrypto -L/usr/local/lib -L.
+LDFLAGS += -L../../openssl-1.0.0-beta2 -L/usr/local/lib -L.
 PREFIX ?= /usr/
 
 all:	meshd meshd-nl80211 mon
 
 meshd:	meshd.o ../common.o ../sae.o ../service.o ../ampe.o ../crypto/aes_siv.o
-	$(CC) -o meshd meshd.o ../common.o ../sae.o ../service.o ../ampe.o ../crypto/aes_siv.o $(LIBS) -lcrypto
+	$(CC) -o meshd meshd.o ../common.o ../sae.o ../service.o ../ampe.o ../crypto/aes_siv.o $(LDFLAGS) -lcrypto -lconfig
 
 libsae.a: ../common.o ../sae.o ../service.o ../ampe.o ../crypto/aes_siv.o
 	ar rcs $@ $^
 
 meshd-nl80211:	meshd-nl80211.o nlutils.o libsae.a
-	$(CC) -o meshd-nl80211 meshd-nl80211.o nlutils.o -lsae $(LIBS) $(LDFLAGS)
+	$(CC) -o meshd-nl80211 meshd-nl80211.o nlutils.o $(LDFLAGS) -lsae -lnl -lnl-genl -lcrypto  -lconfig
 
 mon:	mon.o ../service.o ../common.o
 	$(CC) -o mon mon.o ../service.o ../common.o

@@ -47,6 +47,19 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
     return NL_SKIP;
 }
 
+static int simple_error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
+                                void *arg)
+{
+    int *ret = arg;
+    *ret = 0;
+    if (arg && err) {
+        *ret = err->error;
+        if (*ret != 0)
+            return NL_STOP;
+    }
+    return NL_SKIP;
+}
+
 int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg)
 {
         int err = -ENOMEM;
@@ -74,7 +87,7 @@ static int send_and_recv(struct nl_sock *nl_sock, struct nl_msg *msg,
 
         err = 1;
 
-        nl_cb_err(cb, NL_CB_CUSTOM, error_handler, &err);
+        nl_cb_err(cb, NL_CB_CUSTOM, simple_error_handler, &err);
         nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, finish_handler, &err);
         nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, ack_handler, &err);
 

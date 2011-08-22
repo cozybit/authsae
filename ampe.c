@@ -214,6 +214,12 @@ static void plink_timer(timerid id, void *data)
                     " (retry, timeout): %d %d\n", MAC2STR(cand->peer_mac),
                     cand->retries, cand->timeout);
 			RAND_bytes((unsigned char *) &rand, sizeof(rand));
+            if (!cand->timeout) {
+                cand->timeout = config.retry_timeout_ms;
+                sae_debug(AMPE_DEBUG_ERR, "WARN: cand " MACSTR
+                    " had a timeout of 0ms.  Reset to %d\n",
+                    MAC2STR(cand->peer_mac),cand->timeout);
+            }
             cand->timeout += rand % cand->timeout;
 			++cand->retries;
             cand->t2 = srv_add_timeout(srvctx,

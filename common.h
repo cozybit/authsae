@@ -60,6 +60,7 @@ int parse_buffer(char *, char **);
 #define MESHD_DEBUG             0x40
 #define AMPE_DEBUG_FSM          0x80
 #define AMPE_DEBUG_KEYS        0x100
+#define AMPE_DEBUG_ERR         0x200
 extern unsigned int sae_debug_mask;
 void sae_debug (int level, const char *fmt, ...);
 void sae_hexdump(int level, const char *label, const unsigned char *start, int

@@ -1000,8 +1000,8 @@ void peer_created(unsigned char *peer)
 
 void fin(int status, char *peer, char *buf, int len)
 {
-    sae_debug(MESHD_DEBUG, "fin: %d, key len:%d me:"
-            MACSTR " peer:" MACSTR "\n", status, len, MAC2STR(peer),
+    sae_debug(MESHD_DEBUG, "fin: %d, key len:%d peer:"
+            MACSTR " me:" MACSTR "\n", status, len, MAC2STR(peer),
             MAC2STR(nlcfg.mymacaddr));
     if (!status && len) {
         sae_hexdump(AMPE_DEBUG_KEYS, "pmk", (unsigned char *)buf, len % 80);

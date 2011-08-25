@@ -533,15 +533,15 @@ nla_put_failure:
 
 static void usage(void)
 {
-    sae_debug(MESHD_DEBUG, "\n\n"
+    sae_debug(SAE_DEBUG_ERR, "\n\n"
 "usage: meshd-nl80211 [options]\n\n"
 "    -h               print this message\n"
-"    -c <conffile>    configuration file (see authsae.sample.conf for examle)\n"
+"    -c <conffile>    configuration file (see authsae.sample.conf for example)\n"
 "    -o <outfile>     output log file\n"
 "    -B               run in the background (i.e., daemonize)\n"
 "    -i <interface>   override interface value in config file\n"
 "    -m <meshid>      override mesh id provided in config file\n"
-""
+"\n"
 );
 }
 
@@ -1096,6 +1096,7 @@ int main(int argc, char *argv[])
     struct ampe_config ampe_conf;
     char *ifname = NULL;
 
+    sae_debug_mask = SAE_DEBUG_ERR;
     signal(SIGTERM, term_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));

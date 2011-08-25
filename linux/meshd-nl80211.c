@@ -61,6 +61,7 @@
 #include "sae.h"
 #include "ampe.h"
 #include "common.h"
+#include "os_glue.h"
 
 /*  Notes on peer station lifecycle:
  *
@@ -143,7 +144,7 @@ static void nl2syserr(int error)
     return;
 }
 
-int get_mac_addr(const char * ifname, uint8_t *macaddr)
+static int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {
     int fd;
     struct ifreq ifr;
@@ -153,13 +154,11 @@ int get_mac_addr(const char * ifname, uint8_t *macaddr)
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
     if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
-        sae_debug(MESHD_DEBUG, "meshd: failed to read mac address for %s\n", ifname);
-        perror("meshd");
+        sae_debug(SAE_DEBUG_ERR, "meshd: failed to read MAC address for interface \"%s\": %s\n", ifname, strerror(errno));
         return -1;
     }
 
     memcpy(macaddr, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
-
     close(fd);
 
     return 0;
@@ -213,10 +212,10 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int meshd_write_mgmt(char *buf, int len)
+int meshd_write_mgmt(char *buf, int framelen, void *cookie)
 {
-    tx_frame(&nlcfg, (unsigned char *) buf, len);
-    return len;
+    tx_frame(&nlcfg, (unsigned char *) buf, framelen);
+    return framelen;
 }
 
 static int new_candidate_handler(struct nl_msg *msg, void *arg)
@@ -617,7 +616,8 @@ static int event_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
+#if 0
+static int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_SET_STATION;
@@ -656,6 +656,7 @@ int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
 nla_put_failure:
     return -ENOBUFS;
 }
+#endif
 
 static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *rates, int rates_len)
 {
@@ -824,7 +825,8 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int set_frequency(struct netlink_config_s *nlcfg, int freq)
+#if 0
+static int set_frequency(struct netlink_config_s *nlcfg, int freq)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_SET_CHANNEL;
@@ -856,8 +858,9 @@ int set_frequency(struct netlink_config_s *nlcfg, int freq)
 nla_put_failure:
     return -ENOBUFS;
 }
+#endif
 
-int leave_mesh(struct netlink_config_s *nlcfg)
+static int leave_mesh(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_LEAVE_MESH;
@@ -888,7 +891,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
+static int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
@@ -998,20 +1001,20 @@ void peer_created(unsigned char *peer)
         new_unauthenticated_peer(&nlcfg, peer);
 }
 
-void fin(int status, char *peer, char *buf, int len)
+void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len, void *cookie)
 {
     sae_debug(MESHD_DEBUG, "fin: %d, key len:%d peer:"
-            MACSTR " me:" MACSTR "\n", status, len, MAC2STR(peer),
+            MACSTR " me:" MACSTR "\n", reason, len, MAC2STR(peer),
             MAC2STR(nlcfg.mymacaddr));
-    if (!status && len) {
-        sae_hexdump(AMPE_DEBUG_KEYS, "pmk", (unsigned char *)buf, len % 80);
-        start_peer_link((unsigned char *) peer, (unsigned char *) nlcfg.mymacaddr, NULL);
+    if (!reason && len) {
+        sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
+        start_peer_link(peer, (unsigned char *) nlcfg.mymacaddr, NULL);
     }
 }
 
 void term_handle(int i)
 {
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 /* TODO: This config stuff should be in a common file to be shared by other
@@ -1195,13 +1198,18 @@ int main(int argc, char *argv[])
      * For now this is assumed to be true.
      */
 
+    if (!ifname) {
+        fprintf(stderr, "%s: No interface specified\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
     exitcode = get_mac_addr(meshd_conf.interface, nlcfg.mymacaddr);
     if (exitcode)
         goto out;
 
     if (sae_initialize(meshd_conf.meshid, &sae_conf) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* TODO: move these to a config file */
@@ -1216,7 +1224,7 @@ int main(int argc, char *argv[])
     if (ampe_initialize((unsigned char *)meshd_conf.meshid, meshd_conf.meshid_len,
                 &ampe_conf) < 0) {
         fprintf(stderr, "%s: cannot configure AMPE!\n", argv[0]);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     if (daemonize)
@@ -1266,7 +1274,9 @@ int main(int argc, char *argv[])
 
     srv_main_loop(srvctx);
 out:
+#if 0
     if (exitcode != 0)
         fprintf(stderr, "Failed: %d\n", exitcode);
+#endif
     return exitcode;
 }

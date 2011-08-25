@@ -206,7 +206,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, unsigned char *frame, int le
         sae_debug(MESHD_DEBUG, "tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
     else
-        sae_hexdump(MESHD_DEBUG, "tx frame (seq num=%d)", frame, len);
+        sae_hexdump(MESHD_DEBUG, "tx frame", frame, len);
     return ret;
 nla_put_failure:
     return -ENOBUFS;

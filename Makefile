@@ -1,6 +1,6 @@
 
 all: linux
-	make -C $<
+	$(MAKE) -C $<
 
 clean:
 	rm -f *.o

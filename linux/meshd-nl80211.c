@@ -1198,7 +1198,7 @@ int main(int argc, char *argv[])
      * For now this is assumed to be true.
      */
 
-    if (!ifname) {
+    if (!strlen(meshd_conf.interface)) {
         fprintf(stderr, "%s: No interface specified\n", argv[0]);
         exit(EXIT_FAILURE);
     }

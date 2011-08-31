@@ -188,7 +188,7 @@ static void peer_ampe_init(struct candidate *cand, unsigned char *me, void *cook
 
 static void plink_timer(timerid id, void *data)
 {
-	__le16 llid, plid, reason;
+	__le16 reason;
     struct candidate *cand;
 
 	cand = (struct candidate *)data;
@@ -200,8 +200,6 @@ static void plink_timer(timerid id, void *data)
 		    mplstates[(cand->link_state > PLINK_BLOCKED) ? PLINK_UNDEFINED : cand->link_state]);
 
 	reason = 0;
-	llid = cand->my_lid;
-	plid = cand->peer_lid;
 
 	switch (cand->link_state) {
 	case PLINK_OPN_RCVD:
@@ -748,9 +746,8 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     unsigned char ftype;
 	struct candidate *cand = NULL;
 	enum plink_event event;
-	int matches_local = 1;
 	unsigned char ie_len = 0;
-	unsigned short plid = 0, llid = 0, reason;
+	unsigned short plid = 0, llid = 0;
     unsigned char *ies;
     unsigned short ies_len;
 
@@ -839,7 +836,6 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	event = PLINK_UNDEFINED;
 //	if (ftype != PLINK_CLOSE && (!mesh_matches_local(&elems, sdata))) {
 	if (ftype != PLINK_CLOSE) {
-		matches_local = 0;
 		switch (ftype) {
 		case PLINK_OPEN:
 			event = OPN_RJCT;
@@ -897,7 +893,6 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 		MAC2STR(mgmt->sa), mplstates[cand->link_state],
 		le16toh(cand->my_lid), le16toh(cand->peer_lid),
 		event);
-	reason = 0;
 
     fsm_step(cand, event);
 

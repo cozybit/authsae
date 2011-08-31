@@ -366,8 +366,7 @@ send_beacon (timerid tid, void *data)
 int
 main (int argc, char **argv)
 {
-    int c, ret, mediaopt, band;
-    unsigned int channel;
+    int c, ret;
     struct interface *inf;
     struct sigaction act;
     char confdir[80], conffile[80], mesh_interface[10];
@@ -419,9 +418,6 @@ main (int argc, char **argv)
     strcpy(mesh_interface, "lo0");
     debug = 0;
     passive = 0;
-    channel = 6;
-    mediaopt = MESHD_ADHOC;
-    band = MESHD_11b;
     if ((fp = fopen(conffile, "r")) != NULL) {
         while (!feof(fp)) {
             if (fgets(str, sizeof(str), fp) == 0) {
@@ -447,23 +443,6 @@ main (int argc, char **argv)
             }
             if (strncmp(str, "debug", strlen("debug")) == 0) {
                 debug = atoi(ptr);
-            }
-            if (strncmp(str, "mediaopt", strlen("mediaopt")) == 0) {
-                mediaopt = atoi(ptr);
-            }
-            if (strncmp(str, "channel", strlen("channel")) == 0) {
-                channel = atoi(ptr);
-            }
-            if (strncmp(str, "band", strlen("band")) == 0) {
-                if (strncmp(ptr, "11a", strlen("11a")) == 0) {
-                    band = MESHD_11a;
-                } else if (strncmp(ptr, "11b", strlen("11b")) == 0) {
-                    band = MESHD_11b;
-                } else if (strncmp(ptr, "11g", strlen("11g")) == 0) {
-                    band = MESHD_11g;
-                } else {
-                    band = -1;
-                }
             }
         }
     }

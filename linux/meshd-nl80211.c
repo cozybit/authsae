@@ -62,6 +62,16 @@
 #include "ampe.h"
 #include "common.h"
 #include "os_glue.h"
+/* peers */
+#include <sys/queue.h>
+#include <openssl/bn.h>
+#include <openssl/sha.h>
+#include <openssl/ec.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/rand.h>
+#include "crypto/siv.h"
+#include "peers.h"
 
 /*  Notes on peer station lifecycle:
  *
@@ -256,6 +266,59 @@ static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void
 	return 0;
 }
 
+static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
+                                    unsigned char *peer, struct info_elems *elems)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_NEW_STATION;
+    int ret;
+    char *pret;
+    struct nl80211_sta_flag_update flags;
+    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
+
+    if (!peer)
+        return -EINVAL;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
+            supported_rates);
+    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED);
+    flags.set = 0;
+
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
+
+    if (elems->ht_cap)
+        NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY, elems->ht_cap_len, elems->ht_cap);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "new unauthed sta (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
+    if (ret < 0)
+        fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
 static int new_candidate_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -264,6 +327,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     size_t ie_len;
     struct ieee80211_mgmt_frame bcn;
     struct info_elems elems;
+    struct candidate *peer;
 
     /* check that all the required info exists: source address
      * (arrives as bssid), meshid, mesh config(TODO!) and RSN
@@ -294,9 +358,16 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
 
-    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL))
+    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL) != 0) {
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
+        return NL_SKIP;
+    }
 
+    /* if peer now exists, we know it was created by process_mgmt_frame, or if
+     * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
+     */
+    if ((peer = find_peer(bcn.sa, 0)))
+        new_unauthenticated_peer(&nlcfg, bcn.sa, &elems);
 
     return NL_SKIP;
 }
@@ -667,55 +738,6 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int new_unauthenticated_peer(struct netlink_config_s *nlcfg, unsigned char *peer)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_STATION;
-    int ret;
-    char *pret;
-    struct nl80211_sta_flag_update flags;
-    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
-
-    if (!peer)
-        return -EINVAL;
-
-    msg = nlmsg_alloc();
-
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
-            supported_rates);
-    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED);
-    flags.set = 0;
-
-    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
-
-    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    sae_debug(MESHD_DEBUG, "new unauthed sta (seq num=%d)\n",
-            nlmsg_hdr(msg)->nlmsg_seq);
-    if (ret < 0)
-        fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-
 #if 0
 static int set_frequency(struct netlink_config_s *nlcfg, int freq)
 {
@@ -889,7 +911,7 @@ void estab_peer_link(unsigned char *peer,
 
 void peer_created(unsigned char *peer)
 {
-        new_unauthenticated_peer(&nlcfg, peer);
+    /* do nothing */
 }
 
 void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len, void *cookie)

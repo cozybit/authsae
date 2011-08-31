@@ -141,8 +141,10 @@ enum plink_action_code {
 
 enum ieee_ie_ids {
     IEEE80211_EID_SUPPORTED_RATES = 1,
+    IEEE80211_EID_MESH_CAPABILITY = 45,
     IEEE80211_EID_RSN = 48,
     IEEE80211_EID_EXTENDED_SUP_RATES = 50,
+    IEEE80211_EID_MESH_OPERATION = 61,
     IEEE80211_EID_MESH_CONFIG = 113,
     IEEE80211_EID_MESH_ID = 114,
     IEEE80211_EID_MESH_PEERING = 117,
@@ -182,6 +184,12 @@ struct info_elems {
 
     unsigned char *mesh_config;
     unsigned char mesh_config_len;
+
+    unsigned char *ht_cap;
+    unsigned char ht_cap_len;
+
+    unsigned char *ht_info;
+    unsigned char ht_info_len;
 
     struct ampe_ie *ampe;
     unsigned char ampe_len;

@@ -1,4 +1,4 @@
-/*
+/* vim: et sw=4 ts=4
  * Copyright (c) Dan Harkins, 2008, 2009, 2010;
  * Copyright (c) 2010, cozybit Inc.
  *
@@ -217,6 +217,46 @@ int meshd_write_mgmt(char *buf, int framelen, void *cookie)
     return framelen;
 }
 
+static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *tb_band[NL80211_BAND_ATTR_MAX + 1];
+    struct nlattr *nl_band;
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    struct ieee80211_band *lband;
+    int rem_band;
+    int bandidx = -1;
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+            genlmsg_attrlen(gnlh, 0), NULL);
+
+    if (!tb[NL80211_ATTR_WIPHY_BANDS])
+        return -1;
+
+    nla_for_each_nested(nl_band, tb[NL80211_ATTR_WIPHY_BANDS], rem_band) {
+        bandidx++;
+        if (!nl_band)
+            continue;
+
+        nla_parse(tb_band, NL80211_BAND_ATTR_MAX,
+                  nla_data(nl_band), nla_len(nl_band), NULL);
+
+        lband = &nlcfg->bands[bandidx];
+        if (tb_band[NL80211_BAND_ATTR_HT_MCS_SET]) {
+            assert(sizeof(lband->ht_cap.mcs) == nla_len(tb_band[NL80211_BAND_ATTR_HT_MCS_SET]));
+            lband->ht_cap.ht_supported = true;
+            memcpy(&lband->ht_cap.mcs,
+                   nla_data(tb_band[NL80211_BAND_ATTR_HT_MCS_SET]),
+                   nla_len(tb_band[NL80211_BAND_ATTR_HT_MCS_SET]));
+            lband->ht_cap.cap = nla_get_u16(tb_band[NL80211_BAND_ATTR_HT_CAPA]);
+            lband->ht_cap.ampdu_factor = nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_FACTOR]);
+            lband->ht_cap.ampdu_density = nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_DENSITY]);
+        }
+        /* TODO: get rates */
+    }
+	return 0;
+}
+
 static int new_candidate_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -337,7 +377,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int request_mesh_caps(struct netlink_config_s *nlcfg)
+static int get_wiphy(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_GET_WIPHY;
@@ -356,12 +396,11 @@ static int request_mesh_caps(struct netlink_config_s *nlcfg)
     if (pret == NULL)
         goto nla_put_failure;
 
-    /* lame, but it could work */
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        sae_debug(MESHD_DEBUG, "request get mesh config failed: %d (%s)\n", ret,
+        sae_debug(MESHD_DEBUG, "get wiphy failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
@@ -471,6 +510,8 @@ static int event_handler(struct nl_msg *msg, void *arg)
 	    /* test */
         case NL80211_CMD_NEW_WIPHY:
             assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
+            if (handle_wiphy(&nlcfg, msg, arg))
+                sae_debug(MESHD_DEBUG, "error getting wiphy info! \n");
             break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
@@ -1056,6 +1097,7 @@ int main(int argc, char *argv[])
     if (meshd_conf.channel == 0)
         meshd_conf.channel = 1;
 
+    /* TODO: channel type */
     nlcfg.freq = channel_to_freq(meshd_conf.channel);
     if (nlcfg.freq == -1)
         return -1;
@@ -1136,7 +1178,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
-    request_mesh_caps(&nlcfg);
+    get_wiphy(&nlcfg);
 
     srv_main_loop(srvctx);
 out:

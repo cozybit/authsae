@@ -323,7 +323,6 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     free(clear_ampe_ie);
 
-#undef MIC_IE_BODY_SIZE
     return 0;
 }
 
@@ -398,6 +397,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
             ies_parsed.ampe->key_expiration));
     free(clear_ampe_ie);
     return -1;
+#undef MIC_IE_BODY_SIZE
 }
 
 static int plink_frame_tx(struct candidate *cand, enum

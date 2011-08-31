@@ -310,7 +310,7 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
             ie, 3,
             cand->my_mac, ETH_ALEN,
             cand->peer_mac, ETH_ALEN,
-            &mgmt->action, mic_start - (unsigned char *) &mgmt->action);
+            &mgmt->action, cat_to_mic_len);
 
     *len = mic_start - (unsigned char *) mgmt + sizeof(struct ampe_ie) + 2 + MIC_IE_BODY_SIZE + 2;
 
@@ -342,17 +342,25 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
 
+    if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
+		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
+        return -1;
+    }
+
     /*
-     *  ampe_ie_len is the length of the ciphertext (the encrypted AMPE IE)
-     *  and it needs to be inferred from the total frame size
+     *  ampe_ie_len is the length of the ciphertext (the encrypted
+     *  AMPE IE) and it needs to be inferred from the total frame
+     *  size
      */
-    ampe_ie_len = len - (elems->mic + elems->mic_len - (unsigned char *)mgmt),
+    ampe_ie_len = len -
+                (elems->mic + elems->mic_len - (unsigned char *)mgmt);
     /*
-     *  cat_to_mic_len is the length of the contents of the frame from the category
-     *  (inclusive) to the mic (exclusive)
+     *  cat_to_mic_len is the length of the contents of the frame
+     *  from the category (inclusive) to the mic (exclusive)
      */
     cat_to_mic_len = elems->mic - 2 - (unsigned char *) &mgmt->action;
-    r = siv_decrypt(&cand->sivctx, elems->mic + elems->mic_len, clear_ampe_ie,
+    r = siv_decrypt(&cand->sivctx, elems->mic + elems->mic_len,
+            clear_ampe_ie,
             ampe_ie_len,
             elems->mic, 3,
             cand->peer_mac, ETH_ALEN,

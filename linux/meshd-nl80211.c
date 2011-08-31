@@ -168,9 +168,7 @@ static void srv_handler_wrapper(int fd, void *data)
 {
     int err;
     if ((err = nl_recvmsgs_default((struct nl_sock *) data)) != 0) {
-        //fprintf(stderr, "srv_handler_wrapper(): nl_recvmsgs_default failed (nl error %d, errno %d)\n", err, errno);
         nl2syserr(err);
-        //perror("srv_handler_wrapper()\n");
     }
     fflush(stdout);
 }
@@ -263,69 +261,6 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-static int scan_results_handler(struct nl_msg *msg, void *arg)
-{
-    struct nlattr *tb[NL80211_ATTR_MAX + 1];
-    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-    struct nlattr *bss[NL80211_BSS_MAX + 1];
-    static struct nla_policy bss_policy[NL80211_BSS_MAX + 1] = {
-        [NL80211_BSS_BSSID] = { .type = NLA_UNSPEC },
-        [NL80211_BSS_FREQUENCY] = { .type = NLA_U32 },
-        [NL80211_BSS_TSF] = { .type = NLA_U64 },
-        [NL80211_BSS_BEACON_INTERVAL] = { .type = NLA_U16 },
-        [NL80211_BSS_CAPABILITY] = { .type = NLA_U16 },
-        [NL80211_BSS_INFORMATION_ELEMENTS] = { .type = NLA_UNSPEC },
-        [NL80211_BSS_SIGNAL_MBM] = { .type = NLA_U32 },
-        [NL80211_BSS_SIGNAL_UNSPEC] = { .type = NLA_U8 },
-        [NL80211_BSS_STATUS] = { .type = NLA_U32 },
-        [NL80211_BSS_SEEN_MS_AGO] = { .type = NLA_U32 },
-        [NL80211_BSS_BEACON_IES] = { .type = NLA_UNSPEC },
-    };
-    unsigned char *ie;
-    size_t ie_len;
-    struct ieee80211_mgmt_frame bcn;
-    struct info_elems elems;
-
-    /* check that all the required info exists: source address
-     * (arrives as bssid), meshid (TODO!), mesh config(TODO!) and RSN
-     * */
-    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
-            genlmsg_attrlen(gnlh, 0), NULL);
-
-    if (!tb[NL80211_ATTR_BSS])
-        return NL_SKIP;
-
-    if (nla_parse_nested(bss, NL80211_BSS_MAX, tb[NL80211_ATTR_BSS],
-                bss_policy))
-        return NL_SKIP;
-
-    if (!bss[NL80211_BSS_BSSID])
-        return NL_SKIP;
-
-    if (!bss[NL80211_BSS_INFORMATION_ELEMENTS])
-        return NL_SKIP;
-
-    ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-    ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-
-    parse_ies(ie, ie_len, &elems);
-    if (elems.rsn == NULL) {
-        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
-        return NL_SKIP;
-    }
-
-    memset(&bcn, 0, sizeof(bcn));
-    bcn.frame_control = htole16(
-            (IEEE802_11_FC_TYPE_MGMT << 2 |
-             IEEE802_11_FC_STYPE_BEACON << 4));
-    memcpy(bcn.sa, nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
-
-    if (process_mgmt_frame(&bcn, sizeof(bcn), nlcfg.mymacaddr, NULL))
-        fprintf(stderr, "libsae: process_mgmt_frame failed\n");
-
-    return NL_SKIP;
-}
-
 static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
@@ -396,36 +331,6 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
     else
         ret = 0;
 
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-
-static int request_scan_results(struct netlink_config_s *nlcfg)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_GET_SCAN;
-    int ret;
-    char *pret;
-
-    assert(nlcfg);
-
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, NLM_F_DUMP, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        sae_debug(MESHD_DEBUG, "Scan results request failed: %d (%s)\n", ret,
-                strerror(-ret));
     return ret;
 nla_put_failure:
     return -ENOBUFS;
@@ -563,9 +468,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
 
     switch (gnlh->cmd) {
 	    /* test */
-	case NL80211_CMD_NEW_WIPHY:
-        assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
-	break;
+        case NL80211_CMD_NEW_WIPHY:
+            assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
+            break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
                 sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -590,19 +495,6 @@ static int event_handler(struct nl_msg *msg, void *arg)
             sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
             new_candidate_handler(msg, arg);
             break;
-        case NL80211_CMD_NEW_SCAN_RESULTS:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_SCAN_RESULTS (%d.%d)\n", now.tv_sec, now.tv_usec);
-            if (tb[NL80211_ATTR_GENERATION]) {
-                sae_debug(MESHD_DEBUG, "retrieving results...\n");
-                return scan_results_handler(msg, arg);
-            } else {
-                sae_debug(MESHD_DEBUG, "requesting results\n");
-                request_scan_results(&nlcfg);
-            }
-            break;
-        case NL80211_CMD_TRIGGER_SCAN:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_TRIGGER_SCAN (%d.%d)\n", now.tv_sec, now.tv_usec);
-            break;
         case NL80211_CMD_FRAME_TX_STATUS:
             sae_debug(MESHD_DEBUG, "NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
             if (!tb[NL80211_ATTR_ACK] || !tb[NL80211_ATTR_FRAME])
@@ -615,48 +507,6 @@ static int event_handler(struct nl_msg *msg, void *arg)
 
     return NL_SKIP;
 }
-
-#if 0
-static int open_peer_link(struct netlink_config_s *nlcfg, char *peer)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_SET_STATION;
-    int ret;
-    char *pret;
-
-    if (!peer)
-        return -EINVAL;
-
-    msg = nlmsg_alloc();
-
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-
-    /*
-#define    PLINK_ACTION_OPEN    1
-    NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_ACTION, PLINK_ACTION_OPEN);
-    */
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-#endif
 
 static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *rates, int rates_len)
 {
@@ -907,7 +757,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh
     if (!mesh_id || !mesh_id_len)
         return -EINVAL;
 
-    sae_debug(MESHD_DEBUG, "meshd: Staring mesh with mesh id = %s\n", mesh_id);
+    sae_debug(MESHD_DEBUG, "meshd: Starting mesh with mesh id = %s\n", mesh_id);
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
@@ -1274,9 +1124,5 @@ int main(int argc, char *argv[])
 
     srv_main_loop(srvctx);
 out:
-#if 0
-    if (exitcode != 0)
-        fprintf(stderr, "Failed: %d\n", exitcode);
-#endif
     return exitcode;
 }

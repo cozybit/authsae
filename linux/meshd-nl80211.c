@@ -267,6 +267,42 @@ static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void
 	return 0;
 }
 
+static int set_wiphy_channel(struct netlink_config_s *nlcfg)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_CHANNEL;
+    int ret;
+    char *pret;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, nlcfg->freq);
+    if (meshd_conf.channel_type != NL80211_CHAN_NO_HT)
+        NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE, meshd_conf.channel_type);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "setting freq %d, mode %d (seq num=%d)\n",
+            nlcfg->freq, meshd_conf.channel_type, nlmsg_hdr(msg)->nlmsg_seq);
+    if (ret < 0)
+        fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
                                     unsigned char *peer, struct info_elems *elems)
 {
@@ -1192,6 +1228,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "cannot register for plink frame!\n");
         goto out;
     }
+
+    set_wiphy_channel(&nlcfg);
 
     leave_mesh(&nlcfg);
     exitcode = join_mesh_rsn(&nlcfg, meshd_conf.meshid, meshd_conf.meshid_len);

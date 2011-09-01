@@ -102,6 +102,7 @@ struct meshd_config {
     int channel;
     int band;
     int debug;
+    enum nl80211_channel_type channel_type;     /* HT mode */
 } meshd_conf;
 
 static struct netlink_config_s nlcfg;
@@ -912,6 +913,21 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
             config->band = MESHD_11g;
         } else {
             fprintf(stderr, "Invalid meshd band %s\n", str);
+        }
+    }
+
+    config->channel_type = NL80211_CHAN_NO_HT;
+    if (config_setting_lookup_string(meshd_section, "htmode", (const char **)&str)) {
+        if (strncmp(str, "none", 4) == 0) {
+            config->channel_type = NL80211_CHAN_NO_HT;
+        } else if (strncmp(str, "HT20", 4) == 0) {
+            config->channel_type = NL80211_CHAN_HT20;
+        } else if (strncmp(str, "HT40+", 5) == 0) {
+            config->channel_type = NL80211_CHAN_HT40PLUS;
+        } else if (strncmp(str, "HT40-", 5) == 0) {
+            config->channel_type = NL80211_CHAN_HT40MINUS;
+        } else {
+            sae_debug(MESHD_DEBUG, "unknown HT mode \"%s\", disabling\n", str);
         }
     }
 

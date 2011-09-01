@@ -1,4 +1,4 @@
-/*
+/* vim: et ts=4 sw=4
  * Copyright (c) cozybit Inc., 2011
  *
  *  Copyright holder grants permission for redistribution and use in source
@@ -136,8 +136,10 @@ static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
     switch(frame->action.action_code) {
         case PLINK_OPEN:
             offset = 2;
+            break;
         case PLINK_CONFIRM:
             offset = 4;
+            break;
         case PLINK_CLOSE:
             offset = 0;
     }
@@ -405,9 +407,11 @@ static int plink_frame_tx(struct candidate *cand, enum
 {
         unsigned char *buf;
         struct ieee80211_mgmt_frame *mgmt;
-        unsigned char *ie_len;
+        unsigned char ie_len;
         int len;
         unsigned char *ies;
+        unsigned char *pos;
+        u16 peering_proto = htole16(0x0001);    /* AMPE */
 
         assert(cand);
 
@@ -429,6 +433,18 @@ static int plink_frame_tx(struct candidate *cand, enum
         memcpy(mgmt->bssid, cand->my_mac, ETH_ALEN);
         mgmt->action.category = IEEE80211_CATEGORY_SELF_PROTECTED;
         mgmt->action.action_code = action;
+        pos = mgmt->action.u.var8;
+
+        if (action != PLINK_CLOSE) {
+            /* capability info */
+            *pos++ = 0x10;       /* securitu */
+            *pos++ = 0;
+            if (action == PLINK_CONFIRM) {
+                /* AID */
+                memset(pos, 0, 2);
+                pos += 2;
+            }
+        }
 
 	    ies = start_of_ies(mgmt, len, NULL);
 
@@ -442,33 +458,49 @@ static int plink_frame_tx(struct candidate *cand, enum
         memcpy((char *) ies, meshid, meshid_len);
         ies += meshid_len;
 
-        /* IE: mesh peering (llid, plid, reason and pmk) */
-        *ies++ = IEEE80211_EID_MESH_PEERING;
-        ie_len = ies++;
-        memcpy(ies, &cand->my_lid, 2);
-        ies += 2;
-        *ie_len = 2;
-        if (cand->peer_lid && (action != PLINK_OPEN)) {
-            memcpy(ies, &cand->peer_lid, 2);
-            ies += 2;
-            *ie_len += 2;
-        }
-        if (reason) {
-            memcpy(ies, &cand->reason, 2);
-            ies += 2;
-            *ie_len += 2;
-        }
-
-        memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
-        ies += sizeof(cand->pmkid);
-        *ie_len += sizeof(cand->pmkid);
-
         /* IE: mesh config */
         *ies++ = IEEE80211_EID_MESH_CONFIG;
         *ies++ = 8;
         /*  TODO: IIRC all the defaults are 0. Double check */
         memset(ies, 0, 8);
         ies += 8;
+
+        ie_len = 4 + 16;        /* min. + PMKID */
+        /* IE: Mesh Peering Management element */
+        switch (action) {
+            case PLINK_OPEN:
+                break;
+            case PLINK_CONFIRM:
+                ie_len += 2;
+                break;
+            case PLINK_CLOSE:
+                if (&cand->peer_lid) {
+                    ie_len += 2;
+                }
+                ie_len += 2;	/* reason code */
+                break;
+            default:
+                return -EINVAL;
+        }
+
+        *ies++ = IEEE80211_EID_MESH_PEERING;
+        *ies++ = ie_len;
+        memcpy(ies, &peering_proto, 2);
+        ies += 2;
+        memcpy(ies, &cand->my_lid, 2);
+        ies += 2;
+        if (cand->peer_lid && (action != PLINK_OPEN)) {
+            memcpy(ies, &cand->peer_lid, 2);
+            ies += 2;
+        }
+        if (action == PLINK_CLOSE) {
+            memcpy(ies, &cand->reason, 2);
+            ies += 2;
+        }
+        memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
+        ies += sizeof(cand->pmkid);
+
+        /* TODO: HT IES here */
 
         /* IE: Add MIC and encrypted AMPE */
         if (protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len) < 0)
@@ -698,8 +730,8 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 	}
 }
 
-#define PLINK_GET_LLID(p) (p + 0)
-#define PLINK_GET_PLID(p) (p + 2)
+#define PLINK_GET_LLID(p) (p + 2)
+#define PLINK_GET_PLID(p) (p + 4)
 
 
 /**
@@ -791,9 +823,9 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	ftype = mgmt->action.action_code;
 	ie_len = elems.mesh_peering_len;
 
-	if ((ftype == PLINK_OPEN && ie_len != 18) ||
-	    (ftype == PLINK_CONFIRM && ie_len != 20) ||
-	    (ftype == PLINK_CLOSE && ie_len != 20 && ie_len != 22)) {
+	if ((ftype == PLINK_OPEN && ie_len != 20) ||
+	    (ftype == PLINK_CONFIRM && ie_len != 22) ||
+	    (ftype == PLINK_CLOSE && ie_len != 22 && ie_len != 24)) {
 		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: incorrect plink ie length %d %d\n",
 		    ftype, ie_len);
 		return 0;

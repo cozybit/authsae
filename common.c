@@ -161,12 +161,12 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
             case IEEE80211_EID_AMPE:
                 elems->ampe = (struct ampe_ie *) pos;
                 elems->ampe_len = elen;
+		break;
             case IEEE80211_EID_MIC:
                 elems->mic = pos;
                 elems->mic_len = elen;
                 /*  After the MIC there IEs there's the AMPE encrypted IE.  Stop here */
                 return;
-                break;
             default:
                 break;
         }

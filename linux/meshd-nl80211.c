@@ -331,8 +331,9 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
             supported_rates);
-    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED);
-    flags.set = 0;
+    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+                 (1 << NL80211_STA_FLAG_WME);
+    flags.set = (1 << NL80211_STA_FLAG_WME);
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 

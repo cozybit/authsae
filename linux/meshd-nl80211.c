@@ -905,7 +905,6 @@ nla_put_failure:
 
 void estab_peer_link(unsigned char *peer,
         unsigned char *mtk, int mtk_len,
-        unsigned char *mgtk, int mgtk_len,
         unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,
         unsigned char *rates,
@@ -914,7 +913,7 @@ void estab_peer_link(unsigned char *peer,
 {
     assert(cookie == &nlcfg);
 
-    assert(mtk_len == 16 && mgtk_len == 16 && peer_mgtk_len == 16);
+    assert(mtk_len == 16 && peer_mgtk_len == 16);
 
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
@@ -924,12 +923,6 @@ void estab_peer_link(unsigned char *peer,
 
         /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
 	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
-
-        /* key to protect integrity of multicast mgmt frames tx*/
-	    install_key(&nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk);
-
-        /* key to encrypt multicast data traffic */
-	    install_key(&nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk);
 
         /* key to decrypt multicast data traffic from this peer */
 	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, peer_mgtk);
@@ -1238,6 +1231,11 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Failed to join mesh\n");
         goto out;
     }
+
+    /* key to protect integrity of multicast mgmt frames tx*/
+    install_key(&nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk_tx);
+    /* key to encrypt multicast data traffic */
+    install_key(&nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk_tx);
 
     get_wiphy(&nlcfg);
 

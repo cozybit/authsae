@@ -1,6 +1,13 @@
 #ifndef __AMPE_H
 #define __AMPE_H
 
+unsigned char meshid[32];
+unsigned char meshid_len;
+unsigned char mgtk_tx[16];
+struct ampe_config config;
+unsigned char *sta_fixed_ies;
+unsigned char sta_fixed_ies_len;
+
 enum plink_state {
     PLINK_LISTEN,
     PLINK_OPN_SNT,
@@ -27,8 +34,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 
 /*  and implements these:  */
 void estab_peer_link(unsigned char *peer, unsigned char *mtk,
-        int mtk_len, unsigned char *mgtk, int mgtk_len,
-        unsigned char *peer_mgtk, int peer_mgtk_len,
+        int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,
         unsigned char *sup_rates,
         unsigned short sup_rates_len,

@@ -72,15 +72,9 @@
 #define MESH_SECURITY_INCONSISTENT_PARAMS       59
 #define MESH_SECURITY_INVALID_CAPABILITY        60
 
-static unsigned char meshid[32];
-static unsigned char meshid_len;
-static unsigned char mgtk_tx[16];
-static struct ampe_config config;
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
-static unsigned char *sta_fixed_ies;
-static unsigned char sta_fixed_ies_len;
 
 /*  For debugging use */
 static const char *mplstates[] = {
@@ -637,7 +631,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
             derive_mtk(cand);
             estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
-                    mgtk_tx, sizeof(mgtk_tx),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
                     cand->sup_rates,
@@ -669,7 +662,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->link_state = PLINK_ESTAB;
             estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
-                    mgtk_tx, sizeof(mgtk_tx),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration, cand->sup_rates,
                     cand->sup_rates_len,

@@ -236,7 +236,7 @@ blacklist_peer (struct candidate *peer)
  * delete_peer()
  *      Clean up state, remove peer from database, and free up memory.
  */
-static void
+void
 delete_peer (struct candidate **delme)
 {
     struct candidate *peer;

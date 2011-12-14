@@ -155,7 +155,7 @@ static void set_sup_basic_rates(struct meshd_config *mconf,
 
     for (i = 0; i < rates_len; i++)
         /* nl80211 reports in 100kb/s, IEEE 802.11 is 500kb/s */
-        mconf->rates[i] = (uint8_t) (rates[i] / 5); 
+        mconf->rates[i] = (uint8_t) (rates[i] / 5);
 
     switch(mconf->band) {
     case MESHD_11a:
@@ -339,6 +339,28 @@ nla_put_failure:
 int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed)
 {
     return set_mesh_conf(&nlcfg, mesh, changed);
+}
+
+static int handle_del_peer(struct netlink_config_s *nlcfg,
+        struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    struct candidate **peer;
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+            genlmsg_attrlen(gnlh, 0), NULL);
+
+    if (nla_get_u32(tb[NL80211_ATTR_IFINDEX]) != nlcfg->ifindex);
+        return -1;
+
+    if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
+        return -1;
+
+    if ((*peer = find_peer(nla_data(tb[NL80211_ATTR_MAX]), 0)))
+         delete_peer(peer);
+
+	return 0;
 }
 
 static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
@@ -604,7 +626,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
     uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_AUTH;
     int ret;
     char *pret;
-    char auth_algo[1] = { 0x3};     /* SAE */
+    char auth_algo[1] = { 0x3 };     /* SAE */
 
     msg = nlmsg_alloc();
     if (!msg)
@@ -770,6 +792,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 sae_debug(MESHD_DEBUG, "error getting wiphy info! \n");
             /* wiphy handled, we are now ready start the mesh */
             init(&nlcfg, &mesh);
+            break;
+        case NL80211_CMD_DEL_STATION:
+            handle_del_peer(&nlcfg, msg, arg);
             break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {

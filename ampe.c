@@ -757,7 +757,6 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
 
 
 	return plink_frame_tx(cand, PLINK_OPEN, 0);
-	return 0;
 }
 
 /**

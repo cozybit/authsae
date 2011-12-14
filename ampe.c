@@ -126,7 +126,7 @@ static int plink_free_count() {
 static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
     int len, u16 *ie_len)
 {
-    int offset;
+    int offset=0;
     switch(frame->action.action_code) {
         case PLINK_OPEN:
             offset = 2;
@@ -328,6 +328,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     struct info_elems ies_parsed;
     unsigned short ampe_ie_len, cat_to_mic_len;
     int r;
+    unsigned int* key_expiration_p;
 
     assert(len && cand && mgmt);
 
@@ -389,8 +390,8 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
     memcpy(cand->mgtk, ies_parsed.ampe->mgtk, sizeof(cand->mgtk));
     sae_hexdump(AMPE_DEBUG_KEYS, "Received mgtk: ", cand->mgtk, sizeof(cand->mgtk));
-    cand->mgtk_expiration = le32toh(*((unsigned int *)
-            ies_parsed.ampe->key_expiration));
+    key_expiration_p = (unsigned int *)ies_parsed.ampe->key_expiration;
+    cand->mgtk_expiration = le32toh(*key_expiration_p);
     free(clear_ampe_ie);
     return -1;
 #undef MIC_IE_BODY_SIZE

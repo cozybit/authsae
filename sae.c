@@ -2010,7 +2010,7 @@ sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* co
     char *pwd;
 
     memset(config, 0, sizeof(struct sae_config));
-    config_setting_lookup_int(sae_section, "debug", (long int *)&config->debug);
+    config_setting_lookup_int(sae_section, "debug", &config->debug);
     setting = config_setting_get_member(sae_section, "group");
     if (setting != NULL) {
         while (1) {
@@ -2031,11 +2031,11 @@ sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* co
             config->pwd[SAE_MAX_PASSWORD_LEN - 1] = 0;
         }
     }
-    config_setting_lookup_int(sae_section, "retrans", (long int *)&config->retrans);
-    config_setting_lookup_int(sae_section, "lifetime", (long int *)&config->pmk_expiry);
-    config_setting_lookup_int(sae_section, "thresh", (long int *)&config->open_threshold);
-    config_setting_lookup_int(sae_section, "blacklist", (long int *)&config->blacklist_timeout);
-    config_setting_lookup_int(sae_section, "giveup", (long int *)&config->giveup_threshold);
+    config_setting_lookup_int(sae_section, "retrans", &config->retrans);
+    config_setting_lookup_int(sae_section, "lifetime", &config->pmk_expiry);
+    config_setting_lookup_int(sae_section, "thresh", &config->open_threshold);
+    config_setting_lookup_int(sae_section, "blacklist", &config->blacklist_timeout);
+    config_setting_lookup_int(sae_section, "giveup", &config->giveup_threshold);
     return 0;
 }
 

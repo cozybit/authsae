@@ -59,6 +59,7 @@ struct candidate {
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);
+void delete_peer(struct candidate **peer);
 
 extern struct blah peers;
 #endif

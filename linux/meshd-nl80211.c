@@ -227,6 +227,28 @@ int meshd_write_mgmt(char *buf, int framelen, void *cookie)
     return framelen;
 }
 
+static int handle_del_peer(struct netlink_config_s *nlcfg,
+        struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    struct candidate **peer;
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+            genlmsg_attrlen(gnlh, 0), NULL);
+
+    if (nla_get_u32(tb[NL80211_ATTR_IFINDEX]) != nlcfg->ifindex);
+        return -1;
+
+    if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
+        return -1;
+
+    if ((*peer = find_peer(nla_data(tb[NL80211_ATTR_MAX]), 0)))
+         delete_peer(peer);
+
+	return 0;
+}
+
 static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -458,7 +480,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
     uint16_t frame_type = IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_AUTH;
     int ret;
     char *pret;
-    char auth_algo[1] = { 0x3};     /* SAE */
+    char auth_algo[1] = { 0x3 };     /* SAE */
 
     msg = nlmsg_alloc();
     if (!msg)
@@ -620,6 +642,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
             assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
             if (handle_wiphy(&nlcfg, msg, arg))
                 sae_debug(MESHD_DEBUG, "error getting wiphy info! \n");
+            break;
+        case NL80211_CMD_DEL_STATION:
+            handle_del_peer(&nlcfg, msg, arg);
             break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {

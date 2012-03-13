@@ -921,6 +921,7 @@ void estab_peer_link(unsigned char *peer,
 #define CIPHER_CCMP 0x000FAC04
 #define CIPHER_AES_CMAC 0x000FAC06
 
+        set_authenticated_flag(&nlcfg, peer);
         /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
 	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
@@ -931,8 +932,6 @@ void estab_peer_link(unsigned char *peer,
 	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
 
         set_supported_rates(&nlcfg, peer, rates, rates_len);
-
-        set_authenticated_flag(&nlcfg, peer);
 
 /* from include/net/cfg80211.h */
 #define PLINK_ESTAB 4

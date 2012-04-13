@@ -156,6 +156,18 @@ static void nl2syserr(int error)
     return;
 }
 
+static u32 get_basic_rates(u8 *rates, int len)
+{
+    int i;
+    u32 basic_rates = 0;
+
+    for (i = 0; i < len; i++)
+        if (rates[i] & 0x80)
+            basic_rates |= 1 << i;
+
+    return basic_rates;
+}
+
 /* copy rates and configure BSSBasicRateSet in aconf by using the mandatory phy rates */
 static void set_mandatory_rates(struct ampe_config *aconf, int band,
                                 u8 rates[MAX_SUPP_RATES])
@@ -893,12 +905,14 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh_id_len)
+static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct ampe_config *aconf,
+                         char *mesh_id, int mesh_id_len)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
     int ret;
     char *pret;
+    u32 basic_rates;
 
     assert(rsn_ie[1] == sizeof(rsn_ie) - 2);
 
@@ -915,6 +929,11 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, char *mesh_id, int mesh
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
     if (pret == NULL)
         goto nla_put_failure;
+
+    /* configure BSSBasicRateSet in kernel MPM, which has to know about this to
+     * select eligible candidates */
+    basic_rates = get_basic_rates(aconf->rates, sizeof(aconf->rates));
+    NLA_PUT_U32(msg, NL80211_ATTR_BSS_BASIC_RATES, basic_rates);
 
     struct nlattr *container = nla_nest_start(msg,
             NL80211_ATTR_MESH_CONFIG);
@@ -1275,7 +1294,7 @@ int main(int argc, char *argv[])
     set_wiphy_channel(&nlcfg);
 
     leave_mesh(&nlcfg);
-    exitcode = join_mesh_rsn(&nlcfg, meshd_conf.meshid, meshd_conf.meshid_len);
+    exitcode = join_mesh_rsn(&nlcfg, &ampe_conf, meshd_conf.meshid, meshd_conf.meshid_len);
     if (exitcode) {
         fprintf(stderr, "Failed to join mesh\n");
         goto out;

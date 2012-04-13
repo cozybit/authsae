@@ -97,7 +97,8 @@
  */
 
 /*  As defined in DATA_RATE row of table 6.5.5.2 of IEEE802.11mb */
-static char default_sup_rates[] = { 2, 3, 4, 5, 6, 9, 11, 12, 18, 22, 24, 27, 36, 44, 48, 54, 66, 72, 96, 108 };
+/* TODO: get the actual rates in handle_wiphy() */
+static u8 default_sup_rates[] = { 1, 2, 3, 4, 5, 6, 9, 11, 12, 18, 22, 24, 27, 36, 44, 48, 54, 66, 72, 96, 108 };
 
 /* TODO: this should be in a separate file where it can be used by all the
  * meshd implementations.
@@ -153,6 +154,56 @@ static void nl2syserr(int error)
         default:                fprintf(stderr, "UNKNOWN NL ERROR\n"); break;
     }
     return;
+}
+
+/* copy rates and configure BSSBasicRateSet in aconf by using the mandatory phy rates */
+static void set_mandatory_rates(struct ampe_config *aconf, int band,
+                                u8 rates[MAX_SUPP_RATES])
+{
+
+    int i, want;
+    char basic = 0x80;
+
+    memset(aconf->rates, 0, sizeof(aconf->rates));
+    assert(sizeof(aconf->rates) >= sizeof(rates));
+    memcpy(aconf->rates, rates, sizeof(rates));
+
+    /* TODO: make this enum */
+    switch(band) {
+    case MESHD_11a:
+        want = 3;
+        for (i = 0; i < MAX_SUPP_RATES; i++) {
+            if (rates[i] == 6 ||
+                rates[i] == 12 ||
+                rates[i] == 24) {
+                    aconf->rates[i] |= basic;
+                    want --;
+            }
+        }
+        assert(!want);
+        break;
+    case MESHD_11b:
+    case MESHD_11g:
+        want = 7;
+        for (i = 0; i < MAX_SUPP_RATES; i++) {
+            if (rates[i] == 1) {
+                aconf->rates[i] |= basic;
+                want--;
+            }
+
+            if (rates[i] == 2 ||
+                rates[i] == 5 || /* 5.5... */
+                rates[i] == 11 ||
+                rates[i] == 6 ||
+                rates[i] == 12 ||
+                rates[i] == 24) {
+                aconf->rates[i] |= basic;
+                want--;
+            }
+        }
+        assert(want == 0 || want == 3 || want == 6);
+        break;
+    }
 }
 
 static int get_mac_addr(const char * ifname, uint8_t *macaddr)
@@ -1176,9 +1227,8 @@ int main(int argc, char *argv[])
     ampe_conf.holding_timeout_ms = 1000;
     ampe_conf.confirm_timeout_ms = 1000;
     ampe_conf.max_retries = 10;
-    assert(sizeof(default_sup_rates) < sizeof(ampe_conf.rates));
-    memset(ampe_conf.rates, 0, sizeof(ampe_conf.rates));
-    memcpy(ampe_conf.rates, default_sup_rates, sizeof(default_sup_rates));
+    /* configure BSSBasicRateSet */
+    set_mandatory_rates(&ampe_conf, meshd_conf.band, default_sup_rates);
 
     if (ampe_initialize((unsigned char *)meshd_conf.meshid, meshd_conf.meshid_len,
                 &ampe_conf) < 0) {

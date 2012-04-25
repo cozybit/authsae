@@ -32,7 +32,14 @@
 
 /* leave hw/kernel info here for now, maybe move to common.h? */
 #include "stdbool.h"
-#define IEEE80211_NUM_BANDS	2
+
+enum ieee80211_band {
+	IEEE80211_BAND_2GHZ = NL80211_BAND_2GHZ,
+	IEEE80211_BAND_5GHZ = NL80211_BAND_5GHZ,
+
+	/* keep last */
+	IEEE80211_NUM_BANDS
+};
 
 struct mcs_info {
         uint8_t rx_mask[10];
@@ -49,7 +56,9 @@ struct local_ht_caps {
 	struct mcs_info mcs;
 };
 
-struct ieee80211_band {
+struct ieee80211_supported_band {
+	uint8_t *rates;
+	int n_bitrates;
 	struct local_ht_caps ht_cap;
 };
 
@@ -64,7 +73,9 @@ struct netlink_config_s {
 	int ifindex;
 	int freq;
 	uint8_t mymacaddr[ETH_ALEN];
-	struct ieee80211_band bands[IEEE80211_NUM_BANDS];
+	struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
+	/* current band */
+	enum ieee80211_band band;
 };
 
 int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);

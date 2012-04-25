@@ -96,10 +96,6 @@
  *  callback when a station needs to change its state.
  */
 
-/*  As defined in DATA_RATE row of table 6.5.5.2 of IEEE802.11mb */
-/* TODO: get the actual rates in handle_wiphy() */
-static u8 default_sup_rates[] = { 1, 2, 3, 4, 5, 6, 9, 11, 12, 18, 22, 24, 27, 36, 44, 48, 54, 66, 72, 96, 108 };
-
 /* TODO: this should be in a separate file where it can be used by all the
  * meshd implementations.
  */
@@ -116,6 +112,7 @@ struct meshd_config {
     enum nl80211_channel_type channel_type;     /* HT mode */
 } meshd_conf;
 
+struct ampe_config ampe_conf;
 static struct netlink_config_s nlcfg;
 service_context srvctx;
 
@@ -156,10 +153,10 @@ static void nl2syserr(int error)
     return;
 }
 
-static u32 get_basic_rates(u8 *rates, int len)
+static uint32_t get_basic_rates(u8 *rates, int len)
 {
     int i;
-    u32 basic_rates = 0;
+    uint32_t basic_rates = 0;
 
     for (i = 0; i < len; i++)
         if (rates[i] & 0x80)
@@ -168,26 +165,29 @@ static u32 get_basic_rates(u8 *rates, int len)
     return basic_rates;
 }
 
-/* copy rates and configure BSSBasicRateSet in aconf by using the mandatory phy rates */
-static void set_mandatory_rates(struct ampe_config *aconf, int band,
-                                u8 rates[MAX_SUPP_RATES])
+/* ampe will copy the rates in aconf->rates straight into the supported rates
+ * elements, so do that conversion here. Also write the BSSBasicRateSet here. */
+static void set_aconf_rates(struct ampe_config *aconf, int band,
+                            u8 *rates, int rates_len)
 {
 
     int i, want;
     char basic = 0x80;
 
     memset(aconf->rates, 0, sizeof(aconf->rates));
-    assert(sizeof(aconf->rates) >= sizeof(rates));
-    memcpy(aconf->rates, rates, sizeof(rates));
+    assert(sizeof(aconf->rates) >= rates_len);
 
-    /* TODO: make this enum */
+    for (i = 0; i < rates_len; i++)
+        /* nl80211 reports in 100kb/s, IEEE 802.11 is 500kb/s */
+        aconf->rates[i] = (uint8_t) (rates[i] / 5); 
+
     switch(band) {
     case MESHD_11a:
         want = 3;
         for (i = 0; i < MAX_SUPP_RATES; i++) {
-            if (rates[i] == 6 ||
-                rates[i] == 12 ||
-                rates[i] == 24) {
+            if (rates[i] == 60 ||
+                rates[i] == 120 ||
+                rates[i] == 240) {
                     aconf->rates[i] |= basic;
                     want --;
             }
@@ -198,17 +198,17 @@ static void set_mandatory_rates(struct ampe_config *aconf, int band,
     case MESHD_11g:
         want = 7;
         for (i = 0; i < MAX_SUPP_RATES; i++) {
-            if (rates[i] == 1) {
+            if (rates[i] == 10) {
                 aconf->rates[i] |= basic;
                 want--;
             }
 
-            if (rates[i] == 2 ||
-                rates[i] == 5 || /* 5.5... */
-                rates[i] == 11 ||
-                rates[i] == 6 ||
-                rates[i] == 12 ||
-                rates[i] == 24) {
+            if (rates[i] == 20 ||
+                rates[i] == 55 ||
+                rates[i] == 110 ||
+                rates[i] == 60 ||
+                rates[i] == 120 ||
+                rates[i] == 240) {
                 aconf->rates[i] |= basic;
                 want--;
             }
@@ -294,11 +294,17 @@ static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct nlattr *tb_band[NL80211_BAND_ATTR_MAX + 1];
-    struct nlattr *nl_band;
+    struct nlattr *nl_band, *nl_rate;
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-    struct ieee80211_band *lband;
-    int rem_band;
+    struct ieee80211_supported_band *lband;
+    int rem_band, rem_rate, n_rates = 0;
     int bandidx = -1;
+    uint8_t sup_rates[MAX_SUPP_RATES] = { 0 };
+    struct nlattr *tb_rate[NL80211_BITRATE_ATTR_MAX + 1];
+    static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
+        [NL80211_BITRATE_ATTR_RATE] = { .type = NLA_U32 },
+        [NL80211_BITRATE_ATTR_2GHZ_SHORTPREAMBLE] = { .type = NLA_FLAG },
+    };
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
@@ -325,7 +331,25 @@ static int handle_wiphy(struct netlink_config_s *nlcfg, struct nl_msg *msg, void
             lband->ht_cap.ampdu_factor = nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_FACTOR]);
             lband->ht_cap.ampdu_density = nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_DENSITY]);
         }
-        /* TODO: get rates */
+
+        n_rates = 0;
+        nla_for_each_nested(nl_rate, tb_band[NL80211_BAND_ATTR_RATES], rem_rate) {
+            nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX, nla_data(nl_rate),
+                    nla_len(nl_rate), rate_policy);
+            if (!tb_rate[NL80211_BITRATE_ATTR_RATE])
+                continue;
+            sup_rates[n_rates] = nla_get_u32(tb_rate[NL80211_BITRATE_ATTR_RATE]);
+            n_rates++;
+        }
+
+        if (n_rates) {
+            lband->rates = malloc(n_rates);
+            if (!lband->rates)
+                return -ENOMEM;
+            memcpy(lband->rates, sup_rates, n_rates);
+            lband->n_bitrates = n_rates;
+            sae_hexdump(MESHD_DEBUG, "got rates:", lband->rates, lband->n_bitrates);
+        }
     }
 	return 0;
 }
@@ -660,6 +684,9 @@ static void usage(void)
 );
 }
 
+static int init(struct netlink_config_s *nlcfg, struct ampe_config *aconf,
+                struct meshd_config *mconf);
+
 static int event_handler(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
@@ -683,6 +710,8 @@ static int event_handler(struct nl_msg *msg, void *arg)
             assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
             if (handle_wiphy(&nlcfg, msg, arg))
                 sae_debug(MESHD_DEBUG, "error getting wiphy info! \n");
+            /* wiphy handled, we are now ready start the mesh */
+            init(&nlcfg, &ampe_conf, &meshd_conf);
             break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
@@ -910,9 +939,10 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct ampe_config *aco
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
+    uint8_t basic_rates[MAX_SUPP_RATES];
+    int rates = 0, i;
     int ret;
     char *pret;
-    u32 basic_rates;
 
     assert(rsn_ie[1] == sizeof(rsn_ie) - 2);
 
@@ -932,8 +962,15 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct ampe_config *aco
 
     /* configure BSSBasicRateSet in kernel MPM, which has to know about this to
      * select eligible candidates */
-    basic_rates = get_basic_rates(aconf->rates, sizeof(aconf->rates));
-    NLA_PUT_U32(msg, NL80211_ATTR_BSS_BASIC_RATES, basic_rates);
+    for (i = 0; i < sizeof(aconf->rates); i++) {
+        if (aconf->rates[i] & 0x80) {
+            basic_rates[rates] = aconf->rates[i];
+            rates++;
+        }
+    }
+
+    sae_hexdump(MESHD_DEBUG, "basic rates:", basic_rates, rates);
+    NLA_PUT(msg, NL80211_ATTR_BSS_BASIC_RATES, rates, basic_rates);
 
     struct nlattr *container = nla_nest_start(msg,
             NL80211_ATTR_MESH_CONFIG);
@@ -1114,6 +1151,57 @@ static int channel_to_freq(int chan)
 	return (chan + 1000) * 5;
 }
 
+static int init(struct netlink_config_s *nlcfg, struct ampe_config *aconf,
+                struct meshd_config *mconf)
+{
+    int exitcode = 0;
+
+    /* TODO: verify channel */
+    set_wiphy_channel(nlcfg);
+
+    sae_hexdump(MESHD_DEBUG, "nlcfg rates", nlcfg->bands[nlcfg->band].rates,
+                              nlcfg->bands[nlcfg->band].n_bitrates);
+    /* configure BSSBasicRateSet */
+    if (!nlcfg->bands[nlcfg->band].rates) {
+        fprintf(stderr, "wiphy reported no rates!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    set_aconf_rates(aconf, mconf->band, nlcfg->bands[nlcfg->band].rates,
+                    nlcfg->bands[nlcfg->band].n_bitrates);
+
+    if (ampe_initialize((unsigned char *)mconf->meshid, mconf->meshid_len,
+                        aconf) < 0) {
+        fprintf(stderr, "cannot configure AMPE!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    leave_mesh(nlcfg);
+    exitcode = join_mesh_rsn(nlcfg, aconf, mconf->meshid, mconf->meshid_len);
+    if (exitcode) {
+        fprintf(stderr, "Failed to join mesh\n");
+        goto out;
+    }
+
+    exitcode = register_for_auth_frames(nlcfg);
+    if (exitcode)
+        goto out;
+
+    exitcode = register_for_plink_frames(nlcfg);
+    if (exitcode) {
+        fprintf(stderr, "cannot register for plink frame!\n");
+        goto out;
+    }
+
+    /* key to protect integrity of multicast mgmt frames tx*/
+    install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk_tx);
+    /* key to encrypt multicast data traffic */
+    install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk_tx);
+
+out:
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     int c;
@@ -1124,7 +1212,6 @@ int main(int argc, char *argv[])
     char *outfile = NULL;
     char *conffile = NULL;
     struct sae_config sae_conf;
-    struct ampe_config ampe_conf;
     char *ifname = NULL;
 
     sae_debug_mask = SAE_DEBUG_ERR;
@@ -1222,6 +1309,8 @@ int main(int argc, char *argv[])
     nlcfg.freq = channel_to_freq(meshd_conf.channel);
     if (nlcfg.freq == -1)
         return -1;
+    nlcfg.band = meshd_conf.band == MESHD_11a ? IEEE80211_BAND_5GHZ
+                                              : IEEE80211_BAND_2GHZ;
 
     /* TODO: Check if ifname is of type mesh and if it's up.
      * For now this is assumed to be true.
@@ -1246,14 +1335,6 @@ int main(int argc, char *argv[])
     ampe_conf.holding_timeout_ms = 1000;
     ampe_conf.confirm_timeout_ms = 1000;
     ampe_conf.max_retries = 10;
-    /* configure BSSBasicRateSet */
-    set_mandatory_rates(&ampe_conf, meshd_conf.band, default_sup_rates);
-
-    if (ampe_initialize((unsigned char *)meshd_conf.meshid, meshd_conf.meshid_len,
-                &ampe_conf) < 0) {
-        fprintf(stderr, "%s: cannot configure AMPE!\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
 
     if (daemonize)
         daemon(1, 0);
@@ -1280,30 +1361,6 @@ int main(int argc, char *argv[])
     nlsock = nlcfg.nl_sock_event;
     srv_add_input(srvctx, nl_socket_get_fd(nlsock), nlsock,
             srv_handler_wrapper);
-
-    exitcode = register_for_auth_frames(&nlcfg);
-    if (exitcode)
-        goto out;
-
-    exitcode = register_for_plink_frames(&nlcfg);
-    if (exitcode) {
-        fprintf(stderr, "cannot register for plink frame!\n");
-        goto out;
-    }
-
-    set_wiphy_channel(&nlcfg);
-
-    leave_mesh(&nlcfg);
-    exitcode = join_mesh_rsn(&nlcfg, &ampe_conf, meshd_conf.meshid, meshd_conf.meshid_len);
-    if (exitcode) {
-        fprintf(stderr, "Failed to join mesh\n");
-        goto out;
-    }
-
-    /* key to protect integrity of multicast mgmt frames tx*/
-    install_key(&nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk_tx);
-    /* key to encrypt multicast data traffic */
-    install_key(&nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk_tx);
 
     get_wiphy(&nlcfg);
 

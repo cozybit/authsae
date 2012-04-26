@@ -759,6 +759,26 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
 	return plink_frame_tx(cand, PLINK_OPEN, 0);
 }
 
+static uint32_t get_basic_rates(struct info_elems *elems)
+{
+    int i, bit = 0;
+    uint32_t basic_rates = 0;
+
+    if (elems->sup_rates) {
+        for (i = 0; i < elems->sup_rates_len; i++)
+            if (elems->sup_rates[i] & 0x80)
+                basic_rates |= 1 << bit++;
+    }
+
+    if (elems->ext_rates) {
+        for (i = 0; i < elems->ext_rates_len; i++)
+            if (elems->ext_rates[i] & 0x80)
+                basic_rates |= 1 << bit++;
+    }
+
+    return basic_rates;
+}
+
 /**
  * process_ampe_frame - process an ampe frame
  * @frame:     The full frame
@@ -775,6 +795,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
                         unsigned char *me, void *cookie)
 {
     struct info_elems elems;
+    struct info_elems our_elems;
     unsigned char ftype;
 	struct candidate *cand = NULL;
 	enum plink_event event;
@@ -834,6 +855,13 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
  	memcpy(&plid, PLINK_GET_LLID(elems.mesh_peering), 2);
     if (ftype == PLINK_CONFIRM || (ftype == PLINK_CLOSE && ie_len == 10))
         memcpy(&llid, PLINK_GET_PLID(elems.mesh_peering), 2);
+
+    /* match BSSBasicRateSet*/
+    parse_ies(sta_fixed_ies, sta_fixed_ies_len, &our_elems);
+    if (get_basic_rates(&our_elems) != get_basic_rates(&elems)) {
+        sae_debug(AMPE_DEBUG_FSM, "mesh plink: mismatched BSSBasicRateSet!\n");
+        return 0;
+    }
 
     if ((cand = find_peer(mgmt->sa, 0)) == NULL) {
 		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: plink open from unauthed peer\n");

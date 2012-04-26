@@ -153,18 +153,6 @@ static void nl2syserr(int error)
     return;
 }
 
-static uint32_t get_basic_rates(u8 *rates, int len)
-{
-    int i;
-    uint32_t basic_rates = 0;
-
-    for (i = 0; i < len; i++)
-        if (rates[i] & 0x80)
-            basic_rates |= 1 << i;
-
-    return basic_rates;
-}
-
 /* ampe will copy the rates in aconf->rates straight into the supported rates
  * elements, so do that conversion here. Also write the BSSBasicRateSet here. */
 static void set_aconf_rates(struct ampe_config *aconf, int band,

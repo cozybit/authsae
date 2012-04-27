@@ -39,6 +39,7 @@
 #ifndef _FRAME_H_
 #define _FRAME_H_
 
+#include <stdint.h>
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 /*
  * IEEE does things bassackwards, networking in non-network order.
@@ -164,6 +165,33 @@ struct ampe_ie {
     unsigned char mgtk[16];
     unsigned char key_rsc[8];
     unsigned char key_expiration[4];
+} __attribute__ ((packed));
+
+struct mcs_info {
+    uint8_t rx_mask[10];
+    uint16_t rx_highest;
+    uint8_t tx_params;
+    uint8_t reserved[3];
+} __attribute__((packed));
+
+struct ht_cap_ie {
+    uint16_t cap_info; /* le */
+    uint8_t ampdu_params_info;
+
+    /* 16 bytes MCS information */
+    struct mcs_info mcs;
+
+    uint16_t extended_ht_cap_info;	/* le */
+    uint32_t tx_BF_cap_info;	/* le */
+    uint8_t antenna_selection_info;
+} __attribute__ ((packed));
+
+struct ht_op_ie {
+    uint8_t primary_chan;
+    uint8_t ht_param;
+    uint16_t operation_mode; /* le */
+    uint16_t stbc_param;	/* le */
+    uint8_t basic_set[16];
 } __attribute__ ((packed));
 
 struct info_elems {

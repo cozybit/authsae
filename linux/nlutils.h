@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <linux/if_ether.h>
 #include "nl80211-copy.h"
+#include "ieee802_11.h"
 
 /* leave hw/kernel info here for now, maybe move to common.h? */
 #include "stdbool.h"
@@ -40,13 +41,6 @@ enum ieee80211_band {
 	/* keep last */
 	IEEE80211_NUM_BANDS
 };
-
-struct mcs_info {
-        uint8_t rx_mask[10];
-        uint16_t rx_highest;
-        uint8_t tx_params;
-        uint8_t reserved[3];
-} __attribute__((packed));
 
 struct local_ht_caps {
 	uint16_t cap;

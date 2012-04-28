@@ -56,6 +56,7 @@ struct candidate {
     unsigned short sup_rates_len;
     siv_ctx sivctx;
     void *cookie;
+    struct ampe_config *conf;
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

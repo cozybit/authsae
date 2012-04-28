@@ -146,11 +146,11 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
                 elems->rsn = pos;
                 elems->rsn_len = elen;
                 break;
-	    case IEEE80211_EID_MESH_CAPABILITY:
+	    case IEEE80211_EID_HT_CAPABILITY:
 		elems->ht_cap = pos;
 		elems->ht_cap_len = elen;
 		break;
-	    case IEEE80211_EID_MESH_OPERATION:
+	    case IEEE80211_EID_HT_OPERATION:
 		elems->ht_info = pos;
 		elems->ht_info_len = elen;
 		break;

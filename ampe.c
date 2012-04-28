@@ -76,6 +76,9 @@ static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
 
+/* global configuration data */
+static struct ampe_config ampe_conf;
+
 /*  For debugging use */
 static const char *mplstates[] = {
     [PLINK_LISTEN] = "LISTEN",
@@ -164,7 +167,8 @@ static void derive_aek(struct candidate *cand)
     sae_hexdump(AMPE_DEBUG_KEYS, "aek: ", cand->aek, sizeof(cand->aek));
 }
 
-static void peer_ampe_init(struct candidate *cand, unsigned char *me, void *cookie)
+static void peer_ampe_init(struct ampe_config *aconf,
+                           struct candidate *cand, unsigned char *me, void *cookie)
 {
 	le16 llid;
 
@@ -176,7 +180,8 @@ static void peer_ampe_init(struct candidate *cand, unsigned char *me, void *cook
 	cand->my_lid = llid;
 	cand->peer_lid = 0;
 	cand->link_state = PLINK_LISTEN;
-    cand->timeout = config.retry_timeout_ms;
+    cand->timeout = aconf->retry_timeout_ms;
+    cand->conf = aconf;
     derive_aek(cand);
     siv_init(&cand->sivctx, cand->aek, SIV_256);
 	return;
@@ -201,15 +206,16 @@ static void plink_timer(timerid id, void *data)
 	case PLINK_OPN_RCVD:
 	case PLINK_OPN_SNT:
 		/* retry timer */
-        sae_debug(AMPE_DEBUG_FSM, "Mesh plink:retries %d of %d\n", cand->retries, config.max_retries);
-		if (cand->retries < config.max_retries) {
+        sae_debug(AMPE_DEBUG_FSM, "Mesh plink:retries %d of %d\n", cand->retries,
+                  cand->conf->max_retries);
+		if (cand->retries < cand->conf->max_retries) {
 			unsigned int rand;
             sae_debug(AMPE_DEBUG_FSM, "Mesh plink for " MACSTR
                     " (retry, timeout): %d %d\n", MAC2STR(cand->peer_mac),
                     cand->retries, cand->timeout);
 			RAND_bytes((unsigned char *) &rand, sizeof(rand));
             if (!cand->timeout) {
-                cand->timeout = config.retry_timeout_ms;
+                cand->timeout = cand->conf->retry_timeout_ms;
                 sae_debug(AMPE_DEBUG_ERR, "WARN: cand " MACSTR
                     " had a timeout of 0ms.  Reset to %d\n",
                     MAC2STR(cand->peer_mac),cand->timeout);
@@ -230,7 +236,7 @@ static void plink_timer(timerid id, void *data)
 			reason = htole16(MESH_CONFIRM_TIMEOUT);
 		cand->link_state = PLINK_HOLDING;
         cand->t2 = srv_add_timeout(srvctx,
-                    SRV_MSEC(config.holding_timeout_ms), plink_timer,
+                    SRV_MSEC(cand->conf->holding_timeout_ms), plink_timer,
                     cand);
 		plink_frame_tx(cand, PLINK_CLOSE, reason);
 		break;
@@ -397,11 +403,12 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 #undef MIC_IE_BODY_SIZE
 }
 
-static int plink_frame_tx(struct candidate *cand, enum
-        plink_action_code action, unsigned short reason)
+static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
+                          unsigned short reason)
 {
         unsigned char *buf;
         struct ieee80211_mgmt_frame *mgmt;
+        struct mesh_node *mesh = cand->conf->mesh;
         unsigned char ie_len;
         int len;
         unsigned char *ies;
@@ -449,9 +456,9 @@ static int plink_frame_tx(struct candidate *cand, enum
 
         /* IE: Mesh ID element */
         *ies++ = IEEE80211_EID_MESH_ID;
-        *ies++ = meshid_len;
-        memcpy((char *) ies, meshid, meshid_len);
-        ies += meshid_len;
+        *ies++ = mesh->conf->meshid_len;
+        memcpy((char *) ies, mesh->conf->meshid, mesh->conf->meshid_len);
+        ies += mesh->conf->meshid_len;
 
         /* IE: mesh config */
         *ies++ = IEEE80211_EID_MESH_CONFIG;
@@ -559,6 +566,7 @@ static void derive_mtk(struct candidate *cand)
 
 static void fsm_step(struct candidate *cand, enum plink_event event)
 {
+    struct ampe_config *aconf = cand->conf;
     unsigned short reason = 0;
 
 	switch (cand->link_state) {
@@ -568,7 +576,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			fsm_restart(cand);
 			break;
 		case OPN_ACPT:
-            cand->timeout = config.retry_timeout_ms;
+            cand->timeout = aconf->retry_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_OPEN, 0);
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
@@ -588,7 +596,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-            cand->timeout = config.holding_timeout_ms;
+            cand->timeout = aconf->holding_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
@@ -599,7 +607,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case CNF_ACPT:
 			cand->link_state = PLINK_CNF_RCVD;
-            cand->timeout = config.confirm_timeout_ms;
+            cand->timeout = aconf->confirm_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			break;
 		default:
@@ -617,7 +625,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-            cand->timeout = config.holding_timeout_ms;
+            cand->timeout = aconf->holding_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
@@ -655,7 +663,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 				reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-            cand->timeout = config.holding_timeout_ms;
+            cand->timeout = aconf->holding_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
@@ -685,7 +693,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			reason = htole16(MESH_CLOSE_RCVD);
 			cand->reason = reason;
 			cand->link_state = PLINK_HOLDING;
-            cand->timeout = config.holding_timeout_ms;
+            cand->timeout = aconf->holding_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
             //TODO: update the number of available peer "slots" in mesh config
 			//if (deactivated)
@@ -748,7 +756,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
             return -EPERM;
 	}
 
-    peer_ampe_init(cand, me, cookie);
+    peer_ampe_init(&ampe_conf, cand, me, cookie);
 	cand->link_state = PLINK_OPN_SNT;
     cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
 
@@ -869,7 +877,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     }
 
     if (cand->my_lid == 0)
-        peer_ampe_init(cand, me, cookie);
+        peer_ampe_init(&ampe_conf, cand, me, cookie);
 
     if (elems.sup_rates) {
         memcpy(cand->sup_rates, elems.sup_rates,
@@ -959,41 +967,42 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     return 0;
 }
 
-int ampe_initialize(unsigned char *mesh_id, unsigned char len, struct ampe_config *aconfig)
+int ampe_initialize(struct mesh_node *mesh)
 {
         int sup_rates_len;
 
-        if (len > 32) {
-            sae_debug(SAE_DEBUG_ERR, "AMPE: Invalid meshid len");
-            return -1;
-        }
-        meshid_len = len;
-        memcpy(meshid, mesh_id, len);
-        memcpy(&config, aconfig, sizeof(config));
+
+        /* TODO: move these to a config file */
+        ampe_conf.retry_timeout_ms = 1000;
+        ampe_conf.holding_timeout_ms = 1000;
+        ampe_conf.confirm_timeout_ms = 1000;
+        ampe_conf.max_retries = 10;
+        ampe_conf.mesh = mesh;
+
         RAND_bytes(mgtk_tx, 16);
         sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
 
         /* We can do this because valid supported rates non null and the array is null terminated */
-        sup_rates_len = strnlen((char *) aconfig->rates, sizeof(aconfig->rates));
+        sup_rates_len = strnlen((char *) mesh->conf->rates, sizeof(mesh->conf->rates));
         if (sup_rates_len <= 8) {
             /*  rates fit into a the supported rates IE */
             sta_fixed_ies_len = 2 + sup_rates_len;
             sta_fixed_ies = malloc(sta_fixed_ies_len);
             *sta_fixed_ies = IEEE80211_EID_SUPPORTED_RATES;
             *(sta_fixed_ies+1) = sup_rates_len;
-            memcpy(sta_fixed_ies+2, aconfig->rates, sup_rates_len);
-        } else if (sup_rates_len < sizeof(aconfig->rates)) {
+            memcpy(sta_fixed_ies+2, mesh->conf->rates, sup_rates_len);
+        } else if (sup_rates_len < sizeof(mesh->conf->rates)) {
             /*  rates overflow onto the extended supported rates IE */
             sta_fixed_ies_len = 4 + sup_rates_len;
             sta_fixed_ies = malloc(sta_fixed_ies_len);
             *sta_fixed_ies = IEEE80211_EID_SUPPORTED_RATES;
             *(sta_fixed_ies + 1) = 8;
-            memcpy(sta_fixed_ies + 2, aconfig->rates, 8);
+            memcpy(sta_fixed_ies + 2, mesh->conf->rates, 8);
             *(sta_fixed_ies + 10) = IEEE80211_EID_EXTENDED_SUP_RATES;
             *(sta_fixed_ies + 11) = sup_rates_len - 8;
-            memcpy(sta_fixed_ies + 12, aconfig->rates + 8, sup_rates_len - 8);
+            memcpy(sta_fixed_ies + 12, mesh->conf->rates + 8, sup_rates_len - 8);
         } else {
-            sae_debug(SAE_DEBUG_ERR, "ampe_config->rates should be null-terminated");
+            sae_debug(SAE_DEBUG_ERR, "mesh->conf->rates should be null-terminated");
             return -1;
         }
 

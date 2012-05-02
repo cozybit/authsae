@@ -409,6 +409,9 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         unsigned char *buf;
         struct ieee80211_mgmt_frame *mgmt;
         struct mesh_node *mesh = cand->conf->mesh;
+        struct ieee80211_supported_band *sband = &mesh->bands[mesh->band];
+        struct ht_cap_ie *ht_cap;
+        struct ht_op_ie *ht_op;
         unsigned char ie_len;
         int len;
         unsigned char *ies;
@@ -502,7 +505,45 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
         ies += sizeof(cand->pmkid);
 
-        /* TODO: HT IES here */
+        if (mesh->conf->channel_type != NL80211_CHAN_NO_HT &&
+            sband->ht_cap.ht_supported) {
+
+            /* HT IEs */
+            *ies++ = IEEE80211_EID_HT_CAPABILITY;
+            *ies++ = sizeof(struct ht_cap_ie);
+            ht_cap = (struct ht_cap_ie *) ies;
+            ht_cap->cap_info = htole16(sband->ht_cap.cap);
+            ht_cap->ampdu_params_info = sband->ht_cap.ampdu_factor |
+                                        (sband->ht_cap.ampdu_density << 2);
+            memcpy(&ht_cap->mcs, &sband->ht_cap.mcs, sizeof(struct mcs_info));
+            /* mac80211 apparently ignores the rest */
+            ies += sizeof(*ht_cap);
+
+            *ies++ = IEEE80211_EID_HT_OPERATION;
+            *ies++ = sizeof(struct ht_op_ie);
+            ht_op = (struct ht_op_ie *) ies;
+            ht_op->primary_chan = mesh->conf->channel;
+            switch (mesh->conf->channel_type) {
+            case NL80211_CHAN_HT40MINUS:
+                ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
+                break;
+            case NL80211_CHAN_HT40PLUS:
+                ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
+                break;
+            case NL80211_CHAN_HT20:
+            default:
+                ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
+                break;
+            }
+            if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
+                mesh->conf->channel_type > NL80211_CHAN_HT20)
+                    ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
+
+            ht_op->operation_mode = 0x0;
+            memset(ht_op->basic_set, 0, 16);
+            memcpy(ht_op->basic_set, &sband->ht_cap.mcs, 10);
+            ies += sizeof(*ht_op);
+        }
 
         /* IE: Add MIC and encrypted AMPE */
         if (protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len) < 0)

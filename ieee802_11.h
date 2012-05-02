@@ -79,6 +79,40 @@ ieee_order (unsigned short x)                   /* if BE, byte-swap */
 
 #define ETH_ALEN                                6
 
+/* for ht_param */
+#define IEEE80211_HT_PARAM_CHA_SEC_OFFSET               0x03
+#define         IEEE80211_HT_PARAM_CHA_SEC_NONE         0x00
+#define         IEEE80211_HT_PARAM_CHA_SEC_ABOVE        0x01
+#define         IEEE80211_HT_PARAM_CHA_SEC_BELOW        0x03
+#define IEEE80211_HT_PARAM_CHAN_WIDTH_ANY               0x04
+
+/* for operation_mode */
+#define IEEE80211_HT_OP_MODE_PROTECTION                 0x0003
+#define         IEEE80211_HT_OP_MODE_PROTECTION_NONE            0
+#define         IEEE80211_HT_OP_MODE_PROTECTION_NONMEMBER       1
+#define         IEEE80211_HT_OP_MODE_PROTECTION_20MHZ           2
+#define         IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED     3
+#define IEEE80211_HT_OP_MODE_NON_GF_STA_PRSNT           0x0004
+#define IEEE80211_HT_OP_MODE_NON_HT_STA_PRSNT           0x0010
+
+/* 802.11n HT capabilities masks (for cap_info) */
+#define IEEE80211_HT_CAP_LDPC_CODING            0x0001
+#define IEEE80211_HT_CAP_SUP_WIDTH_20_40        0x0002
+#define IEEE80211_HT_CAP_SM_PS                  0x000C
+#define         IEEE80211_HT_CAP_SM_PS_SHIFT    2
+#define IEEE80211_HT_CAP_GRN_FLD                0x0010
+#define IEEE80211_HT_CAP_SGI_20                 0x0020
+#define IEEE80211_HT_CAP_SGI_40                 0x0040
+#define IEEE80211_HT_CAP_TX_STBC                0x0080
+#define IEEE80211_HT_CAP_RX_STBC                0x0300
+#define         IEEE80211_HT_CAP_RX_STBC_SHIFT  8
+#define IEEE80211_HT_CAP_DELAY_BA               0x0400
+#define IEEE80211_HT_CAP_MAX_AMSDU              0x0800
+#define IEEE80211_HT_CAP_DSSSCCK40              0x1000
+#define IEEE80211_HT_CAP_RESERVED               0x2000
+#define IEEE80211_HT_CAP_40MHZ_INTOLERANT       0x4000
+#define IEEE80211_HT_CAP_LSIG_TXOP_PROT         0x8000
+
 /*
  * all we're interested in is mgmt frames of subtype beacon and auth,
  * so instead of depending on platform-specific data structures just

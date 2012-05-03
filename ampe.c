@@ -539,7 +539,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
                 mesh->conf->channel_type > NL80211_CHAN_HT20)
                     ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 
-            ht_op->operation_mode = 0x0;
+            ht_op->operation_mode = htole16(mesh->conf->ht_prot_mode);
             memset(ht_op->basic_set, 0, 16);
             memcpy(ht_op->basic_set, &sband->ht_cap.mcs, 10);
             ies += sizeof(*ht_op);

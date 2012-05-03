@@ -1287,6 +1287,10 @@ int main(int argc, char *argv[])
     mesh.channel_type = meshd_conf.channel_type;
     mesh.band = meshd_conf.band == MESHD_11a ? IEEE80211_BAND_5GHZ
                                               : IEEE80211_BAND_2GHZ;
+
+    /* this is the default in kernel as well, so no need to do anything else */
+    meshd_conf.ht_prot_mode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
+
     /* TODO: Check if ifname is of type mesh and if it's up.
      * For now this is assumed to be true.
      */

@@ -43,9 +43,7 @@ struct ieee80211_supported_band {
 	struct local_ht_caps ht_cap;
 };
 
-/* config file options are just parsed into here. The real state lives in
- * mesh_node.
- */
+/* mesh configuration parameters. Our bss_conf */
 struct meshd_config {
     char interface[IFNAMSIZ + 1];
     char meshid[MESHD_MAX_SSID_LEN + 1];
@@ -60,6 +58,7 @@ struct meshd_config {
     /* ready to be copied into rate IEs. Includes BSSBasicRateSet */
 #define MAX_SUPP_RATES 32
     unsigned char rates[MAX_SUPP_RATES];
+    uint16_t ht_prot_mode;
 };
 
 /* the single global interface and mesh node info we're handling.

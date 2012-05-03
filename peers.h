@@ -61,5 +61,10 @@ struct candidate {
 
 struct candidate *find_peer(unsigned char *mac, int accept);
 
-extern struct blah peers;
+TAILQ_HEAD(fubar, candidate) blacklist;
+TAILQ_HEAD(blah, candidate) peers;
+
+#define for_each_peer(peer) \
+	TAILQ_FOREACH(peer, &peers, entry)
+
 #endif

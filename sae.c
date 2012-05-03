@@ -105,8 +105,6 @@ static void reauth(timerid id, void *data);
 /*
  * global variables
  */
-TAILQ_HEAD(fubar, candidate) blacklist;
-TAILQ_HEAD(blah, candidate) peers;
 BN_CTX *bnctx = NULL;
 GD *gd;                                 /* group definitions */
 BIO *out;

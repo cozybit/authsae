@@ -481,7 +481,11 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
-    /* TODO: unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */
+    /* unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */
+    if (elems->ht_info &&
+        !(((struct ht_op_ie *) elems->ht_info)->ht_param & IEEE80211_HT_PARAM_CHAN_WIDTH_ANY))
+            ((struct ht_cap_ie *) elems->ht_cap)->cap_info &= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+
     if (elems->ht_cap)
         NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY, elems->ht_cap_len, elems->ht_cap);
 

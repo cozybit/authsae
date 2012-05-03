@@ -57,6 +57,7 @@ struct candidate {
     siv_ctx sivctx;
     void *cookie;
     struct ampe_config *conf;
+    unsigned int ch_type; /* nl80211_channel_type */
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

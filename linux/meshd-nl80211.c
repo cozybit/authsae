@@ -194,6 +194,31 @@ static void set_sup_basic_rates(struct meshd_config *mconf,
     }
 }
 
+static enum nl80211_channel_type
+ht_op_to_channel_type(struct ht_op_ie *ht_op)
+{
+    enum nl80211_channel_type channel_type;
+
+    if (!ht_op)
+        return NL80211_CHAN_NO_HT;
+
+    switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
+        case IEEE80211_HT_PARAM_CHA_SEC_NONE:
+            channel_type = NL80211_CHAN_HT20;
+            break;
+        case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
+            channel_type = NL80211_CHAN_HT40PLUS;
+            break;
+        case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
+            channel_type = NL80211_CHAN_HT40MINUS;
+            break;
+        default:
+            channel_type = NL80211_CHAN_NO_HT;
+    }
+
+    return channel_type;
+}
+
 static int get_mac_addr(const char * ifname, uint8_t *macaddr)
 {
     int fd;
@@ -425,6 +450,7 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     int ret;
     char *pret;
     struct nl80211_sta_flag_update flags;
+    /* XXX: we have the elems, fix this */
     uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
 
     if (!peer)
@@ -455,6 +481,7 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
+    /* TODO: unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */
     if (elems->ht_cap)
         NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY, elems->ht_cap_len, elems->ht_cap);
 
@@ -518,8 +545,10 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     /* if peer now exists, we know it was created by process_mgmt_frame, or if
      * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
      */
-    if ((peer = find_peer(bcn.sa, 0)))
+    if ((peer = find_peer(bcn.sa, 0))) {
+        peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *) elems.ht_info);
         new_unauthenticated_peer(&nlcfg, bcn.sa, &elems);
+    }
 
     return NL_SKIP;
 }

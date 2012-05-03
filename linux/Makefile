@@ -1,5 +1,5 @@
 
-CFLAGS += -g -DLINUX -Wall -I.. # -Werror -I..
+CFLAGS += -g -DLINUX -Wall -Werror -I..
 LDFLAGS += -L.
 PREFIX ?= /usr/
 
@@ -12,7 +12,7 @@ libsae.a: ../common.o ../sae.o ../service.o ../ampe.o ../crypto/aes_siv.o
 	ar rcs $@ $^
 
 meshd-nl80211:	meshd-nl80211.o nlutils.o libsae.a
-	$(CC) -o $@ $^ $(LDFLAGS) -lsae -lnl -lnl-genl -lcrypto  -lconfig
+	$(CC) -o $@ $^ $(LDFLAGS) -lsae -lnl-3 -lnl-genl-3 -lcrypto  -lconfig
 
 mon:	mon.o ../service.o ../common.o
 	$(CC) $^ -o $@

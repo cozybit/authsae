@@ -142,6 +142,7 @@ static void nl2syserr(int error)
 
 /* copy the phy supported rate set into the mesh conf, and hardcode BSSBasicRateSet
  * as the mandatory phy rates for now */
+/* TODO: allow user to configure BSSBasicRateSet */
 static void set_sup_basic_rates(struct meshd_config *mconf,
                             u8 *rates, int rates_len)
 {
@@ -265,6 +266,54 @@ int meshd_write_mgmt(char *buf, int framelen, void *cookie)
 {
     tx_frame(&nlcfg, &mesh, (unsigned char *) buf, framelen);
     return framelen;
+}
+
+static int set_mesh_conf(struct netlink_config_s *nlcfg,
+                         struct mesh_node *mesh, uint32_t changed)
+{
+
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_SET_MESH_CONFIG;
+    int ret = 0;
+    char *pret;
+
+    sae_debug(MESHD_DEBUG, "%s(%p, %d)\n", __FUNCTION__, nlcfg, changed);
+    msg = nlmsg_alloc();
+    if (!msg)
+        return -ENOMEM;
+
+    pret = genlmsg_put(msg, 0, NL_AUTO_SEQ,
+            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    struct nlattr *container = nla_nest_start(msg,
+            NL80211_ATTR_MESH_CONFIG);
+
+    if (!container)
+        return -ENOBUFS;
+
+    if (changed & MESH_CONF_CHANGED_HT)
+        NLA_PUT_U32(msg, NL80211_MESHCONF_HT_OPMODE, mesh->conf->ht_prot_mode);
+    nla_nest_end(msg, container);
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+
+    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "set meshconf (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
+    if (ret < 0)
+        sae_debug(MESHD_DEBUG, "set meshconf failed: %d (%s)\n", ret,
+                strerror(-ret));
+    return ret;
+nla_put_failure:
+    return -ENOBUFS;
+}
+
+int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed)
+{
+    return set_mesh_conf(&nlcfg, mesh, changed);
 }
 
 static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)

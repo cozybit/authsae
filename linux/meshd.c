@@ -249,6 +249,11 @@ void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsig
     printf("TODO: implement estab_peer_link\n");
 }
 
+void meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed)
+{
+	printf("TODO: implement meshd_set_mesh_conf, or don't. Just build\n");
+}
+
 static void
 add_interface (char *ptr)
 {

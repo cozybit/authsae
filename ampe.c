@@ -167,6 +167,51 @@ static void derive_aek(struct candidate *cand)
     sae_hexdump(AMPE_DEBUG_KEYS, "aek: ", cand->aek, sizeof(cand->aek));
 }
 
+/* determine and set the correct ht operation mode for all established peers
+ * according to 802.11mb 9.23.3. Return MESH_CONF_CHANGED_HT bit if a new
+ * operation mode was selected */
+static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
+{
+    struct candidate *peer;
+    uint32_t changed = 0;
+    unsigned int ht_opmode;
+    bool no_ht = false, ht20 = false;
+
+    if (mesh->conf->channel_type == NL80211_CHAN_NO_HT)
+        return 0;
+
+    for_each_peer(peer) {
+        if (peer->link_state != PLINK_ESTAB)
+            continue;
+
+        switch (peer->ch_type) {
+        case NL80211_CHAN_NO_HT:
+            no_ht = true;
+            goto out;
+        case NL80211_CHAN_HT20:
+            ht20 = true;
+        default:
+            break;
+        }
+    }
+
+out:
+    if (no_ht)
+        ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
+    else if (ht20 && mesh->conf->channel_type > NL80211_CHAN_HT20)
+        ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_20MHZ;
+    else
+        ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONE;
+
+    if (ht_opmode != mesh->conf->ht_prot_mode) {
+        sae_debug(MESHD_DEBUG, "changing ht protection mode to: %d\n", ht_opmode);
+        mesh->conf->ht_prot_mode = ht_opmode;
+        changed = MESH_CONF_CHANGED_HT;
+    }
+
+    return changed;
+}
+
 static void peer_ampe_init(struct ampe_config *aconf,
                            struct candidate *cand, unsigned char *me, void *cookie)
 {
@@ -609,6 +654,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 {
     struct ampe_config *aconf = cand->conf;
     unsigned short reason = 0;
+    uint32_t changed = 0;
 
 	switch (cand->link_state) {
 	case PLINK_LISTEN:
@@ -686,6 +732,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
+            changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
 			break;
@@ -716,6 +763,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mgtk_expiration, cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
+            changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
@@ -736,6 +784,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->link_state = PLINK_HOLDING;
             cand->timeout = aconf->holding_timeout_ms;
             cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             //TODO: update the number of available peer "slots" in mesh config
 			//if (deactivated)
 		    //	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
@@ -770,6 +819,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
         sae_debug(AMPE_DEBUG_FSM, "Unsupported event transition %d", event);
 		break;
 	}
+
+    if (changed)
+        meshd_set_mesh_conf(cand->conf->mesh, changed);
 }
 
 #define PLINK_GET_LLID(p) (p + 2)

@@ -586,7 +586,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
 
             ht_op->operation_mode = htole16(mesh->conf->ht_prot_mode);
             memset(ht_op->basic_set, 0, 16);
-            memcpy(ht_op->basic_set, &sband->ht_cap.mcs, 10);
+            ht_op->basic_set[0] = 0xff; /* mandatory HT phy rates */
             ies += sizeof(*ht_op);
         }
 

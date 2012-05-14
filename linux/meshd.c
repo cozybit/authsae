@@ -55,6 +55,7 @@
 #include "service.h"
 #include "common.h"
 #include "sae.h"
+#include "ampe.h"
 
 struct interface {
     TAILQ_ENTRY(interface) entry;
@@ -244,14 +245,20 @@ void peer_created(unsigned char *peer)
     printf("SAE notification that a peer was created\n");
 }
 
-void estab_peer_link(unsigned char *peer, unsigned char *mtk, int mtk_len, unsigned char *mgtk, int mgtk_len, void *cookie)
+void estab_peer_link(unsigned char *peer, unsigned char *mtk,
+        int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
+        unsigned int mgtk_expiration,
+        unsigned char *sup_rates,
+        unsigned short sup_rates_len,
+        void *cookie)
 {
     printf("TODO: implement estab_peer_link\n");
 }
 
-void meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed)
+int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed)
 {
 	printf("TODO: implement meshd_set_mesh_conf, or don't. Just build\n");
+	return 0;
 }
 
 static void

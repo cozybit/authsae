@@ -38,7 +38,7 @@ struct local_ht_caps {
 };
 
 struct ieee80211_supported_band {
-	uint8_t *rates;
+	uint16_t *rates;
 	int n_bitrates;
 	struct local_ht_caps ht_cap;
 };

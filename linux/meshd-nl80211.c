@@ -144,7 +144,7 @@ static void nl2syserr(int error)
  * as the mandatory phy rates for now */
 /* TODO: allow user to configure BSSBasicRateSet */
 static void set_sup_basic_rates(struct meshd_config *mconf,
-                            u8 *rates, int rates_len)
+                            u16 *rates, int rates_len)
 {
 
     int i, want;
@@ -399,7 +399,6 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
                 return -ENOMEM;
             memcpy(lband->rates, sup_rates, n_rates);
             lband->n_bitrates = n_rates;
-            sae_hexdump(MESHD_DEBUG, "got rates:", lband->rates, lband->n_bitrates);
         }
     }
 	return 0;
@@ -1216,7 +1215,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     /* TODO: verify channel */
     set_wiphy_channel(nlcfg, mesh);
 
-    sae_hexdump(MESHD_DEBUG, "nlcfg rates", mesh->bands[mesh->band].rates,
+    sae_hexdump(MESHD_DEBUG, "nlcfg rates", (const unsigned char *) mesh->bands[mesh->band].rates,
                               mesh->bands[mesh->band].n_bitrates);
 
     /* shouldn't happen */

@@ -350,7 +350,7 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
     struct ieee80211_supported_band *lband;
     int rem_band, rem_rate, n_rates = 0;
     int bandidx = -1;
-    uint8_t sup_rates[MAX_SUPP_RATES] = { 0 };
+    uint16_t sup_rates[MAX_SUPP_RATES] = { 0 };
     struct nlattr *tb_rate[NL80211_BITRATE_ATTR_MAX + 1];
     static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
         [NL80211_BITRATE_ATTR_RATE] = { .type = NLA_U32 },
@@ -394,10 +394,10 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
         }
 
         if (n_rates) {
-            lband->rates = malloc(n_rates);
+            lband->rates = malloc(n_rates * 2);	// lband->rates is 16bit
             if (!lband->rates)
                 return -ENOMEM;
-            memcpy(lband->rates, sup_rates, n_rates);
+            memcpy(lband->rates, sup_rates, n_rates * 2);
             lband->n_bitrates = n_rates;
         }
     }
@@ -1216,7 +1216,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     set_wiphy_channel(nlcfg, mesh);
 
     sae_hexdump(MESHD_DEBUG, "nlcfg rates", (const unsigned char *) mesh->bands[mesh->band].rates,
-                              mesh->bands[mesh->band].n_bitrates);
+                              mesh->bands[mesh->band].n_bitrates * 2); // .rates is 16bit
 
     /* shouldn't happen */
     if (!mesh->bands[mesh->band].rates) {

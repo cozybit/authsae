@@ -160,7 +160,7 @@ static void set_sup_basic_rates(struct meshd_config *mconf,
     switch(mconf->band) {
     case MESHD_11a:
         want = 3;
-        for (i = 0; i < MAX_SUPP_RATES; i++) {
+        for (i = 0; i < rates_len; i++) {
             if (rates[i] == 60 ||
                 rates[i] == 120 ||
                 rates[i] == 240) {
@@ -173,7 +173,7 @@ static void set_sup_basic_rates(struct meshd_config *mconf,
     case MESHD_11b:
     case MESHD_11g:
         want = 7;
-        for (i = 0; i < MAX_SUPP_RATES; i++) {
+        for (i = 0; i < rates_len; i++) {
             if (rates[i] == 10) {
                 mconf->rates[i] |= basic;
                 want--;

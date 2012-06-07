@@ -158,6 +158,10 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems)
                 elems->mesh_id = pos;
                 elems->mesh_id_len = elen;
                 break;
+            case IEEE80211_EID_SSID:
+                elems->ssid = pos;
+                elems->ssid_len = elen;
+                break;
             case IEEE80211_EID_MESH_PEERING:
                 elems->mesh_peering = pos;
                 elems->mesh_peering_len = elen;

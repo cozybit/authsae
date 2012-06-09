@@ -20,6 +20,32 @@
 
 #include "nlutils.h"
 
+static char *cmd_to_string(uint8_t cmd)
+{
+#define CASE(X) \
+	case X: \
+		return #X;
+
+	switch (cmd)
+	{
+CASE(NL80211_CMD_FRAME)
+CASE(NL80211_CMD_SET_MESH_CONFIG)
+CASE(NL80211_CMD_SET_CHANNEL)
+CASE(NL80211_CMD_NEW_STATION)
+CASE(NL80211_CMD_REGISTER_FRAME)
+CASE(NL80211_CMD_GET_WIPHY)
+CASE(NL80211_CMD_NEW_KEY)
+CASE(NL80211_CMD_SET_KEY)
+CASE(NL80211_CMD_SET_STATION)
+CASE(NL80211_CMD_LEAVE_MESH)
+CASE(NL80211_CMD_JOIN_MESH)
+CASE(NL80211_CMD_JOIN_IBSS)
+CASE(NL80211_CMD_LEAVE_IBSS)
+		default: 
+			return "No match";
+	}
+}
+
 static int ack_handler(struct nl_msg *msg, void *arg)
 {
     int *err = arg;
@@ -45,7 +71,7 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
         fprintf(stderr, "Unexpected error %d ", err->error);
         fprintf(stderr, "(expected %d)\n", nlcfg->supress_error);
     } else {
-	    fprintf(stderr, "nlerror, cmd %d, seq %d: %s\n", gnlh->cmd, err->msg.nlmsg_seq,
+	    fprintf(stderr, "nlerror, cmd %s, seq %d: %s\n", cmd_to_string(gnlh->cmd), err->msg.nlmsg_seq,
 							     strerror(abs(err->error)));
     }
     nlcfg->supress_error = 0;

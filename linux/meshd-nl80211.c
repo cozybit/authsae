@@ -251,10 +251,16 @@ static void srv_handler_wrapper(int fd, void *data)
 static int tx_frame(struct netlink_config_s *nlcfg, struct mesh_node *mesh,
                     unsigned char *frame, int len)
 {
+    struct ieee80211_mgmt_frame *sframe;
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_FRAME;
     int ret = 0;
     char *pret;
+
+    sframe = (struct ieee80211_mgmt_frame*) frame;
+
+    if (meshd_conf.using_adhoc)
+        memcpy(sframe->bssid, meshd_conf.bssid, ETH_ALEN);
 
     sae_debug(MESHD_DEBUG, "%s(%p, %p, %d)\n", __FUNCTION__, nlcfg, frame, len);
     msg = nlmsg_alloc();
@@ -501,7 +507,7 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int new_candidate_handler(struct nl_msg *msg, void *arg)
+static int new_candidate_handler(struct nl_msg *msg, void *arg, int adhoc)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
@@ -517,21 +523,28 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
 
-    if (!tb[NL80211_ATTR_MAC] || !tb[NL80211_ATTR_IE])
+    if (!tb[NL80211_ATTR_MAC])
         return NL_SKIP;
+    
+    if (!adhoc) {
+        if (!tb[NL80211_ATTR_IE])
+            return NL_SKIP;
 
-    ie = nla_data(tb[NL80211_ATTR_IE]);
-    ie_len = nla_len(tb[NL80211_ATTR_IE]);
+        ie = nla_data(tb[NL80211_ATTR_IE]);
+        ie_len = nla_len(tb[NL80211_ATTR_IE]);
 
-    parse_ies(ie, ie_len, &elems);
-    if (elems.rsn == NULL) {
-        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
-        return NL_SKIP;
-    }
-    if (elems.mesh_id == NULL || elems.mesh_id_len != meshd_conf.meshid_len ||
-            memcmp(elems.mesh_id, meshd_conf.meshid, meshd_conf.meshid_len) != 0) {
-        sae_debug(MESHD_DEBUG, "Candidate from different Mesh ID\n");
-        return NL_SKIP;
+        parse_ies(ie, ie_len, &elems);
+        if (elems.rsn == NULL && !adhoc) {
+            sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
+            return NL_SKIP;
+        }
+
+    	if (elems.mesh_id == NULL || 
+            elems.mesh_id_len != meshd_conf.meshid_len ||
+            memcmp(elems.mesh_id,meshd_conf.meshid,meshd_conf.meshid_len)!=0) {
+            sae_debug(MESHD_DEBUG, "Candidate from different Mesh ID\n");
+            return NL_SKIP;
+        }
     }
 
     memset(&bcn, 0, sizeof(bcn));
@@ -545,18 +558,18 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-    /* if peer now exists, we know it was created by process_mgmt_frame, or if
-     * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
+    /* if peer now exists, we know it was created by process_mgmt_frame,
+     * or if we received two NEW_PEER_CANDIDATE events for the same 
+     * peer, this will fail. We do NOT need to do this in adhoc mode.
      */
-    if ((peer = find_peer(bcn.sa, 0))) {
+    if (!adhoc && (peer = find_peer(bcn.sa, 0))) {
         peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *) elems.ht_info);
         new_unauthenticated_peer(&nlcfg, bcn.sa, &elems);
     }
-
     return NL_SKIP;
 }
 
-static int register_for_plink_frames(struct netlink_config_s *nlcfg)
+static int register_for_action_frames(struct netlink_config_s *nlcfg)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
@@ -789,11 +802,9 @@ static int event_handler(struct nl_msg *msg, void *arg)
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
-            break;
         case NL80211_CMD_NEW_PEER_CANDIDATE:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
-            new_candidate_handler(msg, arg);
+            sae_debug(MESHD_DEBUG, "%s (%d.%d)\n", cmd_to_string(gnlh->cmd), now.tv_sec, now.tv_usec);
+            new_candidate_handler(msg, arg, mesh.conf->using_adhoc);
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
             sae_debug(MESHD_DEBUG, "NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
@@ -801,7 +812,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 sae_debug(MESHD_DEBUG, "tx frame failed!");
             break;
         default:
-            sae_debug(MESHD_DEBUG, "Ignored event (%d)\n", gnlh->cmd);
+            sae_debug(MESHD_DEBUG, "Ignored event (%s)\n", cmd_to_string(gnlh->cmd));
             break;
     }
 
@@ -868,10 +879,12 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char 
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+    if (!meshd_conf.using_adhoc)
+        flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
                                 (1 << NL80211_STA_FLAG_MFP) |
                                 (1 << NL80211_STA_FLAG_AUTHORIZED);
-
+    else 
+        flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHORIZED);
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
 
@@ -961,10 +974,29 @@ nla_put_failure:
 }
 #endif
 
-static int leave_mesh(struct netlink_config_s *nlcfg)
+/* given the channel, find the freq in megahertz.  Borrowed from iw:
+ * Copyright (c) 2007, 2008	Johannes Berg
+ * Copyright (c) 2007		Andy Lutomirski
+ * Copyright (c) 2007		Mike Kershaw
+ * Copyright (c) 2008-2009		Luis R. Rodriguez
+ */
+static int channel_to_freq(int chan)
+{
+	if (chan < 14)
+		return 2407 + chan * 5;
+
+	if (chan == 14)
+		return 2484;
+
+	/* FIXME: dot11ChannelStartingFactor (802.11-2007 17.3.8.3.2) */
+	return (chan + 1000) * 5;
+}
+
+static int leave_network(struct netlink_config_s *nlcfg, struct meshd_config *mconf)
 {
     struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_LEAVE_MESH;
+    uint8_t cmd = (!mconf->using_adhoc) ? NL80211_CMD_LEAVE_MESH : 
+                                          NL80211_CMD_LEAVE_IBSS;  
     int ret;
     char *pret;
 
@@ -983,7 +1015,10 @@ static int leave_mesh(struct netlink_config_s *nlcfg)
     nlcfg->supress_error = -ENOTCONN;
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        fprintf(stderr,"Mesh leave failed: %d (%s)\n", ret, strerror(-ret));
+        fprintf(stderr,"%s leave failed: %d (%s)\n", 
+        (!mconf->using_adhoc) ? "Mesh" : "IBSS",
+        ret, 
+        strerror(-ret));
     else
         ret = 0;
 
@@ -992,14 +1027,17 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mconf)
+static int join_network(struct netlink_config_s *nlcfg, 
+                        struct meshd_config *mconf)
 {
     struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_JOIN_MESH;
+    uint8_t cmd = (!mconf->using_adhoc) ? NL80211_CMD_JOIN_MESH : 
+                                          NL80211_CMD_JOIN_IBSS;  
     uint8_t basic_rates[MAX_SUPP_RATES];
     int rates = 0, i;
     int ret;
     char *pret;
+    struct nlattr *container = NULL;
 
     assert(rsn_ie[1] == sizeof(rsn_ie) - 2);
 
@@ -1010,7 +1048,10 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     if (!mconf->meshid || !mconf->meshid_len)
         return -EINVAL;
 
-    sae_debug(MESHD_DEBUG, "meshd: Starting mesh with mesh id = %s\n", mconf->meshid);
+    sae_debug(MESHD_DEBUG, "meshd: Starting %s with %s id = %s\n", 
+              (!mconf->using_adhoc) ? "Mesh" : "IBSS",
+              (!mconf->using_adhoc) ? "Mesh" : "IBSS",
+              mconf->meshid);
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
@@ -1029,36 +1070,56 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     sae_hexdump(MESHD_DEBUG, "basic rates:", basic_rates, rates);
     NLA_PUT(msg, NL80211_ATTR_BSS_BASIC_RATES, rates, basic_rates);
 
-    struct nlattr *container = nla_nest_start(msg,
+    if (!mconf->using_adhoc) {
+        /* 
+         * configure appropriately for mesh mode.
+         */
+        container = nla_nest_start(msg,
             NL80211_ATTR_MESH_CONFIG);
+        if (!container)
+            return -ENOBUFS;
 
-    if (!container)
-        return -ENOBUFS;
+        NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
+        nla_nest_end(msg, container);
 
-    NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
-    nla_nest_end(msg, container);
+        container = nla_nest_start(msg,
+                NL80211_ATTR_MESH_SETUP);
 
-    container = nla_nest_start(msg,
-            NL80211_ATTR_MESH_SETUP);
+        if (!container)
+            return -ENOBUFS;
 
-    if (!container)
-        return -ENOBUFS;
+        /* We'll be creating stations, not the kernel */
+        NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
 
-    /* We'll be creating stations, not the kernel */
-    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
+        /* We'll handle peer state transitions */
+        NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
 
-    /* We'll handle peer state transitions */
-    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
+        NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
+        nla_nest_end(msg, container);
 
-    NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
-    nla_nest_end(msg, container);
-
+        NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
+    }
+    else {
+        /*
+         * configure appropriately for adhoc mode.
+         */
+        NLA_PUT_U32(msg, 
+                    NL80211_ATTR_WIPHY_FREQ,
+                    channel_to_freq(mconf->channel));
+        NLA_PUT_FLAG(msg, NL80211_ATTR_FREQ_FIXED);
+        NLA_PUT(msg, NL80211_ATTR_SSID, mconf->meshid_len, mconf->meshid);
+        NLA_PUT(msg, NL80211_ATTR_MAC, 6, mconf->bssid);
+        NLA_PUT_FLAG(msg, NL80211_ATTR_CONTROL_PORT);
+    }
+    
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
-        fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
+        fprintf(stderr,"%s start failed: %d (%s)\n", 
+                (!mconf->using_adhoc) ? "Mesh" : "IBSS",
+                ret, 
+                strerror(-ret));
     else
         ret = 0;
 
@@ -1153,6 +1214,49 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
         config->meshid_len = strlen(config->meshid);
     }
 
+    if (config_setting_lookup_string(meshd_section, "bssid", (const char**)&str)) {
+        char bssid_copy[MESHD_MAX_BSSID_LEN + 1];
+        char *tok = NULL;
+        unsigned int pos = 0;
+
+        config->using_adhoc = 1;
+
+        strncpy(bssid_copy, str, MESHD_MAX_BSSID_LEN + 1);
+        if (bssid_copy[MESHD_MAX_BSSID_LEN] != 0) {
+            config->using_adhoc = 0;
+            fprintf(stderr, "Invalid BSSID (too long). Not using one.\n");
+        } else if (tok = strtok(bssid_copy, ":")) {
+            do {
+                /* 
+                 * add the tok.
+                 */
+                long unsigned int conversion = 0;
+                unsigned char byte;
+
+                conversion = strtol(tok, NULL, 16);
+                if (conversion > 0xff) {
+                    config->using_adhoc = 0;
+                    fprintf(stderr,"Invalid BSSID (%s). Not using one.\n", tok);
+                    break;
+                }
+
+                byte = (unsigned char)conversion;
+                config->bssid[pos++] = byte;
+            } while ((tok = strtok(NULL, ":")) && pos < 6);
+        } else {
+            fprintf(stderr, "Invalid BSSID (unknown error). Not using one.\n");
+            config->using_adhoc = 0;
+        }
+
+        if (config->using_adhoc) {
+            /*
+             * copy from str because bssid_copy was mangled by strtok() above.
+             */
+            strncpy(config->bssid_string, str, MESHD_MAX_BSSID_LEN);
+            fprintf(stderr, "BSSID: %s-\n", config->bssid_string);
+        }
+    }
+
     config_setting_lookup_int(meshd_section, "passive", (long int *)&config->passive);
     config_setting_lookup_int(meshd_section, "beacon", (long int *)&config->beacon);
     config_setting_lookup_int(meshd_section, "debug", (long int *)&config->debug);
@@ -1190,24 +1294,6 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     return 0;
 }
 
-/* given the channel, find the freq in megahertz.  Borrowed from iw:
- * Copyright (c) 2007, 2008	Johannes Berg
- * Copyright (c) 2007		Andy Lutomirski
- * Copyright (c) 2007		Mike Kershaw
- * Copyright (c) 2008-2009		Luis R. Rodriguez
- */
-static int channel_to_freq(int chan)
-{
-	if (chan < 14)
-		return 2407 + chan * 5;
-
-	if (chan == 14)
-		return 2484;
-
-	/* FIXME: dot11ChannelStartingFactor (802.11-2007 17.3.8.3.2) */
-	return (chan + 1000) * 5;
-}
-
 static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
 {
     int exitcode = 0;
@@ -1233,20 +1319,23 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         exit(EXIT_FAILURE);
     }
 
-    leave_mesh(nlcfg);
-    exitcode = join_mesh_rsn(nlcfg, mesh->conf);
+    leave_network(nlcfg, mesh->conf);
+    exitcode = join_network(nlcfg, mesh->conf);
+
     if (exitcode) {
-        fprintf(stderr, "Failed to join mesh\n");
+        fprintf(stderr, "Failed to join network\n");
         goto out;
     }
 
     exitcode = register_for_auth_frames(nlcfg);
-    if (exitcode)
-        goto out;
-
-    exitcode = register_for_plink_frames(nlcfg);
     if (exitcode) {
-        fprintf(stderr, "cannot register for plink frame!\n");
+        fprintf(stderr, "cannot register for auth frames!\n");
+        goto out;
+    }
+
+    exitcode = register_for_action_frames(nlcfg);
+    if (exitcode) {
+        fprintf(stderr, "cannot register for action frames!\n");
         goto out;
     }
 

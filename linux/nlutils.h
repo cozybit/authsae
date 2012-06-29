@@ -49,3 +49,4 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);
 int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg);
 int send_nlmsg_suppress_error(struct nl_sock *nl_sock,
         struct nl_msg *msg, int expect_err);
+char *cmd_to_string(uint8_t cmd);

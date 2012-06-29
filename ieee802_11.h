@@ -175,6 +175,7 @@ enum plink_action_code {
 };
 
 enum ieee_ie_ids {
+    IEEE80211_EID_SSID = 0,
     IEEE80211_EID_SUPPORTED_RATES = 1,
     IEEE80211_EID_HT_CAPABILITY = 45,
     IEEE80211_EID_RSN = 48,
@@ -258,6 +259,9 @@ struct info_elems {
 
     unsigned char *mic;
     unsigned char mic_len;
+
+    unsigned char *ssid;
+    unsigned char ssid_len;
 };
 
 void parse_ies(unsigned char *start, int len, struct info_elems *elems);

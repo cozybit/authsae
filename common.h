@@ -49,6 +49,7 @@
 #define MESHD_11b       2
 #define MESHD_11g       3
 #define MESHD_MAX_SSID_LEN 32
+#define MESHD_MAX_BSSID_LEN 17
 int parse_buffer(char *, char **);
 
 #define SAE_DEBUG_ERR           0x01

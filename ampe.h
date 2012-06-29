@@ -48,6 +48,9 @@ struct meshd_config {
     char interface[IFNAMSIZ + 1];
     char meshid[MESHD_MAX_SSID_LEN + 1];
     int meshid_len;
+    unsigned char bssid_string[MESHD_MAX_BSSID_LEN + 1];
+    unsigned char bssid[ETH_ALEN];
+    int using_adhoc;
     int passive;
     int beacon;
     int mediaopt;

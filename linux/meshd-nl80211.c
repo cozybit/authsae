@@ -1153,11 +1153,11 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
         config->meshid_len = strlen(config->meshid);
     }
 
-    config_setting_lookup_int(meshd_section, "passive", (long int *)&config->passive);
-    config_setting_lookup_int(meshd_section, "beacon", (long int *)&config->beacon);
-    config_setting_lookup_int(meshd_section, "debug", (long int *)&config->debug);
-    config_setting_lookup_int(meshd_section, "mediaopt", (long int *)&config->mediaopt);
-    config_setting_lookup_int(meshd_section, "channel", (long int *)&config->channel);
+    config_setting_lookup_int(meshd_section, "passive", (config_int_t *)&config->passive);
+    config_setting_lookup_int(meshd_section, "beacon", (config_int_t *)&config->beacon);
+    config_setting_lookup_int(meshd_section, "debug", (config_int_t *)&config->debug);
+    config_setting_lookup_int(meshd_section, "mediaopt", (config_int_t *)&config->mediaopt);
+    config_setting_lookup_int(meshd_section, "channel", (config_int_t *)&config->channel);
     config->band = MESHD_11b;
 
     if (config_setting_lookup_string(meshd_section, "band", (const char **)&str)) {

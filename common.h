@@ -78,4 +78,9 @@ void sae_hexdump(int level, const char *label, const unsigned char *start, int
 #ifndef le32
 #define le32 unsigned int
 #endif
+#ifndef LIBCONFIG_SETTING_INT_AS_LONG
+typedef int config_int_t;
+#else
+typedef long int config_int_t;
+#endif
 #endif  /* _COMMON_H_ */

@@ -103,7 +103,9 @@ Lines beginning with '#' are treated as comments and ignored.
 		is 11b.
 	channel: which channel to use in the defined band. Default
 		is 6.
-
+	mcast-rate: set multicast/broadcast transmission rate. Default is 
+		1Mbps for 2.4GHz or 6Mbps for 5GHz 
+	
 HOW TO USE
 
 meshd MUST be run as root. After it's built just run it. If a beacon

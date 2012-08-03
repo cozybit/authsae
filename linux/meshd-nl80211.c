@@ -1056,6 +1056,8 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
 
+    NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, mconf->mcast_rate);
+
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
@@ -1186,6 +1188,8 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
             sae_debug(MESHD_DEBUG, "unknown HT mode \"%s\", disabling\n", str);
         }
     }
+
+    config_setting_lookup_int(meshd_section, "mcast-rate", (config_int_t *)&config->mcast_rate);
 
     return 0;
 }
@@ -1368,6 +1372,8 @@ int main(int argc, char *argv[])
     mesh.channel_type = meshd_conf.channel_type;
     mesh.band = meshd_conf.band == MESHD_11a ? IEEE80211_BAND_5GHZ
                                               : IEEE80211_BAND_2GHZ;
+
+    meshd_conf.mcast_rate = meshd_conf.mcast_rate * 10;
 
     /* this is the default in kernel as well, so no need to do anything else */
     meshd_conf.ht_prot_mode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;

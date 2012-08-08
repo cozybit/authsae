@@ -9,6 +9,11 @@ IF(NOT PKG_CONFIG_FOUND)
 ENDIF(NOT PKG_CONFIG_FOUND)
 
 #####################################################################
+IF(NOT SYSCONF_INSTALL_DIR)
+	SET(SYSCONF_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/etc")
+ENDIF(NOT SYSCONF_INSTALL_DIR)
+
+#####################################################################
 MESSAGE(STATUS "")
 MESSAGE(STATUS "Configuring Host System and compiler flags ...")
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
@@ -73,4 +78,11 @@ IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
 #####################################################################
-CONFIGURE_FILE("${CMAKE_SOURCE_DIR}/config/authsae.sample.cfg" "/etc/authsae.cfg" COPYONLY)
+SET(CONFFILE_DIR "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/etc")
+MESSAGE(STATUS "")
+MESSAGE(STATUS "Configuring authsae.cfg ...")
+IF(NOT IS_DIRECTORY "${CONFFILE_DIR}")
+	MAKE_DIRECTORY("${CONFFILE_DIR}")
+ENDIF(NOT IS_DIRECTORY "${CONFFILE_DIR}")
+CONFIGURE_FILE("${CMAKE_SOURCE_DIR}/config/authsae.sample.cfg" "${CONFFILE_DIR}/authsae.cfg" COPYONLY)
+INSTALL(FILES "${CONFFILE_DIR}/authsae.cfg" DESTINATION "${SYSCONF_INSTALL_DIR}")

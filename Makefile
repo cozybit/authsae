@@ -1,9 +1,8 @@
+all:
+	mkdir -p build; cd build; cmake ..; make
 
-all: linux
-	$(MAKE) -C $<
+install:
+	cd build; make install
 
 clean:
-	rm -f *.o
-	rm -f linux/*.o linux/meshd-nl80211 linux/meshd
-	rm -f freebsd/*.o freebsd/meshd
-	rm -f crypto/*.o
+	rm -rf build

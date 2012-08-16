@@ -371,7 +371,7 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct ieee80211_supported_band *lband;
     int rem_band, rem_rate, n_rates = 0;
-    int bandidx = -1;
+    enum ieee80211_band band;
     uint16_t sup_rates[MAX_SUPP_RATES] = { 0 };
     struct nlattr *tb_rate[NL80211_BITRATE_ATTR_MAX + 1];
     static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
@@ -386,14 +386,13 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
         return -1;
 
     nla_for_each_nested(nl_band, tb[NL80211_ATTR_WIPHY_BANDS], rem_band) {
-        bandidx++;
-        if (!nl_band)
-            continue;
+
+        band = nl_band->nla_type;
+        lband = &mesh->bands[band];
 
         nla_parse(tb_band, NL80211_BAND_ATTR_MAX,
                   nla_data(nl_band), nla_len(nl_band), NULL);
 
-        lband = &mesh->bands[bandidx];
         if (tb_band[NL80211_BAND_ATTR_HT_MCS_SET]) {
             assert(sizeof(lband->ht_cap.mcs) == nla_len(tb_band[NL80211_BAND_ATTR_HT_MCS_SET]));
             lband->ht_cap.ht_supported = true;

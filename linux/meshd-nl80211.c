@@ -1080,7 +1080,8 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
 
-    NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, mconf->mcast_rate);
+    if (mconf->mcast_rate <= 0)
+        NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, mconf->mcast_rate);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
@@ -1179,11 +1180,15 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
         config->meshid_len = strlen(config->meshid);
     }
 
-    config_setting_lookup_int(meshd_section, "passive", (config_int_t *)&config->passive);
-    config_setting_lookup_int(meshd_section, "beacon", (config_int_t *)&config->beacon);
-    config_setting_lookup_int(meshd_section, "debug", (config_int_t *)&config->debug);
-    config_setting_lookup_int(meshd_section, "mediaopt", (config_int_t *)&config->mediaopt);
-    config_setting_lookup_int(meshd_section, "channel", (config_int_t *)&config->channel);
+#define CONFIG_LOOKUP(name, config_val) \
+    if (CONFIG_FALSE == config_setting_lookup_int(meshd_section, #name, (config_int_t *)&config->config_val)) \
+        config->config_val = -1;
+
+    CONFIG_LOOKUP(channel, channel);
+    CONFIG_LOOKUP(mcast-rate, mcast_rate);
+
+#undef CONFIG_LOOKUP
+
     config->band = MESHD_11b;
 
     if (config_setting_lookup_string(meshd_section, "band", (const char **)&str)) {
@@ -1212,8 +1217,6 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
             sae_debug(MESHD_DEBUG, "unknown HT mode \"%s\", disabling\n", str);
         }
     }
-
-    config_setting_lookup_int(meshd_section, "mcast-rate", (config_int_t *)&config->mcast_rate);
 
     return 0;
 }
@@ -1387,7 +1390,7 @@ int main(int argc, char *argv[])
     nlcfg.ifindex = if_nametoindex(meshd_conf.interface);
 
     /* default to channel 1 */
-    if (meshd_conf.channel == 0)
+    if (meshd_conf.channel <= 0)
         meshd_conf.channel = 1;
 
     mesh.freq = channel_to_freq(meshd_conf.channel);

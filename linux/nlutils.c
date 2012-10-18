@@ -40,10 +40,13 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
     struct netlink_config_s *nlcfg = arg;
     struct genlmsghdr *gnlh = nlmsg_data(&err->msg);
 
-    if (arg && err && nlcfg->supress_error &&
-            nlcfg->supress_error != err->error) {
-        fprintf(stderr, "Unexpected error %d ", err->error);
-        fprintf(stderr, "(expected %d)\n", nlcfg->supress_error);
+    if (arg && err && nlcfg->supress_error) {
+        if (nlcfg->supress_error != err->error) {
+            fprintf(stderr, "Unexpected error %d ", err->error);
+            fprintf(stderr, "(expected %d)\n", nlcfg->supress_error);
+        } else {
+            /* do nothing: this was an expected error */
+        }
     } else {
 	    fprintf(stderr, "nlerror, cmd %d, seq %d: %s\n", gnlh->cmd, err->msg.nlmsg_seq,
 							     strerror(abs(err->error)));

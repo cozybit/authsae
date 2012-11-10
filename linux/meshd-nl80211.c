@@ -1080,7 +1080,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
 
-    if (mconf->mcast_rate <= 0)
+    if (mconf->mcast_rate > 0)
         NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, mconf->mcast_rate);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
@@ -1392,6 +1392,10 @@ int main(int argc, char *argv[])
     /* default to channel 1 */
     if (meshd_conf.channel <= 0)
         meshd_conf.channel = 1;
+
+    /* default to mcast-rate of 12 Mbps */
+    if (meshd_conf.mcast_rate <= 0)
+        meshd_conf.mcast_rate = 12;
 
     mesh.freq = channel_to_freq(meshd_conf.channel);
     if (mesh.freq == -1)

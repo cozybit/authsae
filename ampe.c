@@ -964,8 +964,10 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         return 0;
     }
 
-    if ((cand = find_peer(mgmt->sa, 0)) == NULL) {
-		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: plink open from unauthed peer\n");
+    /* "1" here means only get peers in SAE_ACCEPTED */
+    if ((cand = find_peer(mgmt->sa, 1)) == NULL) {
+		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: plink open from unauthed peer "MACSTR" state=%d\n",
+                  MAC2STR(mgmt->sa), cand->state);
         return 0;
     }
 

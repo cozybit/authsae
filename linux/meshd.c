@@ -245,6 +245,12 @@ void peer_created(unsigned char *peer)
     printf("SAE notification that a peer was created\n");
 }
 
+int set_plink_state(unsigned char *peer, int state, void *cookie)
+{
+	printf("TODO: implement set_plink_state\n");
+	return 0;
+}
+
 void estab_peer_link(unsigned char *peer, unsigned char *mtk,
         int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,

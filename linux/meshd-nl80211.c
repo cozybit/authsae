@@ -561,7 +561,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
 
-    if (process_mgmt_frame(&bcn, sizeof(bcn), mesh.mymacaddr, NULL) != 0) {
+    if (process_mgmt_frame(&bcn, sizeof(bcn), mesh.mymacaddr, &nlcfg) != 0) {
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
         return NL_SKIP;
     }
@@ -912,12 +912,14 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int set_plink_state(struct netlink_config_s *nlcfg, char *peer, int state)
+int set_plink_state(unsigned char *peer, int state, void *cookie)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_SET_STATION;
     int ret;
     char *pret;
+
+    assert(cookie == &nlcfg);
 
     if (!peer)
         return -EINVAL;
@@ -928,16 +930,16 @@ static int set_plink_state(struct netlink_config_s *nlcfg, char *peer, int state
         return -ENOMEM;
 
     pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+            genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
 
     if (pret == NULL)
         goto nla_put_failure;
 
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_STATE, state);
 
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    ret = send_nlmsg(nlcfg.nl_sock, msg);
     sae_debug(MESHD_DEBUG, "set plink state (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
     if (ret < 0)
@@ -1123,10 +1125,6 @@ void estab_peer_link(unsigned char *peer,
 	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
 
         set_supported_rates(&nlcfg, peer, rates, rates_len);
-
-/* from include/net/cfg80211.h */
-#define PLINK_ESTAB 4
-        set_plink_state(&nlcfg, (char *)peer, PLINK_ESTAB);
     }
 }
 
@@ -1142,7 +1140,7 @@ void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len
             MAC2STR(mesh.mymacaddr));
     if (!reason && len) {
         sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
-        start_peer_link(peer, (unsigned char *) mesh.mymacaddr, NULL);
+        start_peer_link(peer, (unsigned char *) mesh.mymacaddr, cookie);
     }
 }
 

@@ -92,6 +92,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 
 /*  and implements these:  */
 int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed);
+int set_plink_state(unsigned char *peer, int state, void *cookie);
 void estab_peer_link(unsigned char *peer, unsigned char *mtk,
         int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,

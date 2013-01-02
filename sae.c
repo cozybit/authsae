@@ -170,18 +170,20 @@ prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
      unsigned char *result, int resultbitlen)
 {
     HMAC_CTX ctx;
-    unsigned char i = 0, digest[SHA256_DIGEST_LENGTH];
+    unsigned char digest[SHA256_DIGEST_LENGTH];
     int resultlen, len = 0;
     unsigned int mdlen = SHA256_DIGEST_LENGTH;
     unsigned char mask = 0xff;
     unsigned short reslength;
+    unsigned short i = 0, i_le;
 
     reslength = ieee_order(resultbitlen);
     resultlen = (resultbitlen + 7)/8;
     do {
         i++;
         HMAC_Init(&ctx, key, keylen, EVP_sha256());
-        HMAC_Update(&ctx, &i, sizeof(i));
+        i_le = ieee_order(i);
+        HMAC_Update(&ctx, (unsigned char *) &i_le, sizeof(i_le));
         HMAC_Update(&ctx, label, labellen);
         HMAC_Update(&ctx, context, contextlen);
         HMAC_Update(&ctx, (unsigned char *)&reslength, sizeof(unsigned short));

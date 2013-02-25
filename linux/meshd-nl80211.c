@@ -73,6 +73,9 @@
 #include "crypto/siv.h"
 #include "peers.h"
 
+#define CIPHER_CCMP 0x000FAC04
+#define CIPHER_AES_CMAC 0x000FAC06
+
 /*  Notes on peer station lifecycle:
  *
  *  Stations in this context are either mesh neighbors, peer candidates or
@@ -737,10 +740,13 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     if (pret == NULL)
         goto nla_put_failure;
 
-    NLA_PUT_FLAG(msg, (keyidx == 0) ? NL80211_ATTR_KEY_DEFAULT : NL80211_ATTR_KEY_DEFAULT_MGMT);
+    if (cipher == CIPHER_AES_CMAC)
+        NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT_MGMT);
+    else
+        NLA_PUT_FLAG(msg, NL80211_ATTR_KEY_DEFAULT);
+
     NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, keyidx);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
@@ -1111,15 +1117,12 @@ void estab_peer_link(unsigned char *peer,
     if (peer) {
         sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 
-#define CIPHER_CCMP 0x000FAC04
-#define CIPHER_AES_CMAC 0x000FAC06
-
         set_authenticated_flag(&nlcfg, peer);
         /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
 	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
         /* key to decrypt multicast data traffic from this peer */
-	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, peer_mgtk);
+	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
 
         /* to check integrity of multicast mgmt frames from this peer */
 	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
@@ -1282,7 +1285,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     /* key to protect integrity of multicast mgmt frames tx*/
     install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk_tx);
     /* key to encrypt multicast data traffic */
-    install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 0, mgtk_tx);
+    install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, mgtk_tx);
 
 out:
     return 0;

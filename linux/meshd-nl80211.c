@@ -778,6 +778,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct ieee80211_mgmt_frame *frame;
     int frame_len;
+    unsigned short frame_control;
     struct timeval now;
 
     gettimeofday(&now, NULL);
@@ -806,12 +807,12 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
+                frame_control = ieee_order(frame->frame_control);
                 sae_hexdump(MESHD_DEBUG, "rx frame", (unsigned char *) frame, frame_len);
                 /* Auth frames go to SAE */
-                if ((frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
-                                                      IEEE802_11_FC_STYPE_AUTH << 4))) ||
-                     (frame->frame_control == htole16((IEEE802_11_FC_TYPE_MGMT << 2 |
-                                                      IEEE802_11_FC_STYPE_ACTION << 4)))) {
+                if (IEEE802_11_FC_GET_TYPE(frame_control) == IEEE802_11_FC_TYPE_MGMT &&
+                     (IEEE802_11_FC_GET_STYPE(frame_control) == IEEE802_11_FC_STYPE_ACTION ||
+                      IEEE802_11_FC_GET_STYPE(frame_control) == IEEE802_11_FC_STYPE_AUTH)) {
                     if (process_mgmt_frame(frame, frame_len, mesh.mymacaddr, &nlcfg))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else

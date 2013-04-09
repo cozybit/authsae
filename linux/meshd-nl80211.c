@@ -360,7 +360,7 @@ static int handle_del_peer(struct netlink_config_s *nlcfg,
     if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
         return -1;
 
-    if ((peer = find_peer(nla_data(tb[NL80211_ATTR_MAX]), 0)))
+    if ((peer = find_peer(nla_data(tb[NL80211_ATTR_MAC]), 0)))
          delete_peer(&peer);
 
 	return 0;

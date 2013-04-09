@@ -349,19 +349,19 @@ static int handle_del_peer(struct netlink_config_s *nlcfg,
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-    struct candidate **peer;
+    struct candidate *peer;
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
             genlmsg_attrlen(gnlh, 0), NULL);
 
-    if (nla_get_u32(tb[NL80211_ATTR_IFINDEX]) != nlcfg->ifindex);
+    if (nla_get_u32(tb[NL80211_ATTR_IFINDEX]) != nlcfg->ifindex)
         return -1;
 
     if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
         return -1;
 
-    if ((*peer = find_peer(nla_data(tb[NL80211_ATTR_MAX]), 0)))
-         delete_peer(peer);
+    if ((peer = find_peer(nla_data(tb[NL80211_ATTR_MAX]), 0)))
+         delete_peer(&peer);
 
 	return 0;
 }

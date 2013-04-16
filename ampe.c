@@ -539,6 +539,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
                 ie_len += 2;	/* reason code */
                 break;
             default:
+                free(buf);
                 return -EINVAL;
         }
 

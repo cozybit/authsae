@@ -287,6 +287,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, struct mesh_node *mesh,
         sae_hexdump(MESHD_DEBUG, "tx frame", frame, len);
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -320,7 +321,7 @@ static int set_mesh_conf(struct netlink_config_s *nlcfg,
             NL80211_ATTR_MESH_CONFIG);
 
     if (!container)
-        return -ENOBUFS;
+        goto nla_put_failure;
 
     if (changed & MESH_CONF_CHANGED_HT)
         NLA_PUT_U32(msg, NL80211_MESHCONF_HT_OPMODE, mesh->conf->ht_prot_mode);
@@ -336,6 +337,7 @@ static int set_mesh_conf(struct netlink_config_s *nlcfg,
                 strerror(-ret));
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -463,6 +465,7 @@ static int set_wiphy_channel(struct netlink_config_s *nlcfg,
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
@@ -522,6 +525,7 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -616,6 +620,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -652,6 +657,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -682,6 +688,7 @@ static int get_wiphy(struct netlink_config_s *nlcfg)
                 strerror(-ret));
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -753,6 +760,7 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
                 strerror(-ret));
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -872,6 +880,7 @@ static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *pe
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -916,6 +925,7 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char 
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -956,6 +966,7 @@ int set_plink_state(unsigned char *peer, int state, void *cookie)
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -1022,6 +1033,7 @@ static int leave_mesh(struct netlink_config_s *nlcfg)
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 
@@ -1036,12 +1048,12 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
 
     assert(rsn_ie[1] == sizeof(rsn_ie) - 2);
 
+    if (!mconf->meshid || !mconf->meshid_len)
+        return -EINVAL;
+
     msg = nlmsg_alloc();
     if (!msg)
         return -ENOMEM;
-
-    if (!mconf->meshid || !mconf->meshid_len)
-        return -EINVAL;
 
     sae_debug(MESHD_DEBUG, "meshd: Starting mesh with mesh id = %s\n", mconf->meshid);
 
@@ -1066,7 +1078,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
             NL80211_ATTR_MESH_CONFIG);
 
     if (!container)
-        return -ENOBUFS;
+        goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
     nla_nest_end(msg, container);
@@ -1075,7 +1087,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
             NL80211_ATTR_MESH_SETUP);
 
     if (!container)
-        return -ENOBUFS;
+        goto nla_put_failure;
 
     /* We'll be creating stations, not the kernel */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
@@ -1100,6 +1112,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
 
     return ret;
 nla_put_failure:
+    nlmsg_free(msg);
     return -ENOBUFS;
 }
 

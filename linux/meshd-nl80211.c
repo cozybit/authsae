@@ -1245,6 +1245,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
 {
     int exitcode = 0;
 
+    leave_mesh(nlcfg);
     /* TODO: verify channel */
     set_wiphy_channel(nlcfg, mesh);
 
@@ -1266,7 +1267,6 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         exit(EXIT_FAILURE);
     }
 
-    leave_mesh(nlcfg);
     exitcode = join_mesh_rsn(nlcfg, mesh->conf);
     if (exitcode) {
         fprintf(stderr, "Failed to join mesh\n");

@@ -397,6 +397,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 
     if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
+        free(clear_ampe_ie);
         return -1;
     }
 
@@ -431,6 +432,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 
     if (r != 1) {
         sae_debug(AMPE_DEBUG_KEYS, "Protection check failed\n");
+        free(clear_ampe_ie);
         return -1;
     }
 
@@ -442,6 +444,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         memcmp(ies_parsed.ampe->peer_nonce, cand->my_nonce, 32) != 0) {
         sae_hexdump(AMPE_DEBUG_KEYS, "IE peer_nonce ", ies_parsed.ampe->peer_nonce, 32);
         sae_debug(AMPE_DEBUG_KEYS, "Unexpected nonce\n");
+        free(clear_ampe_ie);
         return -1;
     }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);

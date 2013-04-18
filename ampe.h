@@ -49,7 +49,6 @@ struct meshd_config {
     char meshid[MESHD_MAX_SSID_LEN + 1];
     int meshid_len;
     int passive;
-    int beacon;
     int mediaopt;
     int channel;
     int band;

@@ -104,7 +104,8 @@ Lines beginning with '#' are treated as comments and ignored.
 	channel: which channel to use in the defined band. Default
 		is 6.
 	mcast-rate: set multicast/broadcast transmission rate. Default is 
-		1Mbps for 2.4GHz or 6Mbps for 5GHz 
+		1Mbps for 2.4GHz or 6Mbps for 5GHz
+	beacon-interval: set beacon interval in TUs.
 	
 HOW TO USE
 

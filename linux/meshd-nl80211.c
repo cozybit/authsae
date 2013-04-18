@@ -1104,6 +1104,9 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     if (mconf->mcast_rate > 0)
         NLA_PUT_U32(msg, NL80211_ATTR_MCAST_RATE, mconf->mcast_rate);
 
+    if (mconf->beacon_interval > 0)
+        NLA_PUT_U32(msg, NL80211_ATTR_BEACON_INTERVAL, mconf->beacon_interval);
+
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
         fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
@@ -1201,7 +1204,7 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
 
     CONFIG_LOOKUP(channel, channel);
     CONFIG_LOOKUP(mcast-rate, mcast_rate);
-
+    CONFIG_LOOKUP(beacon-interval,beacon_interval);
 #undef CONFIG_LOOKUP
 
     config->band = MESHD_11b;

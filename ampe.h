@@ -59,6 +59,7 @@ struct meshd_config {
     unsigned char rates[MAX_SUPP_RATES];
     uint16_t ht_prot_mode;
     int mcast_rate;
+    int beacon_interval;
 };
 
 /* the single global interface and mesh node info we're handling.

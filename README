@@ -106,6 +106,15 @@ Lines beginning with '#' are treated as comments and ignored.
 	mcast-rate: set multicast/broadcast transmission rate. Default is 
 		1Mbps for 2.4GHz or 6Mbps for 5GHz
 	beacon-interval: set beacon interval in TUs.
+	path-refresh-time: set mesh parameter mesh_path_refresh_path
+	min-discovery-timeout: set mesh parameter mesh_min_discovery_timeout
+	gate-annoucements: set mesh parameter mesh_gate_annoucements
+	hwmp-active-path-timeout: set mesh parameter mesh_active_path_timeout
+	hwmp-net-diameter-traversal-time: set mesh parameter mesh_hwmp_diameter_traversal_time
+	hwmp-rootmode: set mesh parameter mesh_hwmp_rootmode
+	hwmp-rann-interval: set mesh parameter mesh_hwmp_rann_interval
+	hwmp-active-path-to-root-timeout: set mesh parameter mesh_hwmp_active_path_to_root_timeout
+	hwmp-root-interval; set mesh parameter mesh_hwmp_root_interval
 	
 HOW TO USE
 

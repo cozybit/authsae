@@ -60,6 +60,15 @@ struct meshd_config {
     uint16_t ht_prot_mode;
     int mcast_rate;
     int beacon_interval;
+    int path_refresh_time;
+    int min_discovery_timeout;
+    int gate_announcements;
+    int hwmp_active_path_timeout;
+    int hwmp_net_diameter_traversal_time;
+    int hwmp_rootmode;
+    int hwmp_rann_interval;
+    int hwmp_active_path_to_root_timeout;
+    int hwmp_root_interval;
 };
 
 /* the single global interface and mesh node info we're handling.

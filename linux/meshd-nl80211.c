@@ -1081,6 +1081,50 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
         goto nla_put_failure;
 
     NLA_PUT_U32(msg, NL80211_MESHCONF_AUTO_OPEN_PLINKS, 0);
+    if(mconf->path_refresh_time > 0) {
+        NLA_PUT_U32(msg,NL80211_MESHCONF_PATH_REFRESH_TIME,
+                mconf->path_refresh_time);
+     }
+
+    if(mconf->min_discovery_timeout > 0){
+        NLA_PUT_U16(msg,NL80211_MESHCONF_MIN_DISCOVERY_TIMEOUT,
+                mconf->min_discovery_timeout);
+    }
+
+    if(mconf->hwmp_active_path_timeout > 0){
+        NLA_PUT_U32(msg,NL80211_MESHCONF_HWMP_ACTIVE_PATH_TIMEOUT,
+                mconf->hwmp_active_path_timeout);
+    }
+
+    if(mconf->hwmp_net_diameter_traversal_time > 0){
+        NLA_PUT_U16(msg,NL80211_MESHCONF_HWMP_NET_DIAM_TRVS_TIME,
+                mconf->hwmp_net_diameter_traversal_time);
+     }
+
+    if(mconf->hwmp_rootmode > 0) {
+        NLA_PUT_U8(msg,NL80211_MESHCONF_HWMP_ROOTMODE,mconf->hwmp_rootmode);
+    }
+
+    if(mconf->hwmp_rann_interval > 0){
+        NLA_PUT_U16(msg,NL80211_MESHCONF_HWMP_RANN_INTERVAL,
+                mconf->hwmp_rann_interval);
+    }
+
+    if(mconf->gate_announcements >= 0) {
+        NLA_PUT_U8(msg,NL80211_MESHCONF_GATE_ANNOUNCEMENTS,
+                mconf->gate_announcements);
+    }
+
+    if(mconf->hwmp_active_path_to_root_timeout > 0){
+        NLA_PUT_U32(msg,NL80211_MESHCONF_HWMP_PATH_TO_ROOT_TIMEOUT,
+                mconf->hwmp_active_path_to_root_timeout);
+    }
+
+    if(mconf->hwmp_root_interval > 0){
+        NLA_PUT_U16(msg,NL80211_MESHCONF_HWMP_ROOT_INTERVAL,
+                mconf->hwmp_root_interval);
+    }
+
     nla_nest_end(msg, container);
 
     container = nla_nest_start(msg,
@@ -1205,6 +1249,19 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     CONFIG_LOOKUP(channel, channel);
     CONFIG_LOOKUP(mcast-rate, mcast_rate);
     CONFIG_LOOKUP(beacon-interval,beacon_interval);
+
+    /* Get mesh parameter */
+    CONFIG_LOOKUP(path-refresh-time,path_refresh_time);
+    CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout);
+    CONFIG_LOOKUP(gate-announcements,gate_announcements);
+    CONFIG_LOOKUP(hwmp-active-path-timeout,hwmp_active_path_timeout);
+    CONFIG_LOOKUP(hwmp-net-diameter-traversal-time,
+            hwmp_net_diameter_traversal_time);
+    CONFIG_LOOKUP(hwmp-rootmode,hwmp_rootmode);
+    CONFIG_LOOKUP(hwmp-rann-interval,hwmp_rann_interval);
+    CONFIG_LOOKUP(hwmp-active-path-to-root-timeout,
+            hwmp_active_path_to_root_timeout);
+    CONFIG_LOOKUP(hwmp-root-interval,hwmp_root_interval);
 #undef CONFIG_LOOKUP
 
     config->band = MESHD_11b;

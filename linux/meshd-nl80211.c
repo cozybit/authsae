@@ -1100,6 +1100,9 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
     /* We'll be creating stations, not the kernel */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
 
+    /* Tell the kernel we're using SAE */
+    NLA_PUT_U8(msg, NL80211_MESH_SETUP_AUTH_PROTOCOL, 0x1);
+
     /* We'll handle peer state transitions */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
 

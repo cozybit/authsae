@@ -430,44 +430,6 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
 	return 0;
 }
 
-static int set_wiphy_channel(struct netlink_config_s *nlcfg,
-                             struct mesh_node *mesh)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_SET_CHANNEL;
-    int ret;
-    char *pret;
-
-    msg = nlmsg_alloc();
-
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
-    if (mesh->channel_type != NL80211_CHAN_NO_HT)
-        NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE, mesh->channel_type);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    sae_debug(MESHD_DEBUG, "setting freq %d, mode %d (seq num=%d)\n",
-            mesh->freq, mesh->channel_type, nlmsg_hdr(msg)->nlmsg_seq);
-    if (ret < 0)
-        fprintf(stderr,"Set wiphy channel failed: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return ret;
-nla_put_failure:
-    nlmsg_free(msg);
-    return -ENOBUFS;
-}
 static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
                                     unsigned char *peer, struct info_elems *elems)
 {
@@ -1037,9 +999,11 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mconf)
+static int join_mesh_rsn(struct netlink_config_s *nlcfg,
+                         struct mesh_node *mesh)
 {
     struct nl_msg *msg;
+    struct meshd_config *mconf = mesh->conf;
     uint8_t cmd = NL80211_CMD_JOIN_MESH;
     uint8_t basic_rates[MAX_SUPP_RATES];
     int rates = 0, i;
@@ -1142,6 +1106,10 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
     NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
     nla_nest_end(msg, container);
 
+    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
+    if (mesh->channel_type != NL80211_CHAN_NO_HT)
+        NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE, mesh->channel_type);
+
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
 
@@ -1150,6 +1118,9 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg, struct meshd_config *mc
 
     if (mconf->beacon_interval > 0)
         NLA_PUT_U32(msg, NL80211_ATTR_BEACON_INTERVAL, mconf->beacon_interval);
+
+    sae_debug(MESHD_DEBUG, "joining mesh %s on freq %d, mode %d\n",
+                        mconf->meshid, mconf-mesh->freq, mesh->channel_type);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)
@@ -1319,8 +1290,6 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     int exitcode = 0;
 
     leave_mesh(nlcfg);
-    /* TODO: verify channel */
-    set_wiphy_channel(nlcfg, mesh);
 
     sae_hexdump(MESHD_DEBUG, "nlcfg rates", (const unsigned char *) mesh->bands[mesh->band].rates,
                               mesh->bands[mesh->band].n_bitrates * 2); // .rates is 16bit
@@ -1340,7 +1309,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         exit(EXIT_FAILURE);
     }
 
-    exitcode = join_mesh_rsn(nlcfg, mesh->conf);
+    exitcode = join_mesh_rsn(nlcfg, mesh);
     if (exitcode) {
         fprintf(stderr, "Failed to join mesh\n");
         goto out;

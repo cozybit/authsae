@@ -735,7 +735,7 @@ static void usage(void)
 "    -o <outfile>     output log file\n"
 "    -B               run in the background (i.e., daemonize)\n"
 "    -i <interface>   override interface value in config file\n"
-"    -m <meshid>      override mesh id provided in config file\n"
+"    -s <meshid>      override mesh id provided in config file\n"
 "\n"
 );
 }

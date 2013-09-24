@@ -1123,7 +1123,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
         NLA_PUT_U32(msg, NL80211_ATTR_BEACON_INTERVAL, mconf->beacon_interval);
 
     sae_debug(MESHD_DEBUG, "joining mesh %s on freq %d, mode %d\n",
-                        mconf->meshid, mconf-mesh->freq, mesh->channel_type);
+                        mconf->meshid, mesh->freq, mesh->channel_type);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     if (ret < 0)

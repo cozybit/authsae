@@ -332,6 +332,7 @@ add_interface (unsigned char *ptr)
      */
     if ((s = socket(PF_INET, SOCK_RAW, 0)) < 0) {
         fprintf(stderr, "unable to get raw socket to determine interface flags!\n");
+        free(inf);
         return;
     }
     memset(&ifr, 0, sizeof(ifr));

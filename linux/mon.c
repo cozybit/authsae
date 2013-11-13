@@ -171,6 +171,7 @@ add_interface (char *ptr)
      */
     if ((inf->fd = socket(PF_PACKET, SOCK_RAW, 0)) < 0) {
         fprintf(stderr, "unable to get raw socket to determine interface flags!\n");
+        free(inf);
         return;
     }
     memset(&ifr, 0, sizeof(ifr));
@@ -184,6 +185,7 @@ add_interface (char *ptr)
     }
     if ((ifr.ifr_flags & IFF_LOOPBACK) == 0) {
         fprintf(stderr, "only works on loopback for now!\n");
+        free(inf);
         return;
     }
 
@@ -191,6 +193,7 @@ add_interface (char *ptr)
     strncpy(ifr.ifr_name, inf->ifname, IFNAMSIZ);
     if (ioctl(inf->fd, SIOCGIFINDEX, &ifr) < 0) {
         fprintf(stderr, "unable to get if index on %s\n", inf->ifname);
+        free(inf);
         return;
     }
 
@@ -200,6 +203,7 @@ add_interface (char *ptr)
     sll.sll_protocol = htons(ETH_P_ALL);
     if (bind(inf->fd, (struct sockaddr *)&sll, sizeof(sll)) < 0) {
         fprintf(stderr, "unable to bind socket to %s\n", inf->ifname);
+        free(inf);
         return;
     }
 

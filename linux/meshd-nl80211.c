@@ -434,12 +434,9 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
                                     unsigned char *peer, struct info_elems *elems)
 {
     struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_STATION;
+    uint8_t cmd = NL80211_CMD_SET_STATION;
     int ret;
     char *pret;
-    struct nl80211_sta_flag_update flags;
-    /* XXX: we have the elems, fix this */
-    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
 
     if (!peer)
         return -EINVAL;
@@ -457,17 +454,6 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
-            supported_rates);
-    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
-                 (1 << NL80211_STA_FLAG_WME);
-    flags.set = (1 << NL80211_STA_FLAG_WME);
-
-    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
-
-    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
     /* unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */
     if (elems->ht_info &&
@@ -1168,7 +1154,52 @@ void estab_peer_link(unsigned char *peer,
 
 void peer_created(unsigned char *peer)
 {
-    /* do nothing */
+    /* Create a candidate */
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_NEW_STATION;
+    int ret;
+    char *pret;
+    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 }; /* XXX: Try to use IE rates, or otherwise basic rate? */
+    struct nl80211_sta_flag_update flags;
+
+    if (!peer)
+        return;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return;
+
+    pret = genlmsg_put(msg, 0, 0,
+            genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
+            supported_rates);
+    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+                 (1 << NL80211_STA_FLAG_WME);
+    flags.set = (1 << NL80211_STA_FLAG_WME);
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
+
+    ret = send_nlmsg(nlcfg.nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "new peer candidate (seq num=%d)\n",
+            nlmsg_hdr(msg)->nlmsg_seq);
+    if (ret < 0)
+        fprintf(stderr,"New candidate failed: %d (%s)\n", ret, strerror(-ret));
+    else
+        ret = 0;
+
+    return;
+nla_put_failure:
+    nlmsg_free(msg);
 }
 
 void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len, void *cookie)

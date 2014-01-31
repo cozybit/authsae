@@ -39,7 +39,14 @@
 #ifndef _FRAME_H_
 #define _FRAME_H_
 
+#ifdef LINUX
+#include <endian.h>
+#else
+#include <sys/endian.h>
+#endif
+
 #include <stdint.h>
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 /*
  * IEEE does things bassackwards, networking in non-network order.

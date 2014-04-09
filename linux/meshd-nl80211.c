@@ -1202,6 +1202,41 @@ nla_put_failure:
     nlmsg_free(msg);
 }
 
+void peer_deleted(unsigned char *peer)
+{
+    struct nl_msg *msg;
+    uint8_t cmd = NL80211_CMD_DEL_STATION;
+    int ret;
+    char *pret;
+
+    if (!peer)
+        return;
+
+    msg = nlmsg_alloc();
+
+    if (!msg)
+        return;
+
+    pret = genlmsg_put(msg, 0, 0,
+                       genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
+
+    if (pret == NULL)
+        goto nla_put_failure;
+
+    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
+    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+
+    ret = send_nlmsg(nlcfg.nl_sock, msg);
+    sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n",
+              peer);
+    if (ret < 0)
+        fprintf(stderr, "Remove candidate failed: %d (%s)\n", ret, strerror(-ret));
+
+    return;
+nla_put_failure:
+    nlmsg_free(msg);
+}
+
 void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len, void *cookie)
 {
     sae_debug(MESHD_DEBUG, "fin: %d, key len:%d peer:"
@@ -1210,6 +1245,8 @@ void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len
     if (!reason && len) {
         sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
         start_peer_link(peer, (unsigned char *) mesh.mymacaddr, cookie);
+    } else if (reason) {
+        peer_deleted(peer);
     }
 }
 

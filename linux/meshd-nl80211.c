@@ -1252,7 +1252,7 @@ void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len
 
 void term_handle(int i)
 {
-    exit(EXIT_FAILURE);
+    srv_cancel_main_loop(srvctx);
 }
 
 /* TODO: This config stuff should be in a common file to be shared by other
@@ -1419,6 +1419,7 @@ int main(int argc, char *argv[])
 
     sae_debug_mask = SAE_DEBUG_ERR;
     signal(SIGTERM, term_handle);
+    signal(SIGINT, term_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));
 
@@ -1574,6 +1575,7 @@ int main(int argc, char *argv[])
     get_wiphy(&nlcfg);
 
     srv_main_loop(srvctx);
+    leave_mesh(&nlcfg);
 out:
     return exitcode;
 }

@@ -39,6 +39,7 @@
 #ifndef _SERVICE_CONTEXT_H_
 #define _SERVICE_CONTEXT_H_
 
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -99,6 +100,7 @@ typedef struct _servcxt {
     struct source inputs[NFDS];
     int noutputs;
     struct source outputs[NFDS];
+    volatile sig_atomic_t keep_running;
 } servcxt;
 
 typedef struct _servcxt *service_context;
@@ -125,6 +127,8 @@ void srv_add_exceptor(service_context, fdcb);
 int srv_main_loop(service_context);
 
 service_context srv_create_context(void);
+
+void srv_cancel_main_loop(service_context);
 
 #endif	/* _SERVICE_CONTEXT_H_ */
 

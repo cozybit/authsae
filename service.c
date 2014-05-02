@@ -396,7 +396,7 @@ srv_main_loop(service_context sc)
     fd_set rfds, wfds, efds;
     int i, active;
 
-    while (1) {
+    while (sc->keep_running) {
 	/*
 	 * first check whether any timers expired while we were doing other things
 	 */
@@ -459,6 +459,8 @@ srv_main_loop(service_context sc)
 	 * this condition in check_timers()
 	 */
     }
+
+    return 0;
 }
 
 /*
@@ -484,7 +486,20 @@ srv_create_context(void)
     blah->gbl_timer.tv_sec = 1000;
     blah->gbl_timer.tv_usec = 0;
     blah->exceptor = NULL;
+    blah->keep_running = 1;
 
     return blah;
 }
 
+/*
+ * srv_cancel_main_loop()
+ *	Exit the main loop in srv_main_loop()
+ *	at the earliest opportunity; It can be
+ *	called from within signal handler
+ *	context
+ */
+void
+srv_cancel_main_loop(service_context context)
+{
+	context->keep_running = 0;
+}

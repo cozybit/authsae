@@ -977,6 +977,30 @@ reject_to_peer (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
     return 0;
 }
 
+
+/*
+ * calculate the legendre symbol (a/p)
+ */
+static int
+legendre (BIGNUM *a, BIGNUM *p, BIGNUM *exp, BN_CTX *bnctx)
+{
+    BIGNUM *tmp = NULL;
+    int symbol = -1;
+
+    if ((tmp = BN_new()) != NULL) {
+        BN_mod_exp(tmp, a, exp, p, bnctx);
+        if (BN_is_word(tmp, 1))
+                symbol = 1;
+        else if (BN_is_zero(tmp))
+                symbol = 0;
+        else
+                symbol = -1;
+
+        BN_free(tmp);
+    }
+    return symbol;
+}
+
 /*
  * assign_group_tp_peer()
  *      The group has been selected, assign it to the peer and create PWE.
@@ -985,9 +1009,11 @@ static int
 assign_group_to_peer (struct candidate *peer, GD *grp)
 {
     HMAC_CTX ctx;
-    BIGNUM *x_candidate = NULL, *rnd = NULL;
-    unsigned char pwe_digest[SHA256_DIGEST_LENGTH], *prfbuf, ctr, *primebuf, addrs[ETH_ALEN * 2];
-    int primebitlen, is_odd;
+    BIGNUM *x_candidate = NULL, *x = NULL, *rnd = NULL, *qr = NULL, *qnr = NULL;
+    BIGNUM *pm1 = NULL, *pm1d2 = NULL, *tmp1 = NULL, *tmp2 = NULL, *a = NULL, *b = NULL;
+    unsigned char pwe_digest[SHA256_DIGEST_LENGTH], addrs[ETH_ALEN * 2], ctr;
+    unsigned char *prfbuf = NULL, *primebuf = NULL;
+    int primebitlen, is_odd, check, found = 0;
 
     /*
      * allow for replacement of group....
@@ -1002,11 +1028,17 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
     peer->private_val = NULL;
 
     if (((rnd = BN_new()) == NULL) ||
+        ((pm1d2 = BN_new()) == NULL) ||
+        ((pm1 = BN_new()) == NULL) ||
+        ((tmp1 = BN_new()) == NULL) ||
+        ((tmp2 = BN_new()) == NULL) ||
+        ((a = BN_new()) == NULL) ||
+        ((b = BN_new()) == NULL) ||
+        ((qr = BN_new()) == NULL) ||
+        ((qnr = BN_new()) == NULL) ||
         ((x_candidate = BN_new()) == NULL)) {
         sae_debug(SAE_DEBUG_ERR, "can't create bignum for candidate!\n");
-        BN_free(rnd);
-        BN_free(x_candidate);
-        return -1;
+        goto fail;
     }
     peer->grp_def = grp;
     peer->pwe = EC_POINT_new(grp->group);
@@ -1017,25 +1049,42 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         sae_debug(SAE_DEBUG_ERR, "unable to malloc space for prf buffer!\n");
         BN_free(rnd);
         BN_free(x_candidate);
-        return -1;
+	goto fail;
     }
     if ((primebuf = (unsigned char *)malloc(BN_num_bytes(grp->prime))) == NULL) {
         sae_debug(SAE_DEBUG_ERR, "unable to malloc space for prime!\n");
         free(prfbuf);
         BN_free(rnd);
         BN_free(x_candidate);
-        return -1;
+	goto fail;
     }
     BN_bn2bin(grp->prime, primebuf);
     primebitlen = BN_num_bits(grp->prime);
+
+    if (!EC_GROUP_get_curve_GFp(grp->group, NULL, a, b, NULL)) {
+        free(prfbuf);
+    }
+
+    BN_sub(pm1, grp->prime, BN_value_one());
+    BN_copy(tmp1, BN_value_one());
+    BN_add(tmp1, tmp1, BN_value_one());
+    BN_div(pm1d2, tmp2, pm1, tmp1, bnctx);      /* (p-1)/2 */
+
+    /*
+     * generate a random quadratic residue modulo p and a random
+     * quadratic non-residue modulo p.
+     */
+    do {
+        BN_rand_range(qr, pm1);
+    } while (legendre(qr, grp->prime, pm1d2, bnctx) != 1);
+    do {
+        BN_rand_range(qnr, pm1);
+    } while (legendre(qnr, grp->prime, pm1d2, bnctx) != -1);
+    memset(prfbuf, 0, BN_num_bytes(grp->prime));
+
     sae_debug(SAE_DEBUG_CRYPTO, "computing PWE on %d bit curve number %d\n", primebitlen, grp->group_num);
     ctr = 0;
-    while (1) {
-        if (ctr > 16) {
-            EC_POINT_free(peer->pwe);
-            peer->pwe = NULL;
-            break;
-        }
+    while (ctr < 40) {
         ctr++;
         /*
          * compute counter-mode password value and stretch to prime
@@ -1095,36 +1144,85 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         }
 
         /*
-         * need to unambiguously identify the solution, if there is one...
+         * compute y^2 using the equation of the curve
+         *
+         *      y^2 = x^3 + ax + b
          */
-        if (BN_is_odd(rnd)) {
-            is_odd = 1;
+        BN_mod_sqr(tmp1, x_candidate, grp->prime, bnctx);
+        BN_mod_mul(tmp2, tmp1, x_candidate, grp->prime, bnctx);
+        BN_mod_mul(tmp1, a, x_candidate, grp->prime, bnctx);
+        BN_mod_add_quick(tmp2, tmp2, tmp1, grp->prime);
+        BN_mod_add_quick(tmp2, tmp2, b, grp->prime);
+
+        /*
+         * mask tmp2 so doing legendre won't leak timing info
+         *
+         * tmp1 is a random number between 1 and p-1
+         */
+        BN_rand_range(tmp1, pm1);
+
+        BN_mod_mul(tmp2, tmp2, tmp1, grp->prime, bnctx);
+        BN_mod_mul(tmp2, tmp2, tmp1, grp->prime, bnctx);
+        /*
+         * now tmp2 (y^2) is masked, all values between 1 and p-1
+         * are equally probable. Multiplying by r^2 does not change
+         * whether or not tmp2 is a quadratic residue, just masks it.
+         *
+         * flip a coin, multiply by the random quadratic residue or the
+         * random quadratic nonresidue and record heads or tails
+         */
+        if (BN_is_odd(tmp1)) {
+            BN_mod_mul(tmp2, tmp2, qr, grp->prime, bnctx);
+            check = 1;
         } else {
-            is_odd = 0;
-        }
-        /*
-         * solve the quadratic equation, if it's not solvable then we
-         * don't have a point
-         */
-        if (!EC_POINT_set_compressed_coordinates_GFp(grp->group, peer->pwe, x_candidate, is_odd, bnctx)) {
-            sae_debug(SAE_DEBUG_CRYPTO_VERB, "no solution for random x, ctr = %d...\n", ctr);
-            continue;
-        }
-        /*
-         * If there's a solution to the equation then the point must be on
-         * the curve so why check again explicitly? OpenSSL code says this
-         * is required by X9.62. We're not X9.62 but it can't hurt just to
-         * be sure.
-         */
-        if (!EC_POINT_is_on_curve(grp->group, peer->pwe, bnctx)) {
-            sae_debug(SAE_DEBUG_CRYPTO_VERB, "point is not on curve! ctr = %d\n", ctr);
-            continue;
+            BN_mod_mul(tmp2, tmp2, qnr, grp->prime, bnctx);
+            check = -1;
         }
 
         /*
-         * if we got here then we have PWE!
+         * now it's safe to do legendre, if check is 1 then it's
+         * a straightforward test (multiplying by qr does not
+         * change result), if check is -1 then its the opposite test
+         * (multiplying a qr by qnr would make a qnr)
          */
-        break;
+        if (legendre(tmp2, grp->prime, pm1d2, bnctx) == check) {
+            if (found == 1) {
+                continue;
+            }
+            /*
+             * need to unambiguously identify the solution, if there is one...
+             */
+            if (BN_is_odd(rnd)) {
+                is_odd = 1;
+            } else {
+                is_odd = 0;
+            }
+            if ((x = BN_dup(x_candidate)) == NULL) {
+                goto fail;
+            }
+            sae_debug(SAE_DEBUG_CRYPTO, "it took %d tries to find PWE: %d\n", ctr, grp->group_num);
+            found = 1;
+        }
+    }
+    /*
+     * 2^-40 is about one in a trillion so we should always find a point.
+     * When we do, we know x^3 + ax + b is a quadratic residue so we can
+     * assign a point using x and our discriminator (is_odd)
+     */
+    if ((found == 0) ||
+        (!EC_POINT_set_compressed_coordinates_GFp(grp->group, peer->pwe, x, is_odd, bnctx))) {
+        EC_POINT_free(peer->pwe);
+        peer->pwe = NULL;
+    }
+fail:
+    if (prfbuf != NULL) {
+        free(prfbuf);
+    }
+    if (primebuf != NULL) {
+        free(primebuf);
+    }
+    if (found) {
+        BN_free(x);
     }
 
     if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
@@ -1145,18 +1243,22 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         }
     }
 
-    free(prfbuf);
-    free(primebuf);
     BN_free(x_candidate);
     BN_free(rnd);
+    BN_free(pm1d2);
+    BN_free(pm1);
+    BN_free(tmp1);
+    BN_free(tmp2);
+    BN_free(a);
+    BN_free(b);
+    BN_free(qr);
+    BN_free(qnr);
 
     if (peer->pwe == NULL) {
         sae_debug(SAE_DEBUG_ERR, "unable to find random point on curve for group %d, something's fishy!\n",
                   grp->group_num);
         return -1;
     }
-    sae_debug(SAE_DEBUG_CRYPTO, "it took %d tries to find PWE: %d\n", ctr, grp->group_num);
-
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "assigning group %d to peer, the size of the prime is %d\n",
               peer->grp_def->group_num, BN_num_bytes(peer->grp_def->prime));
 

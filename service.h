@@ -47,6 +47,15 @@
 #include <sys/time.h>
 
 typedef unsigned int timerid;
+
+/* On 32-bit platforms an unsigned long only gives us:
+ * 4294967295 us = 4294967 ms = 4294 s = 71 min
+ * That's not very much time especially given that
+ * we'd like to do some math using signed integers
+ * so we use a long long.
+ */
+typedef unsigned long long microseconds;
+
 /*
  * input callbacks and timer callbacks
  */
@@ -64,8 +73,8 @@ struct timer {
     void *data;
 };
 
-#define SRV_SEC(x)	((x) * 1000000)
-#define SRV_MSEC(x)	((x) * 1000)
+#define SRV_SEC(x)	((x) * 1000000ULL)
+#define SRV_MSEC(x)	((x) * 1000ULL)
 #define SRV_USEC(x)	x
 
 /*
@@ -108,7 +117,7 @@ typedef struct _servcxt *service_context;
 /*
  * service context APIs 
  */
-timerid srv_add_timeout(service_context, unsigned long, timercb, void *);
+timerid srv_add_timeout(service_context, microseconds, timercb, void *);
 
 int srv_rem_timeout(service_context, timerid);
 

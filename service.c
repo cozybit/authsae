@@ -137,7 +137,7 @@ cmp_timers (struct timer *t1, struct timer *t2)
  *      of timers.
  */
 timerid
-srv_add_timeout (service_context context, unsigned long usec, 
+srv_add_timeout (service_context context, microseconds usec,
 		 timercb proc, void *data)
 {
     struct timeval right_now;

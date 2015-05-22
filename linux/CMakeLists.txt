@@ -53,7 +53,12 @@ LIST(APPEND mon_sources
 	../common.c
 )
 
+LIST(APPEND mon_libs
+	${LIBCRYPTO_LIBRARIES}
+)
+
 ADD_EXECUTABLE(mon ${mon_sources})
+TARGET_LINK_LIBRARIES(mon ${mon_libs})
 INSTALL(TARGETS mon DESTINATION bin)
 
 #####################################################################

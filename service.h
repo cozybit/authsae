@@ -117,7 +117,12 @@ typedef struct _servcxt *service_context;
 /*
  * service context APIs 
  */
-timerid srv_add_timeout(service_context, microseconds, timercb, void *);
+timerid srv_add_timeout_with_jitter(service_context context, microseconds usec, timercb proc, void *data, microseconds jitter_usecs);
+
+static inline timerid srv_add_timeout(service_context context, microseconds usec, timercb proc, void *data)
+{
+        return srv_add_timeout_with_jitter(context, usec, proc, data, 0);
+}
 
 int srv_rem_timeout(service_context, timerid);
 

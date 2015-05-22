@@ -69,6 +69,7 @@
 #include "peers.h"
 
 #define COUNTER_INFINITY        65535
+#define REAUTH_JITTER		30
 
 
 #define state_to_string(x) (x) == SAE_NOTHING ? "NOTHING" : \
@@ -1634,7 +1635,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %d seconds\n", pmk_expiry);
-                    peer->t1 = srv_add_timeout(srvctx, SRV_SEC(pmk_expiry), reauth, peer);
+                    peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
                     peer->state = SAE_ACCEPTED;
                     break;
                 default:

@@ -1344,26 +1344,51 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     return peer;
 }
 
+static bool
+reauth_in_progress (struct candidate *peer)
+{
+    if (peer->state == SAE_COMMITTED || peer->state == SAE_CONFIRMED)
+        return true;
+
+    else if (peer->link_state == PLINK_OPN_SNT ||
+        peer->link_state == PLINK_OPN_RCVD ||
+        peer->link_state == PLINK_CNF_RCVD)
+        return true;
+
+    return false;
+}
+
+void
+do_reauth (struct candidate *peer)
+{
+    struct candidate *newpeer;
+
+    if (!reauth_in_progress(peer)) {
+        if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
+            if (assign_group_to_peer(newpeer, gd) < 0) {
+                delete_peer(&newpeer);
+            } else {
+                commit_to_peer(newpeer, NULL, 0);
+                newpeer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, newpeer);
+                newpeer->state = SAE_COMMITTED;
+            }
+        }
+        /*
+         * make a hard deletion of this guy in case the reauth fails and we
+         * don't end up deleting this instance
+         */
+        peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+
+    } else {
+        peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
+    }
+}
+
 static void
 reauth (timerid id, void *data)
 {
-    struct candidate *peer, *newpeer;
-
-    peer = (struct candidate *)data;
-    if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
-        if (assign_group_to_peer(newpeer, gd) < 0) {
-            delete_peer(&newpeer);
-        } else {
-            commit_to_peer(newpeer, NULL, 0);
-            newpeer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, newpeer);
-            newpeer->state = SAE_COMMITTED;
-        }
-    }
-    /*
-     * make a hard deletion of this guy in case the reauth fails and we
-     * don't end up deleting this instance
-     */
-    peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+    struct candidate *peer = (struct candidate *)data;
+    do_reauth(peer);
 }
 
 static enum result

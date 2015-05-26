@@ -1414,6 +1414,8 @@ do_reauth (struct candidate *peer)
         peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
 
     } else {
+        if (peer->t1)
+            srv_rem_timeout(srvctx, peer->t1);
         peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
     }
 }
@@ -1704,6 +1706,8 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %d seconds\n", pmk_expiry);
+                    if (peer->t1)
+                        srv_rem_timeout(srvctx, peer->t1);
                     peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
                     peer->state = SAE_ACCEPTED;
                     break;

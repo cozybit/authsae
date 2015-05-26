@@ -47,6 +47,7 @@
 #include <string.h>
 #include <time.h>
 #include "service.h"
+#include "common.h"
 
 #define SRV_TICK 1000000
 
@@ -158,7 +159,8 @@ srv_add_timeout_with_jitter (service_context context, microseconds usec,
     }
 
     if (context->ntimers >= NTIMERS) {
-	return 0;
+        sae_debug(SAE_DEBUG_ERR, "too many timers!\n");
+        return 0;
     }
     context->timers[context->ntimers].to.tv_sec = usec/SRV_TICK;
     context->timers[context->ntimers].to.tv_usec = usec - ((usec/SRV_TICK)*SRV_TICK);
@@ -486,7 +488,8 @@ srv_create_context(void)
     service_context blah;
 
     if ((blah = (service_context)malloc(sizeof(struct _servcxt))) == NULL) {
-	return NULL;
+        sae_debug(SAE_DEBUG_ERR, "context was NULL\n");
+        return NULL;
     }
     blah->timer_id = 0;
     FD_ZERO(&blah->readfds);

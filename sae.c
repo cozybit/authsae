@@ -1847,6 +1847,34 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
     return 0;
 }
 
+static bool
+handle_new_station (struct ieee80211_mgmt_frame *frame, unsigned char *me, void *cookie)
+{
+    struct candidate *peer;
+
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
+    sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
+    if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
+        return false;
+    }
+    peer->cookie = cookie;
+    /*
+     * assign the first group in the list as the one to try
+     */
+    if (assign_group_to_peer(peer, gd) < 0) {
+        fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
+        delete_peer(&peer);
+    } else {
+        commit_to_peer(peer, NULL, 0);
+        peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+        peer->state = SAE_COMMITTED;
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
+                  MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
+    }
+
+    return true;
+}
+
 /*
  * the "parent process" gets management frames as input and dispatches to
  * "protocol instances".
@@ -1900,25 +1928,8 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                  *
                  * a new mesh point! auth_req transitions from state "NOTHING" to "COMMITTED"
                  */
-                sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
-                sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
-                if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
+                if (!handle_new_station(frame, me, cookie))
                     return -1;
-                }
-                peer->cookie = cookie;
-                /*
-                 * assign the first group in the list as the one to try
-                 */
-                if (assign_group_to_peer(peer, gd) < 0) {
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
-                    delete_peer(&peer);
-                } else {
-                    commit_to_peer(peer, NULL, 0);
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
-                    peer->state = SAE_COMMITTED;
-                    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
-                              MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
-                }
                 break;
             }
             break;
@@ -1933,6 +1944,10 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
             peer = find_peer(frame->sa, 0);
             switch (ieee_order(frame->authenticate.auth_seq)) {
                 case SAE_AUTH_COMMIT:
+                    if (peer == NULL && !on_blacklist(frame->sa)) {
+                        if (!handle_new_station(frame, me, cookie))
+                            return -1;
+                    }
                     if ((peer != NULL) && (peer->state != SAE_ACCEPTED)) {
                         ret = process_authentication_frame(peer, frame, len);
                     } else {

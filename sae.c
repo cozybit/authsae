@@ -425,6 +425,16 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         EC_POINT_free(psum);
         return ERR_NOT_FATAL;
     }
+
+    /* Rarely x can be way too big, e.g. 1348 bytes. Corrupted packet? */
+    if (BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(x) || BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(y)) {
+        sae_debug(SAE_DEBUG_ERR, "coords are too big, x = %d bytes, y = %d bytes\n", BN_num_bytes(x), BN_num_bytes(y));
+        BN_free(x);
+        BN_free(y);
+        EC_POINT_free(psum);
+        return ERR_NOT_FATAL;
+    }
+
         /* peer's element */
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);

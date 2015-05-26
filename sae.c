@@ -1363,7 +1363,7 @@ reauth (timerid id, void *data)
      * make a hard deletion of this guy in case the reauth fails and we
      * don't end up deleting this instance
      */
-    peer->t1 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+    peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
 }
 
 static enum result

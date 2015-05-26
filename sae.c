@@ -374,7 +374,7 @@ check_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
 {
     unsigned short sent_confirm;
 
-    sent_confirm = *(frame->authenticate.u.var16);
+    sent_confirm = ieee_order(*(frame->authenticate.u.var16));
     if ((sent_confirm > peer->rc) && (sent_confirm != COUNTER_INFINITY)) {
         return 1;
     } else {

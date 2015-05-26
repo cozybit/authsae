@@ -1312,6 +1312,8 @@ retransmit_peer (timerid id, void *data)
     }
 }
 
+static int next_candidate_id = 0;
+
 struct candidate *
 create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie)
 {
@@ -1337,11 +1339,42 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     TAILQ_INSERT_TAIL(&peers, peer, entry);
     peer->state = SAE_NOTHING;
     peer->cookie = cookie;
+    peer->candidate_id = next_candidate_id++;
     curr_open++;
 
     peer_created(her_mac);
 
     return peer;
+}
+
+// This is used to verify that the invariants for candidate peers are preserved,
+// namely that there are no more than two candidates for a peer and if there are
+// two candidates then one is accepted and one is not.
+static int
+validate_peers (unsigned char *mac)
+{
+    const int MaxPeers = 10;
+    struct candidate *peer;
+    struct candidate *candidates[MaxPeers];
+    int i, count = 0;
+
+    TAILQ_FOREACH(peer, &peers, entry) {
+        if (memcmp(peer->peer_mac, mac, ETH_ALEN) == 0)
+            if (count < MaxPeers)               // pointless to report problems with candidates after MaxPeers
+                candidates[count++] = peer;
+    }
+
+    if (count > 2) {
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "found %d candidates for peer " MACSTR "!!!\n", count, MAC2STR(mac));
+        for (i = 0; i < count; ++i)
+            peer = candidates[i];
+    } else if (count == 2) {
+        if ((candidates[0]->state == SAE_ACCEPTED && candidates[1]->state == SAE_ACCEPTED) ||
+            (candidates[0]->state != SAE_ACCEPTED && candidates[1]->state != SAE_ACCEPTED))
+            sae_debug(SAE_DEBUG_STATE_MACHINE, "peer " MACSTR " should have one and only one accepted candidate!!!\n", MAC2STR(mac));
+    }
+
+    return count;
 }
 
 static bool
@@ -1362,8 +1395,9 @@ void
 do_reauth (struct candidate *peer)
 {
     struct candidate *newpeer;
+    int count = validate_peers(peer->peer_mac);
 
-    if (!reauth_in_progress(peer)) {
+    if (!reauth_in_progress(peer) && count == 1) {
         if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
             if (assign_group_to_peer(newpeer, gd) < 0) {
                 delete_peer(&newpeer);

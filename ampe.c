@@ -295,6 +295,9 @@ static void plink_timer(timerid id, void *data)
 		/* holding timer */
 		fsm_restart(cand);
 		break;
+	case PLINK_ESTAB:
+		/* nothing to do */
+		break;
 	default:
         sae_debug(AMPE_DEBUG_FSM, "Timeout for peer " MACSTR
                 " in state %d\n", MAC2STR(cand->peer_mac),

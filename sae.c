@@ -69,6 +69,7 @@
 #include "peers.h"
 
 #define COUNTER_INFINITY        65535
+#define REAUTH_JITTER		30
 
 
 #define state_to_string(x) (x) == SAE_NOTHING ? "NOTHING" : \
@@ -374,7 +375,7 @@ check_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
 {
     unsigned short sent_confirm;
 
-    sent_confirm = *(frame->authenticate.u.var16);
+    sent_confirm = ieee_order(*(frame->authenticate.u.var16));
     if ((sent_confirm > peer->rc) && (sent_confirm != COUNTER_INFINITY)) {
         return 1;
     } else {
@@ -424,6 +425,16 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         EC_POINT_free(psum);
         return ERR_NOT_FATAL;
     }
+
+    /* Rarely x can be way too big, e.g. 1348 bytes. Corrupted packet? */
+    if (BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(x) || BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(y)) {
+        sae_debug(SAE_DEBUG_ERR, "coords are too big, x = %d bytes, y = %d bytes\n", BN_num_bytes(x), BN_num_bytes(y));
+        BN_free(x);
+        BN_free(y);
+        EC_POINT_free(psum);
+        return ERR_NOT_FATAL;
+    }
+
         /* peer's element */
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);
@@ -1301,6 +1312,8 @@ retransmit_peer (timerid id, void *data)
     }
 }
 
+static int next_candidate_id = 0;
+
 struct candidate *
 create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie)
 {
@@ -1326,6 +1339,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     TAILQ_INSERT_TAIL(&peers, peer, entry);
     peer->state = SAE_NOTHING;
     peer->cookie = cookie;
+    peer->candidate_id = next_candidate_id++;
     curr_open++;
 
     peer_created(her_mac);
@@ -1333,26 +1347,84 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     return peer;
 }
 
+// This is used to verify that the invariants for candidate peers are preserved,
+// namely that there are no more than two candidates for a peer and if there are
+// two candidates then one is accepted and one is not.
+static int
+validate_peers (unsigned char *mac)
+{
+    const int MaxPeers = 10;
+    struct candidate *peer;
+    struct candidate *candidates[MaxPeers];
+    int i, count = 0;
+
+    TAILQ_FOREACH(peer, &peers, entry) {
+        if (memcmp(peer->peer_mac, mac, ETH_ALEN) == 0)
+            if (count < MaxPeers)               // pointless to report problems with candidates after MaxPeers
+                candidates[count++] = peer;
+    }
+
+    if (count > 2) {
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "found %d candidates for peer " MACSTR "!!!\n", count, MAC2STR(mac));
+        for (i = 0; i < count; ++i)
+            peer = candidates[i];
+    } else if (count == 2) {
+        if ((candidates[0]->state == SAE_ACCEPTED && candidates[1]->state == SAE_ACCEPTED) ||
+            (candidates[0]->state != SAE_ACCEPTED && candidates[1]->state != SAE_ACCEPTED))
+            sae_debug(SAE_DEBUG_STATE_MACHINE, "peer " MACSTR " should have one and only one accepted candidate!!!\n", MAC2STR(mac));
+    }
+
+    return count;
+}
+
+static bool
+reauth_in_progress (struct candidate *peer)
+{
+    if (peer->state == SAE_COMMITTED || peer->state == SAE_CONFIRMED)
+        return true;
+
+    else if (peer->link_state == PLINK_OPN_SNT ||
+        peer->link_state == PLINK_OPN_RCVD ||
+        peer->link_state == PLINK_CNF_RCVD)
+        return true;
+
+    return false;
+}
+
+void
+do_reauth (struct candidate *peer)
+{
+    struct candidate *newpeer;
+    int count = validate_peers(peer->peer_mac);
+
+    if (!reauth_in_progress(peer) && count == 1) {
+        if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
+            if (assign_group_to_peer(newpeer, gd) < 0) {
+                delete_peer(&newpeer);
+            } else {
+                commit_to_peer(newpeer, NULL, 0);
+                newpeer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, newpeer);
+                newpeer->state = SAE_COMMITTED;
+            }
+        }
+        /*
+         * make a hard deletion of this guy in case the reauth fails and we
+         * don't end up deleting this instance
+         */
+        peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+
+    } else {
+        if (peer->t1)
+            srv_rem_timeout(srvctx, peer->t1);
+        peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
+    }
+}
+
 static void
 reauth (timerid id, void *data)
 {
-    struct candidate *peer, *newpeer;
-
-    peer = (struct candidate *)data;
-    if ((newpeer = create_candidate(peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
-        if (assign_group_to_peer(newpeer, gd) < 0) {
-            delete_peer(&newpeer);
-        } else {
-            commit_to_peer(newpeer, NULL, 0);
-            newpeer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, newpeer);
-            newpeer->state = SAE_COMMITTED;
-        }
-    }
-    /*
-     * make a hard deletion of this guy in case the reauth fails and we
-     * don't end up deleting this instance
-     */
-    peer->t1 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+    struct candidate *peer = (struct candidate *)data;
+    do_reauth(peer);
 }
 
 static enum result
@@ -1634,7 +1706,9 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %d seconds\n", pmk_expiry);
-                    peer->t1 = srv_add_timeout(srvctx, SRV_SEC(pmk_expiry), reauth, peer);
+                    if (peer->t1)
+                        srv_rem_timeout(srvctx, peer->t1);
+                    peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
                     peer->state = SAE_ACCEPTED;
                     break;
                 default:
@@ -1773,6 +1847,34 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
     return 0;
 }
 
+static bool
+handle_new_station (struct ieee80211_mgmt_frame *frame, unsigned char *me, void *cookie)
+{
+    struct candidate *peer;
+
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
+    sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
+    if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
+        return false;
+    }
+    peer->cookie = cookie;
+    /*
+     * assign the first group in the list as the one to try
+     */
+    if (assign_group_to_peer(peer, gd) < 0) {
+        fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
+        delete_peer(&peer);
+    } else {
+        commit_to_peer(peer, NULL, 0);
+        peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+        peer->state = SAE_COMMITTED;
+        sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
+                  MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
+    }
+
+    return true;
+}
+
 /*
  * the "parent process" gets management frames as input and dispatches to
  * "protocol instances".
@@ -1826,25 +1928,8 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                  *
                  * a new mesh point! auth_req transitions from state "NOTHING" to "COMMITTED"
                  */
-                sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
-                sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
-                if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
+                if (!handle_new_station(frame, me, cookie))
                     return -1;
-                }
-                peer->cookie = cookie;
-                /*
-                 * assign the first group in the list as the one to try
-                 */
-                if (assign_group_to_peer(peer, gd) < 0) {
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
-                    delete_peer(&peer);
-                } else {
-                    commit_to_peer(peer, NULL, 0);
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
-                    peer->state = SAE_COMMITTED;
-                    sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
-                              MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));
-                }
                 break;
             }
             break;
@@ -1859,6 +1944,10 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
             peer = find_peer(frame->sa, 0);
             switch (ieee_order(frame->authenticate.auth_seq)) {
                 case SAE_AUTH_COMMIT:
+                    if (peer == NULL && !on_blacklist(frame->sa)) {
+                        if (!handle_new_station(frame, me, cookie))
+                            return -1;
+                    }
                     if ((peer != NULL) && (peer->state != SAE_ACCEPTED)) {
                         ret = process_authentication_frame(peer, frame, len);
                     } else {

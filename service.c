@@ -43,9 +43,11 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <openssl/rand.h>
 #include <string.h>
 #include <time.h>
 #include "service.h"
+#include "common.h"
 
 #define SRV_TICK 1000000
 
@@ -131,21 +133,34 @@ cmp_timers (struct timer *t1, struct timer *t2)
 }
 
 /*
- * srv_add_timer()
+ * srv_add_timeout_with_jitter()
  *	add a timer with callback to a service context
  *      Returns a handle to the timer or 0 if we run out
  *      of timers.
  */
 timerid
-srv_add_timeout (service_context context, unsigned long usec, 
-		 timercb proc, void *data)
+srv_add_timeout_with_jitter (service_context context, microseconds usec,
+		 timercb proc, void *data, microseconds jitter_usecs)
 {
     struct timeval right_now;
     struct timezone tz;
     timerid id;
 
+    if (jitter_usecs) {
+        long long rand_number, delta, new_usec;
+        (void) RAND_pseudo_bytes((unsigned char *) &rand_number, sizeof(rand_number));
+        delta = -(long long) jitter_usecs/2  + llabs(rand_number) % jitter_usecs;
+
+        new_usec = (long long) usec + delta;
+        if (new_usec < 0)
+            usec = 1;
+        else
+            usec = (microseconds) new_usec;
+    }
+
     if (context->ntimers >= NTIMERS) {
-	return 0;
+        sae_debug(SAE_DEBUG_ERR, "too many timers!\n");
+        return 0;
     }
     context->timers[context->ntimers].to.tv_sec = usec/SRV_TICK;
     context->timers[context->ntimers].to.tv_usec = usec - ((usec/SRV_TICK)*SRV_TICK);
@@ -473,7 +488,8 @@ srv_create_context(void)
     service_context blah;
 
     if ((blah = (service_context)malloc(sizeof(struct _servcxt))) == NULL) {
-	return NULL;
+        sae_debug(SAE_DEBUG_ERR, "context was NULL\n");
+        return NULL;
     }
     blah->timer_id = 0;
     FD_ZERO(&blah->readfds);

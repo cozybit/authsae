@@ -58,6 +58,7 @@ struct candidate {
     void *cookie;
     struct ampe_config *conf;
     unsigned int ch_type; /* nl80211_channel_type */
+    int candidate_id;
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

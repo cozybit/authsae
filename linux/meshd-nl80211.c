@@ -709,6 +709,8 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    if (key)
+       nlmsg_free(key);
     return -ENOBUFS;
 }
 

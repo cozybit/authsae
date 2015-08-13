@@ -658,8 +658,10 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
 
-    if (pret == NULL)
+    if (pret == NULL) {
+        nlmsg_free(key);
         goto nla_put_failure;
+    }
 
     NLA_PUT_U32(key, NL80211_KEY_CIPHER, cipher);
     NLA_PUT(key, NL80211_KEY_DATA, 16, keydata);

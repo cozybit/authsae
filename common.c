@@ -104,7 +104,8 @@ void sae_hexdump(int level, const char *label, const unsigned char *start, int l
         fprintf(stderr, "%s hexdump", label);
         pos = start;
         for (i=0; i<len; i++) {
-            if (!(i%20)) fprintf(stderr, "\n");
+            if (!(i%16))
+                fprintf(stderr, "\n%08x  ", i);
             fprintf(stderr, "%02x ", (unsigned char) *pos++);
         }
         fprintf(stderr, "\n----------\n\n");

@@ -1230,7 +1230,7 @@ void peer_deleted(unsigned char *peer)
 
     ret = send_nlmsg(nlcfg.nl_sock, msg);
     sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n",
-              peer);
+              MAC2STR(peer));
     if (ret < 0)
         fprintf(stderr, "Remove candidate failed: %d (%s)\n", ret, strerror(-ret));
 

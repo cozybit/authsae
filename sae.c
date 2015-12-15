@@ -1225,18 +1225,8 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         EC_POINT_free(peer->pwe);
         peer->pwe = NULL;
     }
-fail:
-    if (prfbuf != NULL) {
-        free(prfbuf);
-    }
-    if (primebuf != NULL) {
-        free(primebuf);
-    }
-    if (found) {
-        BN_free(x);
-    }
 
-    if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
+    if (found && peer->pwe && (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB)) {
         BIGNUM *px = NULL, *py = NULL;
         if (((px = BN_new()) != NULL) &&
             ((py = BN_new()) != NULL)) {
@@ -1252,6 +1242,17 @@ fail:
             BN_free(px);
             BN_free(py);
         }
+    }
+
+fail:
+    if (prfbuf != NULL) {
+        free(prfbuf);
+    }
+    if (primebuf != NULL) {
+        free(primebuf);
+    }
+    if (found) {
+        BN_free(x);
     }
 
     BN_free(x_candidate);

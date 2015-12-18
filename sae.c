@@ -587,7 +587,8 @@ confirm_to_peer (struct candidate *peer)
 
     len += SHA256_DIGEST_LENGTH;
 
-    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "in %s, sending %s (sc=%d), len %d\n",
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, MACSTR " in %s, sending %s (sc=%d), len %d\n",
+              MAC2STR(peer->peer_mac),
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               peer->sc, len);
@@ -900,7 +901,8 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
 
     len += (2 * BN_num_bytes(peer->grp_def->prime));
 
-    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "in %s, sending %s (%s token), len %d, group %d\n",
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "peer " MACSTR " in %s, sending %s (%s token), len %d, group %d\n",
+              MAC2STR(peer->peer_mac),
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               (token_len ? "with" : "no"), len,
@@ -1483,7 +1485,8 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         reject_to_peer(peer, frame);
                         return ERR_FATAL;
                     }
-                    sae_debug(SAE_DEBUG_STATE_MACHINE, "COMMIT received for unknown peer, committing and confirming\n");
+                    sae_debug(SAE_DEBUG_STATE_MACHINE, "COMMIT received for unknown peer " MACSTR ", committing and confirming\n",
+                    MAC2STR(peer->peer_mac));
                     peer->sc = peer->rc = 0;
                     commit_to_peer(peer, NULL, 0);
                     if (process_commit(peer, frame, len) < 0) {
@@ -1693,7 +1696,8 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     peer->sc = COUNTER_INFINITY;
                     if ((delme = find_peer(peer->peer_mac, 1)) != NULL) {
                         sae_debug(SAE_DEBUG_STATE_MACHINE,
-                                  "peer in %s has just ACCEPTED, found another in %s, deleting\n",
+                                  "peer " MACSTR " in %s has just ACCEPTED, found another in %s, deleting\n",
+                                  MAC2STR(peer->peer_mac),
                                   state_to_string(peer->state), state_to_string(delme->state));
                         delete_peer(&delme);
                     }
@@ -1737,7 +1741,8 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      */
                     if (check_confirm(peer, frame) &&
                         (process_confirm(peer, frame, len) >= 0)) {
-                        sae_debug(SAE_DEBUG_STATE_MACHINE, "resending CONFIRM...\n");
+                        sae_debug(SAE_DEBUG_STATE_MACHINE, "peer " MACSTR " resending CONFIRM...\n",
+                        MAC2STR(peer->peer_mac));
                         peer->sync++;
                         confirm_to_peer(peer);
                     }

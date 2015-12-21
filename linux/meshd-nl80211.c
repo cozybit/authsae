@@ -642,7 +642,7 @@ nla_put_failure:
 
 static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned int cipher, unsigned int keytype, unsigned char keyidx, unsigned char *keydata)
 {
-    struct nl_msg *msg, *key;
+    struct nl_msg *msg, *key=NULL;
     uint8_t cmd = NL80211_CMD_NEW_KEY;
     int ret;
     char *pret;
@@ -651,17 +651,18 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     assert(nlcfg);
 
     msg = nlmsg_alloc();
-    key = nlmsg_alloc();
-    if (!msg || !key)
+    if (!msg)
         return -ENOMEM;
+
+    key = nlmsg_alloc();
+    if (!key)
+        goto nla_put_failure;
 
     pret = genlmsg_put(msg, 0, 0,
             genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
 
-    if (pret == NULL) {
-        nlmsg_free(key);
+    if (pret == NULL)
         goto nla_put_failure;
-    }
 
     NLA_PUT_U32(key, NL80211_KEY_CIPHER, cipher);
     NLA_PUT(key, NL80211_KEY_DATA, 16, keydata);
@@ -669,9 +670,11 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     NLA_PUT(key, NL80211_KEY_SEQ, 6, seq);
     NLA_PUT_U32(key, NL80211_KEY_TYPE, keytype);
     ret = nla_put_nested(msg, NL80211_ATTR_KEY, key);
-    nlmsg_free(key);
     if (ret)
-            goto nla_put_failure;
+        goto nla_put_failure;
+
+    nlmsg_free(key);
+    key = NULL;
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     if (peer)
@@ -710,6 +713,7 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
                 strerror(-ret));
     return ret;
 nla_put_failure:
+    nlmsg_free(key);
     nlmsg_free(msg);
     return -ENOBUFS;
 }

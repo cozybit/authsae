@@ -280,6 +280,8 @@ static int tx_frame(struct netlink_config_s *nlcfg, struct mesh_node *mesh,
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     sae_debug(MESHD_DEBUG, "tx frame (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "tx frame failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -288,6 +290,7 @@ static int tx_frame(struct netlink_config_s *nlcfg, struct mesh_node *mesh,
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -332,12 +335,15 @@ static int set_mesh_conf(struct netlink_config_s *nlcfg,
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     sae_debug(MESHD_DEBUG, "set meshconf (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "set meshconf failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -466,6 +472,8 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     sae_debug(MESHD_DEBUG, "new unauthed sta (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -474,6 +482,7 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -559,6 +568,8 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
         NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(action_codes[i]), action_codes[i]);
 
         ret = send_nlmsg(nlcfg->nl_sock, msg);
+        nlmsg_free(msg);
+        msg = NULL;
         if (ret < 0)
             fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
                     strerror(-ret));
@@ -569,6 +580,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg)
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -597,6 +609,8 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
     NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr ,"Registering for auth frames failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -606,6 +620,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg)
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -631,12 +646,15 @@ static int get_wiphy(struct netlink_config_s *nlcfg)
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "get wiphy failed: %d (%s)\n", ret,
                 strerror(-ret));
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -681,6 +699,8 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
         NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -708,6 +728,8 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
     NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, keyidx);
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         sae_debug(MESHD_DEBUG, "install mesh keys failed: %d (%s)\n", ret,
                 strerror(-ret));
@@ -715,6 +737,8 @@ static int install_key(struct netlink_config_s *nlcfg, unsigned char *peer, unsi
 nla_put_failure:
     nlmsg_free(key);
     nlmsg_free(msg);
+    key = NULL;
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -827,6 +851,8 @@ static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *pe
     NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, rates_len, rates);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"Failed to set supported rates on station: %d (%s)\n", ret, strerror(-ret));
     else
@@ -835,6 +861,7 @@ static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *pe
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -872,6 +899,8 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
     sae_debug(MESHD_DEBUG, "set auth flag (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"Failed to set auth flag on station: %d (%s)\n", ret, strerror(-ret));
     else
@@ -880,6 +909,7 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char 
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -913,6 +943,8 @@ int set_plink_state(unsigned char *peer, int state, void *cookie)
     ret = send_nlmsg(nlcfg.nl_sock, msg);
     sae_debug(MESHD_DEBUG, "set plink state (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"Peer link command failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -921,6 +953,7 @@ int set_plink_state(unsigned char *peer, int state, void *cookie)
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -980,6 +1013,8 @@ static int leave_mesh(struct netlink_config_s *nlcfg)
     /*  Suppress netlink error in case we are not connected to mesh */
     nlcfg->supress_error = -ENOTCONN;
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"Mesh leave failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -988,6 +1023,7 @@ static int leave_mesh(struct netlink_config_s *nlcfg)
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -1118,6 +1154,8 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
                         mconf->meshid, mesh->freq, mesh->channel_type);
 
     ret = send_nlmsg(nlcfg->nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"Mesh start failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -1126,6 +1164,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
     return ret;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
     return -ENOBUFS;
 }
 
@@ -1198,6 +1237,8 @@ void peer_created(unsigned char *peer)
     ret = send_nlmsg(nlcfg.nl_sock, msg);
     sae_debug(MESHD_DEBUG, "new peer candidate (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);
+    nlmsg_free(msg);
+    msg = NULL;
     if (ret < 0)
         fprintf(stderr,"New candidate failed: %d (%s)\n", ret, strerror(-ret));
     else
@@ -1206,6 +1247,7 @@ void peer_created(unsigned char *peer)
     return;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
 }
 
 void peer_deleted(unsigned char *peer)
@@ -1233,6 +1275,8 @@ void peer_deleted(unsigned char *peer)
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
 
     ret = send_nlmsg(nlcfg.nl_sock, msg);
+    nlmsg_free(msg);
+    msg = NULL;
     sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n",
               MAC2STR(peer));
     if (ret < 0)
@@ -1241,6 +1285,7 @@ void peer_deleted(unsigned char *peer)
     return;
 nla_put_failure:
     nlmsg_free(msg);
+    msg = NULL;
 }
 
 void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len, void *cookie)

@@ -74,7 +74,6 @@ int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg)
 
         err = nl_send_auto_complete(nl_sock, msg);
 
-        nlmsg_free(msg);
         return err;
 }
 
@@ -108,7 +107,6 @@ static int send_and_recv(struct nl_sock *nl_sock, struct nl_msg *msg,
                 nl_recvmsgs(nl_sock, cb);
  out:
         nl_cb_put(cb);
-        nlmsg_free(msg);
         return err;
 }
 
@@ -161,6 +159,7 @@ static int nl_get_multicast_id(struct nl_sock *nl_sock, const char
 	NLA_PUT_STRING(msg, CTRL_ATTR_FAMILY_NAME, family);
 
 	ret = send_and_recv(nl_sock, msg, family_handler, &res);
+	nlmsg_free(msg);
 	msg = NULL;
 	if (ret == 0)
 		ret = res.id;

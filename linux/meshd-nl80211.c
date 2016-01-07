@@ -825,46 +825,6 @@ static int event_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-static int set_supported_rates(struct netlink_config_s *nlcfg, unsigned char *peer, unsigned char *rates, int rates_len)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_SET_STATION;
-    int ret;
-    char *pret;
-
-    if (!peer)
-        return -EINVAL;
-
-    msg = nlmsg_alloc();
-
-    if (!msg)
-        return -ENOMEM;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, rates_len, rates);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    nlmsg_free(msg);
-    msg = NULL;
-    if (ret < 0)
-        fprintf(stderr,"Failed to set supported rates on station: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return ret;
-nla_put_failure:
-    nlmsg_free(msg);
-    msg = NULL;
-    return -ENOBUFS;
-}
-
 static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char *peer)
 {
     struct nl_msg *msg;
@@ -1192,8 +1152,6 @@ void estab_peer_link(unsigned char *peer,
 
         /* to check integrity of multicast mgmt frames from this peer */
 	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
-
-        set_supported_rates(&nlcfg, peer, rates, rates_len);
     }
 }
 

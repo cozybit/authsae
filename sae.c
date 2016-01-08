@@ -469,6 +469,7 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
     CN_Final(&ctx, tmp);
+    HMAC_CTX_cleanup(&ctx);
 
     if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("peer's confirm",
@@ -578,6 +579,7 @@ confirm_to_peer (struct candidate *peer)
     CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
     CN_Final(&ctx, (frame->authenticate.u.var8 + sizeof(unsigned short)));
+    HMAC_CTX_cleanup(&ctx);
 
     if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("local confirm",
@@ -733,6 +735,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     H_Init(&ctx, allzero, SHA256_DIGEST_LENGTH);
     H_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     H_Final(&ctx, keyseed);
+    HMAC_CTX_cleanup(&ctx);
     free(tmp);
 
     /*
@@ -943,6 +946,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me, void *cookie
     H_Update(&ctx, req->sa, ETH_ALEN);
     H_Update(&ctx, me, ETH_ALEN);
     H_Final(&ctx, frame->authenticate.u.var8);
+    HMAC_CTX_cleanup(&ctx);
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
@@ -1113,6 +1117,7 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
         H_Update(&ctx, (unsigned char *) grp->password, strlen(grp->password));
         H_Update(&ctx, &ctr, sizeof(ctr));
         H_Final(&ctx, pwe_digest);
+        HMAC_CTX_cleanup(&ctx);
 
         if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
             if (memcmp(peer->peer_mac, peer->my_mac, ETH_ALEN) > 0) {
@@ -1806,6 +1811,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
         H_Update(&ctx, frame->sa, ETH_ALEN);
         H_Update(&ctx, me, ETH_ALEN);
         H_Final(&ctx, token);
+        HMAC_CTX_cleanup(&ctx);
         if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * there's something there but it's not a token, so ask for one.
@@ -1840,6 +1846,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
         H_Update(&ctx, frame->sa, ETH_ALEN);
         H_Update(&ctx, me, ETH_ALEN);
         H_Final(&ctx, token);
+        HMAC_CTX_cleanup(&ctx);
         if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * bad token

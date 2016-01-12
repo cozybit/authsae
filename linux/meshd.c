@@ -52,6 +52,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_tun.h>
 #include <openssl/rand.h>
+#include <limits.h>
 #include "service.h"
 #include "common.h"
 #include "sae.h"
@@ -391,7 +392,7 @@ main (int argc, char **argv)
     int c, ret;
     struct interface *inf;
     struct sigaction act;
-    char confdir[80], conffile[80], mesh_interface[10];
+    char confdir[PATH_MAX], conffile[PATH_MAX], mesh_interface[IFNAMSIZ];
     char str[80], *ptr;
     FILE *fp;
     struct sae_config config;

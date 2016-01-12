@@ -59,6 +59,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
+#include <limits.h>
 #include "service.h"
 #include "common.h"
 #include "ieee802_11.h"
@@ -115,7 +116,7 @@ unsigned long token_generator;
 #if 0
 char mesh_ssid[33]
 #endif
-char conffile[80], allzero[SHA256_DIGEST_LENGTH];
+char conffile[PATH_MAX], allzero[SHA256_DIGEST_LENGTH];
 unsigned int function_mdlen = SHA256_DIGEST_LENGTH;
 
 enum result {

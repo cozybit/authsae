@@ -1192,6 +1192,7 @@ void peer_created(unsigned char *peer)
     NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
+    nlcfg.supress_error = -EEXIST;
     ret = send_nlmsg(nlcfg.nl_sock, msg);
     sae_debug(MESHD_DEBUG, "new peer candidate (seq num=%d)\n",
             nlmsg_hdr(msg)->nlmsg_seq);

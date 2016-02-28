@@ -1,8 +1,8 @@
 #
-CC=	gcc
+CC=	clang
 #
-CFLAGS=	-g -Wall -Werror  -I../../openssl-1.0.0-beta2/include -I.. 
-LIBS= -L../../openssl-1.0.0-beta2
+CFLAGS=	-g -Wall -Werror  -I/usr/local/include -I.. 
+LIBS= -L/usr/local/lib
 
 all:	meshd mon
 

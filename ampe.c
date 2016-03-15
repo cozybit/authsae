@@ -183,7 +183,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
     unsigned int ht_opmode;
     bool no_ht = false, ht20 = false;
 
-    if (mesh->conf->channel_type == NL80211_CHAN_NO_HT)
+    if (mesh->conf->channel_type == CHAN_NO_HT)
         return 0;
 
     for_each_peer(peer) {
@@ -191,10 +191,10 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
             continue;
 
         switch (peer->ch_type) {
-        case NL80211_CHAN_NO_HT:
+        case CHAN_NO_HT:
             no_ht = true;
             goto out;
-        case NL80211_CHAN_HT20:
+        case CHAN_HT20:
             ht20 = true;
         default:
             break;
@@ -204,7 +204,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
 out:
     if (no_ht)
         ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
-    else if (ht20 && mesh->conf->channel_type > NL80211_CHAN_HT20)
+    else if (ht20 && mesh->conf->channel_type > CHAN_HT20)
         ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_20MHZ;
     else
         ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONE;
@@ -563,7 +563,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
         ies += sizeof(cand->pmkid);
 
-        if (mesh->conf->channel_type != NL80211_CHAN_NO_HT &&
+        if (mesh->conf->channel_type != CHAN_NO_HT &&
             sband->ht_cap.ht_supported) {
 
             /* HT IEs */
@@ -582,19 +582,19 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
             ht_op = (struct ht_op_ie *) ies;
             ht_op->primary_chan = mesh->conf->channel;
             switch (mesh->conf->channel_type) {
-            case NL80211_CHAN_HT40MINUS:
+            case CHAN_HT40MINUS:
                 ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
                 break;
-            case NL80211_CHAN_HT40PLUS:
+            case CHAN_HT40PLUS:
                 ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
                 break;
-            case NL80211_CHAN_HT20:
+            case CHAN_HT20:
             default:
                 ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
                 break;
             }
             if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
-                mesh->conf->channel_type > NL80211_CHAN_HT20)
+                mesh->conf->channel_type > CHAN_HT20)
                     ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 
             ht_op->operation_mode = htole16(mesh->conf->ht_prot_mode);

@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include "common.h"
 #include "ieee802_11.h"
-/* meh */
-#include "linux/nl80211-copy.h"
 
 unsigned char mgtk_tx[16];
 unsigned char *sta_fixed_ies;
@@ -19,6 +17,14 @@ enum plink_state {
     PLINK_ESTAB,
     PLINK_HOLDING,
     PLINK_BLOCKED
+};
+
+/* For Linux these values need to match NL80211_CHAN_XXX equivs */
+enum ht_channel_type {
+	CHAN_NO_HT,
+	CHAN_HT20,
+	CHAN_HT40MINUS,
+	CHAN_HT40PLUS
 };
 
 enum ieee80211_band {
@@ -53,7 +59,7 @@ struct meshd_config {
     int channel;
     int band;
     int debug;
-    enum nl80211_channel_type channel_type;     /* HT mode */
+    enum ht_channel_type channel_type;     /* HT mode */
     /* ready to be copied into rate IEs. Includes BSSBasicRateSet */
 #define MAX_SUPP_RATES 32
     unsigned char rates[MAX_SUPP_RATES];
@@ -75,7 +81,7 @@ struct meshd_config {
  * BSS configuration stuff would also go here. Shared with AMPE. */
 struct mesh_node {
     int freq;
-    enum nl80211_channel_type channel_type;     /* HT mode */
+    enum ht_channel_type channel_type;     /* HT mode */
     uint8_t mymacaddr[ETH_ALEN];
     struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
     /* current band */

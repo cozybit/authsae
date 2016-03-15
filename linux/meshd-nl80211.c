@@ -197,26 +197,26 @@ static void set_sup_basic_rates(struct meshd_config *mconf,
     }
 }
 
-static enum nl80211_channel_type
+static enum ht_channel_type
 ht_op_to_channel_type(struct ht_op_ie *ht_op)
 {
     enum nl80211_channel_type channel_type;
 
     if (!ht_op)
-        return NL80211_CHAN_NO_HT;
+        return CHAN_NO_HT;
 
     switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
         case IEEE80211_HT_PARAM_CHA_SEC_NONE:
-            channel_type = NL80211_CHAN_HT20;
+            channel_type = CHAN_HT20;
             break;
         case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
-            channel_type = NL80211_CHAN_HT40PLUS;
+            channel_type = CHAN_HT40PLUS;
             break;
         case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
-            channel_type = NL80211_CHAN_HT40MINUS;
+            channel_type = CHAN_HT40MINUS;
             break;
         default:
-            channel_type = NL80211_CHAN_NO_HT;
+            channel_type = CHAN_NO_HT;
     }
 
     return channel_type;
@@ -1098,7 +1098,7 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
     nla_nest_end(msg, container);
 
     NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
-    if (mesh->channel_type != NL80211_CHAN_NO_HT)
+    if (mesh->channel_type != CHAN_NO_HT)
         NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE, mesh->channel_type);
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);

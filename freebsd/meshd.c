@@ -316,7 +316,7 @@ add_interface (char *ptr)
     };
 
     TAILQ_FOREACH(inf, &interfaces, entry) {
-	
+
         if (memcmp(&inf->ifname, ptr, strlen(ptr)) == 0) {
             printf("%s is already on the list!\n", ptr);
             return;
@@ -515,7 +515,7 @@ main (int argc, char **argv)
     char confdir[80], conffile[80], mesh_interface[10];
     char str[80], *ptr, *cruft;
     size_t needed;
-	struct sae_config config;
+    struct sae_config config;
     FILE *fp;
     int mib[6];
     struct if_msghdr *ifm;
@@ -561,8 +561,8 @@ main (int argc, char **argv)
     }
 
     snprintf(conffile, sizeof(conffile), "%s/meshd.conf", confdir);
-	strcpy((char *)mesh_ssid, "meshd");
-	strcpy((char *)mesh_interface, "lo0");
+    strcpy((char *)mesh_ssid, "meshd");
+    strcpy((char *)mesh_interface, "lo0");
     debug = 0;
     passive = 0;
     channel = 6;
@@ -583,7 +583,7 @@ main (int argc, char **argv)
                 add_interface(ptr);
             }
             if (strncmp(str, "ssid", strlen("ssid")) == 0) {
-				snprintf((char *)mesh_ssid, sizeof(mesh_ssid), "%s", ptr);
+                snprintf((char *)mesh_ssid, sizeof(mesh_ssid), "%s", ptr);
             }
             if (strncmp(str, "passive", strlen("passive")) == 0) {
                 passive = atoi(ptr);
@@ -640,7 +640,7 @@ main (int argc, char **argv)
              * the radio's bssid
              */
             memset(&ifr, 0, sizeof(ifr));
-    		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", inf->ifname);
+            snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", inf->ifname);
             if (ioctl(s, SIOCGIFINDEX, &ifr) < 0) {
                 fprintf(stderr, "%s: cannot determine ifindex!\n", argv[0]);
                 exit(1);
@@ -678,7 +678,7 @@ main (int argc, char **argv)
             free(cruft);
 
             memset(&ireq, 0, sizeof(struct ieee80211req));
-    		snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
+            snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
             ireq.i_type = IEEE80211_IOC_BSSID;
             ireq.i_len = ETH_ALEN;
             ireq.i_data = inf->bssid;
@@ -692,7 +692,7 @@ main (int argc, char **argv)
              * enable RSN
              */
             memset(&ireq, 0, sizeof(struct ieee80211req));
-    		snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
+            snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
             ireq.i_type = IEEE80211_IOC_WPA;
             ireq.i_val = 2;
             if (ioctl(s, SIOCS80211, &ireq) < 0) {
@@ -704,7 +704,7 @@ main (int argc, char **argv)
              * set the ssid
              */
             memset(&ireq, 0, sizeof(struct ieee80211req));
-    		snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
+            snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
             ireq.i_type = IEEE80211_IOC_SSID;
             ireq.i_data = mesh_ssid;
             ireq.i_len = strlen((char *)mesh_ssid);
@@ -718,7 +718,7 @@ main (int argc, char **argv)
              * set the media option
              */
             memset(&ifmreq, 0, sizeof(ifmreq));
-    		snprintf(ifmreq.ifm_name, sizeof(ifmreq.ifm_name), "%s", inf->ifname);
+            snprintf(ifmreq.ifm_name, sizeof(ifmreq.ifm_name), "%s", inf->ifname);
             if (ioctl(s, SIOCGIFMEDIA, &ifmreq) < 0) {
                 fprintf(stderr, "%s: unable to get mediaopt!\n", argv[0]);
                 exit(1);
@@ -770,7 +770,7 @@ main (int argc, char **argv)
              * figure out what channels are allowable on this radio
              */
             memset(&ireq, 0, sizeof(ireq));
-    		snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
+            snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
             ireq.i_type = IEEE80211_IOC_CHANINFO;
             ireq.i_data = &chans;
             ireq.i_len = sizeof(chans);
@@ -800,7 +800,7 @@ main (int argc, char **argv)
                 exit(1);
             }
             memset(&ireq, 0, sizeof(ireq));
-    		snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
+            snprintf(ireq.i_name, sizeof(ireq.i_name), "%s", inf->ifname);
             ireq.i_type = IEEE80211_IOC_CHANNEL;
             ireq.i_val = channel;
             if (ioctl(s, SIOCS80211, &ireq) < 0) {
@@ -830,7 +830,7 @@ main (int argc, char **argv)
     /*
      * initialize SAE...
      */
-	sae_parse_config(confdir, &config);
+    sae_parse_config(confdir, &config);
     if (sae_initialize((char *)mesh_ssid, &config) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(1);

@@ -51,43 +51,52 @@
 
 #define SRV_TICK 1000000
 
-#define IS_ZERO(t)	(!(t)->tv_sec && !(t)->tv_usec)
+#define IS_ZERO(t)	(!(t)->tv_sec && !(t)->tv_nsec)
+
+#define NANOSECONDS_PER_SEC (1000000000)
+
+
+static void timespec_to_timeval(struct timespec *spec, struct timeval *val) {
+  val->tv_sec = spec->tv_sec;
+  val->tv_usec = spec->tv_nsec / 1000;
+}
+
+static void normalise_time(struct timespec *t) {
+   while (t->tv_nsec < 0) {
+     t->tv_sec--;
+     t->tv_nsec += NANOSECONDS_PER_SEC;
+   }
+   while (t->tv_nsec >= NANOSECONDS_PER_SEC) {
+     t->tv_sec++;
+     t->tv_nsec -= NANOSECONDS_PER_SEC;
+   }
+
+   /* t.tv_nsec in [0, NANOSECONDS_PER_SEC) */
+}
 
 /*
  * add_time()
  *	t1 += t2
  */
-static void
-add_time (struct timeval *t1, struct timeval *t2)
-{
-    t1->tv_sec += t2->tv_sec;
-    t1->tv_usec += t2->tv_usec;
-
-    if (t1->tv_usec > SRV_TICK) {
-	t1->tv_sec += (t1->tv_usec/SRV_TICK);
-	t1->tv_usec %= SRV_TICK;
-    }
+static void add_time(struct timespec *t1, struct timespec *t2) {
+  t1->tv_sec += t2->tv_sec;
+  t1->tv_nsec += t2->tv_nsec;
+  normalise_time(t1);
 }
 
 /*
  * sub_time()
  *	t1 -= t2
  */
-static void
-sub_time (struct timeval *t1, struct timeval *t2)
-{
-    t1->tv_sec -= t2->tv_sec;
-    t1->tv_usec -= t2->tv_usec;
+static void sub_time(struct timespec *t1, struct timespec *t2) {
+  t1->tv_sec -= t2->tv_sec;
+  t1->tv_nsec -= t2->tv_nsec;
+  normalise_time(t1);
 
-    if (t1->tv_usec < 0) {
-	t1->tv_sec--;
-	t1->tv_usec += SRV_TICK;
-    }
-
-    if (t1->tv_sec < 0) {
-	t1->tv_sec = 0;
-	t1->tv_usec = 0;
-    }
+  if (t1->tv_sec < 0) {
+    t1->tv_sec = 0;
+    t1->tv_nsec = 0;
+  }
 }
 
 /*
@@ -95,31 +104,29 @@ sub_time (struct timeval *t1, struct timeval *t2)
  *	compare times, return -1, 0, 1 if t1 < t2, t1 = t2, t1 > t2
  *	respectively. By definition, 0.0 means infinity.
  */
-static int
-cmp_time (struct timeval *t1, struct timeval *t2)
-{
-    /*
-     * if both are zero they're equal but if only one of them
-     * is zero that's the "older" one
-     */
-    if (IS_ZERO(t2)) {
-	if (IS_ZERO(t1)) {
-	    return 0;
-	} else {
-	    return -1;		/* t1 is non-zero, t2 is older */
-    }
-    }
+static int cmp_time(struct timespec *t1, struct timespec *t2) {
+  /*
+   * if both are zero they're equal but if only one of them
+   * is zero that's the "older" one
+   */
+  if (IS_ZERO(t2)) {
     if (IS_ZERO(t1)) {
-	return 1;		/* t2 is non-zero, t1 is older */
+      return 0;
+    } else {
+      return -1; /* t1 is non-zero, t2 is older */
     }
+  }
+  if (IS_ZERO(t1)) {
+    return 1; /* t2 is non-zero, t1 is older */
+  }
 
-    /*
-     * neither are zero so compare them to see who's older
-     */
-    if (t1->tv_sec != t2->tv_sec) {
-	return (t1->tv_sec - t2->tv_sec);
-    }
-    return (t1->tv_usec - t2->tv_usec);
+  /*
+   * neither are zero so compare them to see who's older
+   */
+  if (t1->tv_sec != t2->tv_sec) {
+    return (t1->tv_sec - t2->tv_sec);
+  }
+  return (t1->tv_nsec - t2->tv_nsec);
 }
 
 /*
@@ -142,8 +149,7 @@ timerid
 srv_add_timeout_with_jitter (service_context context, microseconds usec,
 		 timercb proc, void *data, microseconds jitter_usecs)
 {
-    struct timeval right_now;
-    struct timezone tz;
+    struct timespec right_now;
     timerid id;
 
     if (jitter_usecs) {
@@ -163,11 +169,12 @@ srv_add_timeout_with_jitter (service_context context, microseconds usec,
         return 0;
     }
     context->timers[context->ntimers].to.tv_sec = usec/SRV_TICK;
-    context->timers[context->ntimers].to.tv_usec = usec - ((usec/SRV_TICK)*SRV_TICK);
+    context->timers[context->ntimers].to.tv_nsec = 1000 * (usec - ((usec/SRV_TICK)*SRV_TICK));
     id = context->timers[context->ntimers].id = ++(context->timer_id);
     context->timers[context->ntimers].proc = proc;
     context->timers[context->ntimers].data = data;
-    gettimeofday(&right_now, &tz);
+
+    clock_gettime(CLOCK_MONOTONIC, &right_now);
     add_time(&(context->timers[context->ntimers].to), &right_now);
     context->ntimers++;
     qsort(context->timers, context->ntimers, sizeof(struct timer), (int (*)())cmp_timers);
@@ -196,7 +203,7 @@ srv_rem_timeout (service_context context, timerid id)
     for (i=0; i<NTIMERS; i++) {
 	if (context->timers[i].id == id) {
 	    context->timers[i].id = 0;
-	    context->timers[i].to.tv_sec = context->timers[i].to.tv_usec = 0;
+	    context->timers[i].to.tv_sec = context->timers[i].to.tv_nsec = 0;
 	    if (context->ntimers > 1) {
 		qsort(context->timers, context->ntimers, sizeof(struct timer),
 		      (int (*)())cmp_timers);
@@ -349,8 +356,7 @@ srv_add_exceptor (service_context sc, fdcb proc)
 static void
 check_timers (service_context sc)
 {
-    struct timezone tz;
-    struct timeval right_now, tdiff;
+    struct timespec right_now, tdiff;
     timerid tid;
 
     if (sc->ntimers) {
@@ -371,13 +377,13 @@ check_timers (service_context sc)
          * have to go through select() before being dispatched, that
          * way we don't starve our file descriptors.
 	 */
-	gettimeofday(&right_now, &tz);
+        clock_gettime(CLOCK_MONOTONIC, &right_now);
         tdiff = sc->timers[0].to;
         while (cmp_time(&tdiff, &right_now) < 1) {
             tid = sc->timers[0].id;
             sc->timers[0].id = 0;
             (*sc->timers[0].proc)(tid, sc->timers[0].data);
-            sc->timers[0].to.tv_sec = sc->timers[0].to.tv_usec = 0;
+            sc->timers[0].to.tv_sec = sc->timers[0].to.tv_nsec = 0;
             qsort(sc->timers, sc->ntimers, sizeof(struct timer),
                   (int (*)())cmp_timers);
             sc->ntimers--;
@@ -392,11 +398,11 @@ check_timers (service_context sc)
 	    sc->gbl_timer = tdiff;
 	} else {
 	    sc->gbl_timer.tv_sec = 1000;
-	    sc->gbl_timer.tv_usec = 0;
+	    sc->gbl_timer.tv_nsec = 0;
 	}
     } else {
 	sc->gbl_timer.tv_sec = 1000;
-	sc->gbl_timer.tv_usec = 0;
+	sc->gbl_timer.tv_nsec = 0;
     }
     return;
 }
@@ -410,6 +416,7 @@ srv_main_loop(service_context sc)
 {
     fd_set rfds, wfds, efds;
     int i, active;
+    struct timeval timeval;
 
     while (sc->keep_running) {
 	/*
@@ -422,10 +429,11 @@ srv_main_loop(service_context sc)
 	/*
 	 * then wait for either inputs or the next scheduled timer to go off
 	 */
+  timespec_to_timeval(&sc->gbl_timer, &timeval);
 	if (sc->ninputs || sc->noutputs) {
-	    active = select(NFDS, &rfds, &wfds, &efds, &sc->gbl_timer);
+	    active = select(NFDS, &rfds, &wfds, &efds, &timeval);
 	} else {
-	    active = select(0, NULL, NULL, NULL, &sc->gbl_timer);
+	    active = select(0, NULL, NULL, NULL, &timeval);
 	}
 	/*
 	 * if an fd is set then process...
@@ -500,7 +508,7 @@ srv_create_context(void)
     bzero((char *)blah->outputs, (NFDS * sizeof(struct source)));
     blah->ntimers = blah->ninputs = blah->noutputs = 0;
     blah->gbl_timer.tv_sec = 1000;
-    blah->gbl_timer.tv_usec = 0;
+    blah->gbl_timer.tv_nsec = 0;
     blah->exceptor = NULL;
     blah->keep_running = 1;
 

@@ -1978,7 +1978,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                                 request_token(frame, me, cookie);
                                 return 0;
                             } else {
-                                sae_debug(SAE_DEBUG_ERR, "correct token received\n");
+                                sae_debug(SAE_DEBUG_STATE_MACHINE, "correct token received\n");
                             }
                         }
                         /*

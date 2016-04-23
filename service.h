@@ -67,7 +67,7 @@ typedef void (*dumpcb)(timerid id, int num, int secs, int usecs, char *msg);
  * a timer definition
  */
 struct timer {
-    struct timeval to;
+    struct timespec to;
     timercb proc;
     timerid id;
     void *data;
@@ -101,7 +101,7 @@ typedef struct _servcxt {
     fd_set writefds;
     fd_set exceptfds;
     timerid timer_id;
-    struct timeval gbl_timer;
+    struct timespec gbl_timer;
     fdcb exceptor;
     int ntimers;
     struct timer timers[NTIMERS];

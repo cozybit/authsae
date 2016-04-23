@@ -217,6 +217,7 @@ ht_op_to_channel_type(struct ht_op_ie *ht_op)
             break;
         default:
             channel_type = CHAN_NO_HT;
+            break;
     }
 
     return channel_type;

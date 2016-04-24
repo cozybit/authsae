@@ -429,7 +429,7 @@ srv_main_loop(service_context sc)
 	/*
 	 * then wait for either inputs or the next scheduled timer to go off
 	 */
-  timespec_to_timeval(&sc->gbl_timer, &timeval);
+	timespec_to_timeval(&sc->gbl_timer, &timeval);
 	if (sc->ninputs || sc->noutputs) {
 	    active = select(NFDS, &rfds, &wfds, &efds, &timeval);
 	} else {

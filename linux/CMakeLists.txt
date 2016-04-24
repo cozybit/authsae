@@ -4,6 +4,8 @@ IF(NOT PKG_CONFIG_FOUND)
 	MESSAGE(FATAL_ERROR "Error: pkg-config not found on this system")
 ENDIF(NOT PKG_CONFIG_FOUND)
 
+FIND_LIBRARY(LIBRT rt)
+
 #####################################################################
 MESSAGE(STATUS "")
 MESSAGE(STATUS "Configuring libnl ...")
@@ -57,6 +59,12 @@ LIST(APPEND mon_libs
 	${LIBCRYPTO_LIBRARIES}
 )
 
+IF(LIBRT)
+LIST(APPEND mon_libs
+	${LIBRT}
+)
+ENDIF(LIBRT)
+
 ADD_EXECUTABLE(mon ${mon_sources})
 TARGET_LINK_LIBRARIES(mon ${mon_libs})
 INSTALL(TARGETS mon DESTINATION bin)
@@ -70,6 +78,12 @@ LIST(APPEND meshd_libs
 	${LIBCRYPTO_LIBRARIES}
 	sae
 )
+
+IF(LIBRT)
+LIST(APPEND meshd_libs
+	${LIBRT}
+)
+ENDIF(LIBRT)
 
 LIST(APPEND meshd_sources
 	meshd.c
@@ -94,6 +108,12 @@ LIST(APPEND meshd_nl80211_libs
 	${LIBNL_GENL_LIBRARIES}
 	sae
 )
+
+IF(LIBRT)
+LIST(APPEND meshd_nl80211_libs
+	${LIBRT}
+)
+ENDIF(LIBRT)
 
 LIST(APPEND meshd_nl80211_sources
 	meshd-nl80211.c

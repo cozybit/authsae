@@ -388,20 +388,24 @@ static int
 process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int len)
 {
     unsigned char tmp[128];
-    BIGNUM *x, *y;
-    EC_POINT *psum;
+    enum result r = NO_ERR;
+    BIGNUM *x = NULL;
+    BIGNUM *y = NULL;
+    EC_POINT *psum = NULL;
     HMAC_CTX ctx;
     int offset;
 
     if (len != (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) + SHA256_DIGEST_LENGTH)) {
         sae_debug(SAE_DEBUG_ERR, "bad size of confirm message (%d)\n", len);
-        return ERR_NOT_FATAL;
+        r = ERR_NOT_FATAL;
+        goto out;
     }
     if (((x = BN_new()) == NULL) ||
         ((y = BN_new()) == NULL) ||
         ((psum = EC_POINT_new(peer->grp_def->group)) == NULL)) {
         sae_debug(SAE_DEBUG_ERR, "unable to construct confirm!\n");
-        return ERR_FATAL;
+        r = ERR_FATAL;
+        goto out;
     }
 
     CN_Init(&ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
@@ -421,19 +425,15 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->peer_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of peer's element\n");
-        BN_free(x);
-        BN_free(y);
-        EC_POINT_free(psum);
-        return ERR_NOT_FATAL;
+        r = ERR_NOT_FATAL;
+        goto out;
     }
 
     /* Rarely x can be way too big, e.g. 1348 bytes. Corrupted packet? */
     if (BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(x) || BN_num_bytes(peer->grp_def->prime) < BN_num_bytes(y)) {
         sae_debug(SAE_DEBUG_ERR, "coords are too big, x = %d bytes, y = %d bytes\n", BN_num_bytes(x), BN_num_bytes(y));
-        BN_free(x);
-        BN_free(y);
-        EC_POINT_free(psum);
-        return ERR_NOT_FATAL;
+        r = ERR_NOT_FATAL;
+        goto out;
     }
 
         /* peer's element */
@@ -454,10 +454,8 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->my_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of my element\n");
-        BN_free(x);
-        BN_free(y);
-        EC_POINT_free(psum);
-        return ERR_NOT_FATAL;
+        r = ERR_NOT_FATAL;
+        goto out;
     }
         /* my element */
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
@@ -480,16 +478,18 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
 
     if (memcmp(tmp, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
         sae_debug(SAE_DEBUG_ERR, "confirm did not verify!\n");
-        BN_free(x);
-        BN_free(y);
-        EC_POINT_free(psum);
-        return ERR_BLACKLIST;
+        r = ERR_BLACKLIST;
+        goto out;
     }
 
+    r = NO_ERR;
+
+out:
     BN_free(x);
     BN_free(y);
     EC_POINT_free(psum);
-    return NO_ERR;
+
+    return r;
 }
 
 static int

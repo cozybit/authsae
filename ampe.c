@@ -322,17 +322,22 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     unsigned char *clear_ampe_ie;
     unsigned char *ie;
     unsigned short cat_to_mic_len;
+    size_t ampe_ie_len;
 
     assert(mic_start && cand && mgmt && len);
 
 #define MIC_IE_BODY_SIZE     AES_BLOCK_SIZE
 
-    if (mic_start + MIC_IE_BODY_SIZE + 2 + sizeof(struct ampe_ie) + 2 - (unsigned char *) mgmt > *len) {
+    /* MGTK + RSC + Exp */
+    ampe_ie_len = sizeof(struct ampe_ie) + 16 + 8 + 4;
+
+    if (mic_start + MIC_IE_BODY_SIZE + 2 +
+        2 + ampe_ie_len - (unsigned char *) mgmt > *len) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: buffer too small\n");
         return -EINVAL;
     }
 
-    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
+    clear_ampe_ie = malloc(ampe_ie_len + 2);
     if (!clear_ampe_ie) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: out of memory\n");
         return -ENOMEM;
@@ -341,7 +346,7 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     /*  IE: AMPE */
     ie = clear_ampe_ie;
     *ie++ = IEEE80211_EID_AMPE;
-    *ie++ = sizeof(struct ampe_ie);
+    *ie++ = ampe_ie_len;
     memcpy(ie, pw_suite_selector, 4);
     ie += 4;
     memcpy(ie, cand->my_nonce, 32);
@@ -362,18 +367,18 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     cat_to_mic_len = mic_start - (unsigned char *) &mgmt->action;
     siv_encrypt(&cand->sivctx, clear_ampe_ie, ie + MIC_IE_BODY_SIZE,
-            sizeof(struct ampe_ie) + 2,
+            ampe_ie_len + 2,
             ie, 3,
             cand->my_mac, ETH_ALEN,
             cand->peer_mac, ETH_ALEN,
             &mgmt->action, cat_to_mic_len);
 
-    *len = mic_start - (unsigned char *) mgmt + sizeof(struct ampe_ie) + 2 + MIC_IE_BODY_SIZE + 2;
+    *len = mic_start - (unsigned char *) mgmt + ampe_ie_len + 2 + MIC_IE_BODY_SIZE + 2;
 
     sae_debug(AMPE_DEBUG_KEYS, "Protecting frame from " MACSTR " to " MACSTR "\n",
             MAC2STR(cand->my_mac), MAC2STR(cand->peer_mac));
     sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %d\n",
-            cat_to_mic_len, sizeof(struct ampe_ie) + 2);
+            cat_to_mic_len, ampe_ie_len + 2);
 
     sae_hexdump(AMPE_DEBUG_KEYS, "SIV- Put AAD[3]: ", (unsigned char *) &mgmt->action, cat_to_mic_len);
 
@@ -389,18 +394,12 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     unsigned short ampe_ie_len, cat_to_mic_len;
     int r;
     unsigned int* key_expiration_p;
+    u8 *gtkdata;
 
     assert(len && cand && mgmt);
 
-    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
-    if (!clear_ampe_ie) {
-		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
-        return -1;
-    }
-
     if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
-        free(clear_ampe_ie);
         return -1;
     }
 
@@ -411,6 +410,20 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
      */
     ampe_ie_len = len -
                 (elems->mic + elems->mic_len - (unsigned char *)mgmt);
+
+    /* expect at least MGTK + RSC + expiry */
+    if (ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
+		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
+        return -1;
+
+    }
+
+    clear_ampe_ie = malloc(ampe_ie_len);
+    if (!clear_ampe_ie) {
+		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
+        return -1;
+    }
+
     /*
      *  cat_to_mic_len is the length of the contents of the frame
      *  from the category (inclusive) to the mic (exclusive)
@@ -439,6 +452,13 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
 
+    if (ampe_ie_len != clear_ampe_ie[1] + 2) {
+        sae_debug(AMPE_DEBUG_KEYS, "AMPE -Invalid length (expected %d, got %d)\n",
+            ampe_ie_len, clear_ampe_ie[1] + 2);
+        free(clear_ampe_ie);
+        return -1;
+    }
+
     sae_hexdump(AMPE_DEBUG_KEYS, "AMPE IE: ", clear_ampe_ie, ampe_ie_len);
 
     parse_ies(clear_ampe_ie, ampe_ie_len, &ies_parsed);
@@ -451,9 +471,12 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
-    memcpy(cand->mgtk, ies_parsed.ampe->mgtk, sizeof(cand->mgtk));
+
+    gtkdata = ies_parsed.ampe->variable;
+
+    memcpy(cand->mgtk, gtkdata, sizeof(cand->mgtk));
     sae_hexdump(AMPE_DEBUG_KEYS, "Received mgtk: ", cand->mgtk, sizeof(cand->mgtk));
-    key_expiration_p = (unsigned int *)ies_parsed.ampe->key_expiration;
+    key_expiration_p = (unsigned int *) (gtkdata + 16 + 8);
     cand->mgtk_expiration = le32toh(*key_expiration_p);
     free(clear_ampe_ie);
     return -1;

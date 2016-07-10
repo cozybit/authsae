@@ -203,9 +203,13 @@ struct ampe_ie {
     unsigned char selected_pairwise_suite[4];
     unsigned char local_nonce[32];
     unsigned char peer_nonce[32];
-    unsigned char mgtk[16];
-    unsigned char key_rsc[8];
-    unsigned char key_expiration[4];
+
+    /*
+     * Key Replay Counter (optional)
+     * MGTK || Key RSC || Key Expiration (optional)
+     * IGTK KeyID || IPN || IGTK (optional)
+     */
+    unsigned char variable[0];
 } __attribute__ ((packed));
 
 struct mcs_info {

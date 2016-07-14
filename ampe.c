@@ -72,6 +72,13 @@
 #define MESH_SECURITY_INCONSISTENT_PARAMS       59
 #define MESH_SECURITY_INVALID_CAPABILITY        60
 
+#if defined(__unix__)
+# include <sys/param.h>
+# if defined(__FreeBSD__)
+#   define __le16 u16
+# endif
+#endif
+
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };

@@ -1,0 +1,40 @@
+Index: sys/net80211/ieee80211.c
+===================================================================
+--- sys/net80211/ieee80211.c	(revision 296157)
++++ sys/net80211/ieee80211.c	(working copy)
+@@ -47,6 +47,7 @@
+ #include <net/if_media.h>
+ #include <net/if_types.h>
+ #include <net/ethernet.h>
++#include <net/route.h>
+
+ #include <net80211/ieee80211_var.h>
+ #include <net80211/ieee80211_regdomain.h>
+Index: sys/net80211/ieee80211.h
+===================================================================
+--- sys/net80211/ieee80211.h	(revision 296157)
++++ sys/net80211/ieee80211.h	(working copy)
+@@ -899,6 +899,7 @@
+ #define   IEEE80211_AUTH_ALG_OPEN     0x0000
+ #define   IEEE80211_AUTH_ALG_SHARED   0x0001
+ #define   IEEE80211_AUTH_ALG_LEAP     0x0080
++#define   IEEE80211_AUTH_ALG_SAE      0x8000
+
+ enum {
+   IEEE80211_AUTH_OPEN_REQUEST     = 1,
+Index: sys/net80211/ieee80211_hostap.c
+===================================================================
+--- sys/net80211/ieee80211_hostap.c	(revision 296157)
++++ sys/net80211/ieee80211_hostap.c	(working copy)
+@@ -1911,6 +1911,11 @@
+ 			    seq, status);
+ 		else if (algo == IEEE80211_AUTH_ALG_OPEN)
+ 			hostap_auth_open(ni, wh, rssi, nf, seq, status);
++		else if (algo == IEEE80211_AUTH_ALG_SAE) {
++			IEEE80211_DISCARD(vap, IEEE80211_MSG_AUTH, wh, "auth",
++				"SAE frame (alg = %d) ignored", algo);
++			return;
++		}
+ 		else if (algo == IEEE80211_AUTH_ALG_LEAP) {
+ 			authalgreject(ni, wh, algo,
+ 			    seq+1, IEEE80211_STATUS_ALG);

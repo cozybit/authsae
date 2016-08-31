@@ -1133,6 +1133,7 @@ void estab_peer_link(unsigned char *peer,
         unsigned char *mtk, int mtk_len,
         unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,
+        unsigned char *peer_igtk, int peer_igtk_len, int peer_igtk_keyid,
         unsigned char *rates,
         unsigned short rates_len,
         void *cookie)
@@ -1152,7 +1153,9 @@ void estab_peer_link(unsigned char *peer,
 	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
 
         /* to check integrity of multicast mgmt frames from this peer */
-	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, peer_mgtk);
+        if (peer_igtk) {
+	        install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
+        }
     }
 }
 
@@ -1303,6 +1306,9 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     CONFIG_LOOKUP(mcast-rate, mcast_rate);
     CONFIG_LOOKUP(beacon-interval,beacon_interval);
 
+    config_setting_lookup_int(meshd_section, "pmf",
+            (config_int_t *) &config->pmf);
+
     /* Get mesh parameter */
     CONFIG_LOOKUP(path-refresh-time,path_refresh_time);
     CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout);
@@ -1407,8 +1413,11 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         goto out;
     }
 
-    /* key to protect integrity of multicast mgmt frames tx*/
-    install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, 4, mgtk_tx);
+    if (mesh->conf->pmf) {
+        /* key to protect integrity of multicast mgmt frames tx*/
+        install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, mesh->igtk_keyid, mesh->igtk_tx);
+    }
+
     /* key to encrypt multicast data traffic */
     install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, mgtk_tx);
 

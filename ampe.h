@@ -64,6 +64,7 @@ struct meshd_config {
 #define MAX_SUPP_RATES 32
     unsigned char rates[MAX_SUPP_RATES];
     uint16_t ht_prot_mode;
+    int pmf;
     int mcast_rate;
     int beacon_interval;
     int path_refresh_time;
@@ -87,6 +88,11 @@ struct mesh_node {
     /* current band */
     enum ieee80211_band band;
     struct meshd_config *conf;
+
+    /* integrity protection key */
+    int igtk_keyid;
+    uint8_t igtk_ipn[6];
+    uint8_t igtk_tx[16];
 };
 
 struct ampe_config {
@@ -111,6 +117,7 @@ int set_plink_state(unsigned char *peer, int state, void *cookie);
 void estab_peer_link(unsigned char *peer, unsigned char *mtk,
         int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,
+        unsigned char *peer_igtk, int peer_igtk_len, int peer_igtk_keyid,
         unsigned char *sup_rates,
         unsigned short sup_rates_len,
         void *cookie);

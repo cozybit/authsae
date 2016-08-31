@@ -252,11 +252,13 @@ int set_plink_state(unsigned char *peer, int state, void *cookie)
 	return 0;
 }
 
-void estab_peer_link(unsigned char *peer, unsigned char *mtk,
-        int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
+void estab_peer_link(unsigned char *peer,
+        unsigned char *mtk, int mtk_len,
+        unsigned char *peer_mgtk, int peer_mgtk_len,
         unsigned int mgtk_expiration,
-        unsigned char *sup_rates,
-        unsigned short sup_rates_len,
+        unsigned char *peer_igtk, int peer_igtk_len, int peer_igtk_keyid,
+        unsigned char *rates,
+        unsigned short rates_len,
         void *cookie)
 {
     printf("TODO: implement estab_peer_link\n");

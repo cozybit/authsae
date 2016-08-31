@@ -1031,7 +1031,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 
     /* match BSSBasicRateSet*/
     parse_ies(sta_fixed_ies, sta_fixed_ies_len, &our_elems);
-    if (get_basic_rates(&our_elems) != get_basic_rates(&elems)) {
+    if (ftype != PLINK_CLOSE && get_basic_rates(&our_elems) != get_basic_rates(&elems)) {
         sae_debug(AMPE_DEBUG_FSM, "mesh plink: mismatched BSSBasicRateSet!\n");
         return 0;
     }

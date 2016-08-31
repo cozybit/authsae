@@ -412,6 +412,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     unsigned short ampe_ie_len, cat_to_mic_len;
     int r;
     unsigned int* key_expiration_p;
+    u8 ftype = mgmt->action.action_code;
     u8 *gtkdata, *igtkdata;
 
     assert(len && cand && mgmt);
@@ -429,8 +430,9 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     ampe_ie_len = len -
                 (elems->mic + elems->mic_len - (unsigned char *)mgmt);
 
-    /* expect at least MGTK + RSC + expiry */
-    if (ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
+    /* expect at least MGTK + RSC + expiry for open/confirm */
+    if (ftype != PLINK_CLOSE &&
+        ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
         return -1;
     }

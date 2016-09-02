@@ -324,18 +324,23 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     unsigned short cat_to_mic_len;
     struct mesh_node *mesh = cand->conf->mesh;
     size_t ampe_ie_len;
+    u8 ftype = mgmt->action.action_code;
     le16 igtk_keyid;
 
     assert(mic_start && cand && mgmt && len);
 
 #define MIC_IE_BODY_SIZE     AES_BLOCK_SIZE
 
-    /* MGTK + RSC + Exp */
-    ampe_ie_len = sizeof(struct ampe_ie) + 16 + 8 + 4;
+    ampe_ie_len = sizeof(struct ampe_ie);
 
-    if (mesh->conf->pmf) {
-        /* IGTK KeyId + IPN + IGTK */
-        ampe_ie_len += 2 + 6 + 16;
+    if (ftype != PLINK_CLOSE) {
+        /* MGTK + RSC + Exp */
+        ampe_ie_len += 16 + 8 + 4;
+
+        if (mesh->conf->pmf) {
+            /* IGTK KeyId + IPN + IGTK */
+            ampe_ie_len += 2 + 6 + 16;
+        }
     }
 
     if (mic_start + MIC_IE_BODY_SIZE + 2 +
@@ -360,21 +365,24 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     ie += 32;
     memcpy(ie, cand->peer_nonce, 32);
     ie += 32;
-    memcpy(ie, mgtk_tx, 16);
-    ie += 16;
-    memset(ie, 0, 8);           /*  TODO: Populate Key RSC */
-    ie += 8;
-    memset(ie, 0xff, 4);        /*  expire in 13 decades or so */
-    ie += 4;
 
-    if (mesh->conf->protected_management_frames) {
-        igtk_keyid = htole16(mesh->igtk_keyid);
-        memcpy(ie, &igtk_keyid, 2);
-        ie += 2;
-        memcpy(ie, mesh->igtk_ipn, 6);
-        ie += 6;
-        memcpy(ie, mesh->igtk_tx, 16);
+    if (ftype != PLINK_CLOSE) {
+        memcpy(ie, mgtk_tx, 16);
         ie += 16;
+        memset(ie, 0, 8);           /*  TODO: Populate Key RSC */
+        ie += 8;
+        memset(ie, 0xff, 4);        /*  expire in 13 decades or so */
+        ie += 4;
+
+        if (mesh->conf->pmf) {
+            igtk_keyid = htole16(mesh->igtk_keyid);
+            memcpy(ie, &igtk_keyid, 2);
+            ie += 2;
+            memcpy(ie, mesh->igtk_ipn, 6);
+            ie += 6;
+            memcpy(ie, mesh->igtk_tx, 16);
+            ie += 16;
+        }
     }
 
     /* IE: MIC */

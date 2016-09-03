@@ -72,6 +72,20 @@
 #define MESH_SECURITY_INCONSISTENT_PARAMS       59
 #define MESH_SECURITY_INVALID_CAPABILITY        60
 
+/* Mesh protocol identifiers */
+#define MESH_CONFIG_PP_HWMP                     1
+#define MESH_CONFIG_PM_ALM                      1
+#define MESH_CONFIG_CC_NONE                     0
+#define MESH_CONFIG_SP_NEIGHBOR_OFFSET          1
+#define MESH_CONFIG_AUTH_SAE                    1
+
+#ifndef BIT
+#define BIT(x) (1UL << (x))
+#endif
+
+#define MESH_CAPA_ACCEPT_PEERINGS               BIT(0)
+#define MESH_CAPA_FORWARDING                    BIT(3)
+
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
@@ -588,10 +602,14 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
 
         /* IE: mesh config */
         *ies++ = IEEE80211_EID_MESH_CONFIG;
-        *ies++ = 8;
-        /*  TODO: IIRC all the defaults are 0. Double check */
-        memset(ies, 0, 8);
-        ies += 8;
+        *ies++ = 7;
+        *ies++ = MESH_CONFIG_PP_HWMP;
+        *ies++ = MESH_CONFIG_PM_ALM;
+        *ies++ = MESH_CONFIG_CC_NONE;
+        *ies++ = MESH_CONFIG_SP_NEIGHBOR_OFFSET;
+        *ies++ = MESH_CONFIG_AUTH_SAE;
+        *ies++ = 0; /* TODO formation info */
+        *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
 
         ie_len = 4 + 16;        /* min. + PMKID */
         /* IE: Mesh Peering Management element */

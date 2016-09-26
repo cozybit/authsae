@@ -72,6 +72,20 @@
 #define MESH_SECURITY_INCONSISTENT_PARAMS       59
 #define MESH_SECURITY_INVALID_CAPABILITY        60
 
+/* Mesh protocol identifiers */
+#define MESH_CONFIG_PP_HWMP                     1
+#define MESH_CONFIG_PM_ALM                      1
+#define MESH_CONFIG_CC_NONE                     0
+#define MESH_CONFIG_SP_NEIGHBOR_OFFSET          1
+#define MESH_CONFIG_AUTH_SAE                    1
+
+#ifndef BIT
+#define BIT(x) (1UL << (x))
+#endif
+
+#define MESH_CAPA_ACCEPT_PEERINGS               BIT(0)
+#define MESH_CAPA_FORWARDING                    BIT(3)
+
 static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     /*  SAE  */
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
@@ -322,17 +336,34 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     unsigned char *clear_ampe_ie;
     unsigned char *ie;
     unsigned short cat_to_mic_len;
+    struct mesh_node *mesh = cand->conf->mesh;
+    size_t ampe_ie_len;
+    u8 ftype = mgmt->action.action_code;
+    le16 igtk_keyid;
 
     assert(mic_start && cand && mgmt && len);
 
 #define MIC_IE_BODY_SIZE     AES_BLOCK_SIZE
 
-    if (mic_start + MIC_IE_BODY_SIZE + 2 + sizeof(struct ampe_ie) + 2 - (unsigned char *) mgmt > *len) {
+    ampe_ie_len = sizeof(struct ampe_ie);
+
+    if (ftype != PLINK_CLOSE) {
+        /* MGTK + RSC + Exp */
+        ampe_ie_len += 16 + 8 + 4;
+
+        if (mesh->conf->pmf) {
+            /* IGTK KeyId + IPN + IGTK */
+            ampe_ie_len += 2 + 6 + 16;
+        }
+    }
+
+    if (mic_start + MIC_IE_BODY_SIZE + 2 +
+        2 + ampe_ie_len - (unsigned char *) mgmt > *len) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: buffer too small\n");
         return -EINVAL;
     }
 
-    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
+    clear_ampe_ie = malloc(ampe_ie_len + 2);
     if (!clear_ampe_ie) {
 		sae_debug(AMPE_DEBUG_KEYS, "protect frame: out of memory\n");
         return -ENOMEM;
@@ -341,19 +372,32 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     /*  IE: AMPE */
     ie = clear_ampe_ie;
     *ie++ = IEEE80211_EID_AMPE;
-    *ie++ = sizeof(struct ampe_ie);
+    *ie++ = ampe_ie_len;
     memcpy(ie, pw_suite_selector, 4);
     ie += 4;
     memcpy(ie, cand->my_nonce, 32);
     ie += 32;
     memcpy(ie, cand->peer_nonce, 32);
     ie += 32;
-    memcpy(ie, mgtk_tx, 16);
-    ie += 16;
-    memset(ie, 0, 8);           /*  TODO: Populate Key RSC */
-    ie += 8;
-    memset(ie, 0xff, 4);        /*  expire in 13 decades or so */
-    ie += 4;
+
+    if (ftype != PLINK_CLOSE) {
+        memcpy(ie, mgtk_tx, 16);
+        ie += 16;
+        memset(ie, 0, 8);           /*  TODO: Populate Key RSC */
+        ie += 8;
+        memset(ie, 0xff, 4);        /*  expire in 13 decades or so */
+        ie += 4;
+
+        if (mesh->conf->pmf) {
+            igtk_keyid = htole16(mesh->igtk_keyid);
+            memcpy(ie, &igtk_keyid, 2);
+            ie += 2;
+            memcpy(ie, mesh->igtk_ipn, 6);
+            ie += 6;
+            memcpy(ie, mesh->igtk_tx, 16);
+            ie += 16;
+        }
+    }
 
     /* IE: MIC */
     ie = mic_start;
@@ -362,18 +406,18 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     cat_to_mic_len = mic_start - (unsigned char *) &mgmt->action;
     siv_encrypt(&cand->sivctx, clear_ampe_ie, ie + MIC_IE_BODY_SIZE,
-            sizeof(struct ampe_ie) + 2,
+            ampe_ie_len + 2,
             ie, 3,
             cand->my_mac, ETH_ALEN,
             cand->peer_mac, ETH_ALEN,
             &mgmt->action, cat_to_mic_len);
 
-    *len = mic_start - (unsigned char *) mgmt + sizeof(struct ampe_ie) + 2 + MIC_IE_BODY_SIZE + 2;
+    *len = mic_start - (unsigned char *) mgmt + ampe_ie_len + 2 + MIC_IE_BODY_SIZE + 2;
 
     sae_debug(AMPE_DEBUG_KEYS, "Protecting frame from " MACSTR " to " MACSTR "\n",
             MAC2STR(cand->my_mac), MAC2STR(cand->peer_mac));
     sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %d\n",
-            cat_to_mic_len, sizeof(struct ampe_ie) + 2);
+            cat_to_mic_len, ampe_ie_len + 2);
 
     sae_hexdump(AMPE_DEBUG_KEYS, "SIV- Put AAD[3]: ", (unsigned char *) &mgmt->action, cat_to_mic_len);
 
@@ -386,21 +430,17 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 {
     unsigned char *clear_ampe_ie;
     struct info_elems ies_parsed;
+    struct mesh_node *mesh = cand->conf->mesh;
     unsigned short ampe_ie_len, cat_to_mic_len;
     int r;
     unsigned int* key_expiration_p;
+    u8 ftype = mgmt->action.action_code;
+    u8 *gtkdata, *igtkdata;
 
     assert(len && cand && mgmt);
 
-    clear_ampe_ie = malloc(sizeof(struct ampe_ie) + 2);
-    if (!clear_ampe_ie) {
-		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
-        return -1;
-    }
-
     if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
-        free(clear_ampe_ie);
         return -1;
     }
 
@@ -411,6 +451,29 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
      */
     ampe_ie_len = len -
                 (elems->mic + elems->mic_len - (unsigned char *)mgmt);
+
+    /* expect at least MGTK + RSC + expiry for open/confirm */
+    if (ftype != PLINK_CLOSE &&
+        ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
+		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
+        return -1;
+    }
+
+    /* if PMF, then we also need IGTKData */
+    if (mesh->conf->pmf) {
+        if (ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4 +
+                          2 + 6 + 16 /* IGTKData */) {
+            sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE missing IGTK\n");
+            return -1;
+        }
+    }
+
+    clear_ampe_ie = malloc(ampe_ie_len);
+    if (!clear_ampe_ie) {
+		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
+        return -1;
+    }
+
     /*
      *  cat_to_mic_len is the length of the contents of the frame
      *  from the category (inclusive) to the mic (exclusive)
@@ -439,6 +502,13 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
 
+    if (ampe_ie_len != clear_ampe_ie[1] + 2) {
+        sae_debug(AMPE_DEBUG_KEYS, "AMPE -Invalid length (expected %d, got %d)\n",
+            ampe_ie_len, clear_ampe_ie[1] + 2);
+        free(clear_ampe_ie);
+        return -1;
+    }
+
     sae_hexdump(AMPE_DEBUG_KEYS, "AMPE IE: ", clear_ampe_ie, ampe_ie_len);
 
     parse_ies(clear_ampe_ie, ampe_ie_len, &ies_parsed);
@@ -451,10 +521,20 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         return -1;
     }
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
-    memcpy(cand->mgtk, ies_parsed.ampe->mgtk, sizeof(cand->mgtk));
+
+    gtkdata = ies_parsed.ampe->variable;
+
+    memcpy(cand->mgtk, gtkdata, sizeof(cand->mgtk));
     sae_hexdump(AMPE_DEBUG_KEYS, "Received mgtk: ", cand->mgtk, sizeof(cand->mgtk));
-    key_expiration_p = (unsigned int *)ies_parsed.ampe->key_expiration;
+    key_expiration_p = (unsigned int *) (gtkdata + 16 + 8);
     cand->mgtk_expiration = le32toh(*key_expiration_p);
+
+    igtkdata = gtkdata + 16 + 8 + 4;
+    if (mesh->conf->pmf) {
+        cand->igtk_keyid = le16toh(*(u16 *) igtkdata);
+        igtkdata += 2 + 6;
+        memcpy(cand->igtk, igtkdata, 16);
+    }
     free(clear_ampe_ie);
     return -1;
 #undef MIC_IE_BODY_SIZE
@@ -522,10 +602,14 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
 
         /* IE: mesh config */
         *ies++ = IEEE80211_EID_MESH_CONFIG;
-        *ies++ = 8;
-        /*  TODO: IIRC all the defaults are 0. Double check */
-        memset(ies, 0, 8);
-        ies += 8;
+        *ies++ = 7;
+        *ies++ = MESH_CONFIG_PP_HWMP;
+        *ies++ = MESH_CONFIG_PM_ALM;
+        *ies++ = MESH_CONFIG_CC_NONE;
+        *ies++ = MESH_CONFIG_SP_NEIGHBOR_OFFSET;
+        *ies++ = MESH_CONFIG_AUTH_SAE;
+        *ies++ = 0; /* TODO formation info */
+        *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
 
         ie_len = 4 + 16;        /* min. + PMKID */
         /* IE: Mesh Peering Management element */
@@ -742,6 +826,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
+                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
@@ -773,7 +858,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
             estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
-                    cand->mgtk_expiration, cand->sup_rates,
+                    cand->mgtk_expiration,
+                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
+                    cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
             changed |= mesh_set_ht_op_mode(cand->conf->mesh);
@@ -972,7 +1059,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 
     /* match BSSBasicRateSet*/
     parse_ies(sta_fixed_ies, sta_fixed_ies_len, &our_elems);
-    if (get_basic_rates(&our_elems) != get_basic_rates(&elems)) {
+    if (ftype != PLINK_CLOSE && get_basic_rates(&our_elems) != get_basic_rates(&elems)) {
         sae_debug(AMPE_DEBUG_FSM, "mesh plink: mismatched BSSBasicRateSet!\n");
         return 0;
     }
@@ -1089,6 +1176,13 @@ int ampe_initialize(struct mesh_node *mesh)
 
         RAND_bytes(mgtk_tx, 16);
         sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
+
+        if (mesh->conf->pmf) {
+            RAND_bytes(mesh->igtk_tx, 16);
+            mesh->igtk_keyid = 4;
+            memset(mesh->igtk_ipn, 0, sizeof(mesh->igtk_ipn));
+            sae_hexdump(AMPE_DEBUG_KEYS, "igtk: ", mesh->igtk_tx, sizeof(mesh->igtk_tx));
+        }
 
         /* We can do this because valid supported rates non null and the array is null terminated */
         sup_rates_len = strnlen((char *) mesh->conf->rates, sizeof(mesh->conf->rates));

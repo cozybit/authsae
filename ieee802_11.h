@@ -49,7 +49,7 @@
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 /*
- * IEEE does things bassackwards, networking in non-network order.
+ * IEEE does things backwards, networking in non-network order.
  */
 #define ieee_order(x)   (x)                     /* if LE, do nothing */
 #else

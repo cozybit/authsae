@@ -210,6 +210,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
             goto out;
         case CHAN_HT20:
             ht20 = true;
+            break;
         default:
             break;
         }

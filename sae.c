@@ -2014,7 +2014,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                      */
                     blacklist_peer(peer);
                     fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
-                    /* fallthru intentional */
+                    /* no break / fall-through intentional */
                 case ERR_FATAL:
                     /*
                      * a "fail" event, it could be argued that fin() should be done

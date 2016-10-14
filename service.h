@@ -36,15 +36,12 @@
  * license (including the GNU public license).
  */
 
-#ifndef _SERVICE_CONTEXT_H_
-#define _SERVICE_CONTEXT_H_
+#ifndef _SAE_SERVICE_H_
+#define _SAE_SERVICE_H_
 
 #include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
+#include <sys/select.h>
+#include <time.h>
 
 typedef unsigned int timerid;
 
@@ -144,5 +141,4 @@ service_context srv_create_context(void);
 
 void srv_cancel_main_loop(service_context);
 
-#endif	/* _SERVICE_CONTEXT_H_ */
-
+#endif	/* _SAE_SERVICE_H_ */

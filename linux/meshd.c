@@ -36,27 +36,23 @@
  * license (including the GNU public license).
  */
 
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
-#include <signal.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-#include <sys/queue.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <linux/if_packet.h>
-#include <linux/if_ether.h>
-#include <linux/if_tun.h>
-#include <openssl/rand.h>
 #include <limits.h>
-#include "service.h"
-#include "common.h"
-#include "sae.h"
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <openssl/rand.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/queue.h>
+#include <unistd.h>
+
+#include "../ieee802_11.h"
 #include "ampe.h"
+#include "sae.h"
+#include "service.h"
 
 struct interface {
     TAILQ_ENTRY(interface) entry;

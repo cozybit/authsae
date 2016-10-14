@@ -49,18 +49,12 @@
  *
  */
 
-#ifndef HEADER_AES_LOCL_H
-#define HEADER_AES_LOCL_H
-
-#include <openssl/e_os2.h>
+#ifndef _SAE_AES_LOCL_H_
+#define _SAE_AES_LOCL_H_
 
 #ifdef OPENSSL_NO_AES
 #error AES is disabled.
 #endif
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_AMD64) || defined(_M_X64))
 # define SWAP(x) (_lrotl(x, 8) & 0x00ff00ff | _lrotr(x, 8) & 0xff00ff00)
@@ -86,4 +80,4 @@ typedef unsigned char u8;
 /* This controls loop-unrolling in aes_core.c */
 #undef FULL_UNROLL
 
-#endif /* !HEADER_AES_LOCL_H */
+#endif /* _SAE_AES_LOCL_H_ */

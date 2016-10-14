@@ -1,5 +1,16 @@
-#ifndef __PEERS_H
-#define __PEERS_H
+#ifndef _SAE_PEERS_H_
+#define _SAE_PEERS_H_
+
+#include <openssl/ec.h>
+#include <openssl/ossl_typ.h>
+#include <openssl/sha.h>
+#include <sys/queue.h>
+
+#include "ampe.h"
+#include "crypto/siv.h"
+#include "common.h"
+#include "ieee802_11.h"
+#include "service.h"
 
 typedef struct group_def_ {
     unsigned short group_num;
@@ -72,4 +83,4 @@ TAILQ_HEAD(blah, candidate) peers;
 #define for_each_peer(peer) \
 	TAILQ_FOREACH(peer, &peers, entry)
 
-#endif
+#endif /* _SAE_PEERS_H_ */

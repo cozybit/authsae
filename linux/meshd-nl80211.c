@@ -38,40 +38,19 @@
  * license (including the GNU public license).
  */
 
-#include <unistd.h>
-#include <stdarg.h>
-#include <signal.h>
-#include <sys/select.h>
-#include <stdlib.h>
-#include <string.h>
-#include <net/if.h>
-#include <linux/if_ether.h>
-#include <netinet/in.h>
 #include <assert.h>
-#include <sys/types.h>
+#include <errno.h>
+#include <netlink/genl/genl.h>
 #include <sys/ioctl.h>
-#include <sys/time.h>
-#include <libconfig.h>
+#include <unistd.h>
 
-#include "nlutils.h"
-
-/* authsae headers */
-#include "service.h"
-#include "ieee802_11.h"
-#include "sae.h"
 #include "ampe.h"
 #include "common.h"
-#include "os_glue.h"
-/* peers */
-#include <sys/queue.h>
-#include <openssl/bn.h>
-#include <openssl/sha.h>
-#include <openssl/ec.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/rand.h>
-#include "crypto/siv.h"
+#include "nl80211-copy.h"
+#include "nlutils.h"
 #include "peers.h"
+#include "sae.h"
+#include "service.h"
 
 #define CIPHER_CCMP 0x000FAC04
 #define CIPHER_AES_CMAC 0x000FAC06

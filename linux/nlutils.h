@@ -20,19 +20,16 @@
  *
  */
 
-#include <netlink/genl/genl.h>
+#ifndef _SAE_NLUTILS_H_
+#define _SAE_NLUTILS_H_
+
+#include <netlink/cache.h>
 #include <netlink/genl/family.h>
-#include <netlink/genl/ctrl.h>
-#include <linux/rtnetlink.h>
-#include <netpacket/packet.h>
-#include <linux/filter.h>
-#include <errno.h>
-#include <linux/if_ether.h>
-#include "nl80211-copy.h"
-#include "ieee802_11.h"
+#include <netlink/handlers.h>
+#include <netlink/msg.h>
+#include <netlink/netlink.h>
 
 /* leave hw/kernel info here for now, maybe move to common.h? */
-#include "stdbool.h"
 
 struct netlink_config_s {
 	struct nl_sock *nl_sock;
@@ -49,3 +46,5 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);
 int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg);
 int send_nlmsg_suppress_error(struct nl_sock *nl_sock,
         struct nl_msg *msg, int expect_err);
+
+#endif /* _SAE_NLUTILS_H_ */

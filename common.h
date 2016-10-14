@@ -36,9 +36,8 @@
  * license (including the GNU public license).
  */
 
-#ifndef _COMMON_H_
-#define _COMMON_H_
-#include <string.h>
+#ifndef _SAE_COMMON_H_
+#define _SAE_COMMON_H_
 
 #define MESHD_STA       0
 #define MESHD_ADHOC     1
@@ -83,4 +82,5 @@ typedef int config_int_t;
 #else
 typedef long int config_int_t;
 #endif
-#endif  /* _COMMON_H_ */
+
+#endif  /* _SAE_COMMON_H_ */

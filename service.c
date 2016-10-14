@@ -36,17 +36,13 @@
  * license (including the GNU public license).
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
+#include "service.h"
+
 #include <errno.h>
-#include <sys/socket.h>
 #include <openssl/rand.h>
 #include <string.h>
 #include <time.h>
-#include "service.h"
+
 #include "common.h"
 
 #define SRV_TICK 1000000

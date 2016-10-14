@@ -36,8 +36,10 @@
  * license (including the GNU public license).
  */
 
-#ifndef _FRAME_H_
-#define _FRAME_H_
+#ifndef _SAE_FRAME_H_
+#define _SAE_FRAME_H_
+
+#include <stdint.h>
 
 #ifdef LINUX
 #include <endian.h>
@@ -272,4 +274,5 @@ struct info_elems {
 };
 
 void parse_ies(unsigned char *start, int len, struct info_elems *elems);
-#endif  /* _FRAME_H_ */
+
+#endif  /* _SAE_FRAME_H_ */

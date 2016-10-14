@@ -1,7 +1,10 @@
-#ifndef __AMPE_H
-#define __AMPE_H
+#ifndef _SAE_AMPE_H_
+#define _SAE_AMPE_H_
 
+#include <net/if.h>
 #include <stdbool.h>
+#include <stdint.h>
+
 #include "common.h"
 #include "ieee802_11.h"
 
@@ -121,4 +124,5 @@ void estab_peer_link(unsigned char *peer, unsigned char *mtk,
         unsigned char *sup_rates,
         unsigned short sup_rates_len,
         void *cookie);
-#endif
+
+#endif /* _SAE_AMPE_H_ */

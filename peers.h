@@ -39,7 +39,6 @@ struct candidate {
     unsigned char my_mac[ETH_ALEN];
     /*  AMPE related fields */
     timerid t2;
-    timerid t3;
     enum plink_state link_state;
     le16 my_lid;
     le16 peer_lid;

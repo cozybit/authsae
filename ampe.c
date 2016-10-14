@@ -677,7 +677,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
                 ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
                 break;
             }
-            if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
+            if ((sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) &&
                 mesh->conf->channel_type > CHAN_HT20)
                     ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 

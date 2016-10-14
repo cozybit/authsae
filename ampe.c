@@ -295,7 +295,7 @@ static void plink_timer(timerid id, void *data)
 			break;
 		}
 		reason = htole16(MESH_MAX_RETRIES);
-		/* fall through on else */
+		/* no break / fall through on else */
 	case PLINK_CNF_RCVD:
 		/* confirm timer */
 		if (!reason)
@@ -776,6 +776,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);
@@ -805,6 +806,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);
@@ -845,6 +847,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);

@@ -20,6 +20,10 @@
 
 #include "nlutils.h"
 
+#include <errno.h>
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
+
 static int ack_handler(struct nl_msg *msg, void *arg)
 {
     int *err = arg;

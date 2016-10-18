@@ -27,39 +27,17 @@
  *  SUCH DAMAGE."
  *
  */
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/if_ether.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/queue.h>
-#include <net/if.h>
-#include <assert.h>
-#include <openssl/bn.h>
-#include <openssl/sha.h>
-#include <openssl/ec.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/rand.h>
 
-#include "service.h"
-#include "common.h"
-#include "ieee802_11.h"
-#include "os_glue.h"
-#include "sae.h"
 #include "ampe.h"
-#include "crypto/siv.h"
+
+#include <assert.h>
+#include <errno.h>
+#include <openssl/rand.h>
+#include <string.h>
+
+#include "os_glue.h"
 #include "peers.h"
+#include "sae.h"
 
 /* Peer link cancel reasons */
 #define MESH_LINK_CANCELLED                     52

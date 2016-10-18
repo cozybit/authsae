@@ -36,12 +36,12 @@
  * license (including the GNU public license).
  */
 
-#ifndef _OS_GLUE_H_
-#define _OS_GLUE_H_
+#ifndef _SAE_OS_GLUE_H_
+#define _SAE_OS_GLUE_H_
 
 int meshd_write_mgmt(char *frame, int framelen, void *cookie);
 void peer_created(unsigned char *peer_mac);
 void fin(unsigned short reason, unsigned char *peer_mac,
          unsigned char *key, int keylen, void *cookie);
 
-#endif  /* _OS_GLUE_H_ */
+#endif  /* _SAE_OS_GLUE_H_ */

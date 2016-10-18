@@ -35,12 +35,14 @@
  * this code cannot simply be copied and put under another distribution
  * license (including the GNU public license).
  */
+
+#include "siv.h"
+
+#include <openssl/aes.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <openssl/crypto.h>
-#include <openssl/evp.h>
-#include <openssl/aes.h>
-#include "siv.h"
+
 #include "aes_locl.h"
 
 /*

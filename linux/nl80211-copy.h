@@ -1,5 +1,5 @@
-#ifndef __LINUX_NL80211_H
-#define __LINUX_NL80211_H
+#ifndef _SAE_NL80211_COPY_H_
+#define _SAE_NL80211_COPY_H_
 /*
  * 802.11 netlink interface public header
  *
@@ -3758,4 +3758,4 @@ enum nl80211_crit_proto_id {
 /* maximum duration for critical protocol measures */
 #define NL80211_CRIT_PROTO_MAX_DURATION		5000 /* msec */
 
-#endif /* __LINUX_NL80211_H */
+#endif /* _SAE_NL80211_COPY_H_ */

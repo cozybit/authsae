@@ -36,14 +36,14 @@
  * this code cannot simply be copied and put under a different distribution
  * license (including the GNU public license).
  */
-//#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
+
+#include "common.h"
+
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
-#include <stdio.h>
-#include "common.h"
 #include "ieee802_11.h"
 
 unsigned int sae_debug_mask;

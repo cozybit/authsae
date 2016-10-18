@@ -35,8 +35,8 @@
  * this code cannot simply be copied and put under another distribution
  * license (including the GNU public license).
  */
-#ifndef _SIV_H_
-#define _SIV_H_
+#ifndef _SAE_SIV_H_
+#define _SAE_SIV_H_
 
 #include <openssl/aes.h>
 
@@ -75,4 +75,4 @@ int siv_encrypt(siv_ctx *, const unsigned char *, unsigned char *,
 int siv_decrypt(siv_ctx *, const unsigned char *, unsigned char *,
                 const int, unsigned char *, const int, ... );
 
-#endif /* _SIV_H_ */
+#endif /* _SAE_SIV_H_ */

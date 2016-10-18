@@ -38,7 +38,9 @@
 
 #ifndef _SAE_H_
 #define _SAE_H_
+
 #include <libconfig.h>
+
 #include "ieee802_11.h"
 
 #define    SAE_MAX_EC_GROUPS    10

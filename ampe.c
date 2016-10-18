@@ -210,6 +210,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh)
             goto out;
         case CHAN_HT20:
             ht20 = true;
+            break;
         default:
             break;
         }
@@ -294,7 +295,7 @@ static void plink_timer(timerid id, void *data)
 			break;
 		}
 		reason = htole16(MESH_MAX_RETRIES);
-		/* fall through on else */
+		/* no break / fall through on else */
 	case PLINK_CNF_RCVD:
 		/* confirm timer */
 		if (!reason)
@@ -677,7 +678,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
                 ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
                 break;
             }
-            if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
+            if ((sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) &&
                 mesh->conf->channel_type > CHAN_HT20)
                     ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 
@@ -775,6 +776,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);
@@ -804,6 +806,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);
@@ -844,6 +847,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_RJCT:
 		case CNF_RJCT:
 			reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+			/* no break */
 		case CLS_ACPT:
 			if (!reason)
 				reason = htole16(MESH_CLOSE_RCVD);

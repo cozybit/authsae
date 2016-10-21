@@ -47,8 +47,6 @@
 #include <sys/endian.h>
 #endif
 
-#include <stdint.h>
-
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 /*
  * IEEE does things backwards, networking in non-network order.

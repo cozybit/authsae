@@ -236,8 +236,11 @@ delete_peer (struct candidate **delme)
                 }
             }
             srv_rem_timeout(srvctx, peer->t0);     /* no harm if not set */
+            peer->t0 = 0;
             srv_rem_timeout(srvctx, peer->t1);     /*      ditto         */
+            peer->t1 = 0;
             srv_rem_timeout(srvctx, peer->t2);     /*      ditto         */
+            peer->t2 = 0;
             TAILQ_REMOVE(&peers, peer, entry);
             /*
              * PWE, the private value, the PMK and KCK are all secret so
@@ -1428,6 +1431,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
               state_to_string(peer->state));
 
     srv_rem_timeout(srvctx, peer->t0);
+    peer->t0 = 0;
     /*
      * implement the state machine for SAE
      */

@@ -1307,29 +1307,29 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
         config->meshid_len = strlen(config->meshid);
     }
 
-#define CONFIG_LOOKUP(name, config_val) \
+#define CONFIG_LOOKUP(name, config_val, dflt) \
     if (CONFIG_FALSE == config_setting_lookup_int(meshd_section, #name, (config_int_t *)&config->config_val)) \
-        config->config_val = -1;
+        config->config_val = dflt;
 
-    CONFIG_LOOKUP(channel, channel);
-    CONFIG_LOOKUP(mcast-rate, mcast_rate);
-    CONFIG_LOOKUP(beacon-interval,beacon_interval);
+    CONFIG_LOOKUP(channel, channel, -1);
+    CONFIG_LOOKUP(mcast-rate, mcast_rate, -1);
+    CONFIG_LOOKUP(beacon-interval,beacon_interval, -1);
 
     config_setting_lookup_int(meshd_section, "pmf",
             (config_int_t *) &config->pmf);
 
     /* Get mesh parameter */
-    CONFIG_LOOKUP(path-refresh-time,path_refresh_time);
-    CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout);
-    CONFIG_LOOKUP(gate-announcements,gate_announcements);
-    CONFIG_LOOKUP(hwmp-active-path-timeout,hwmp_active_path_timeout);
+    CONFIG_LOOKUP(path-refresh-time,path_refresh_time, -1);
+    CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout, -1);
+    CONFIG_LOOKUP(gate-announcements,gate_announcements, -1);
+    CONFIG_LOOKUP(hwmp-active-path-timeout,hwmp_active_path_timeout, -1);
     CONFIG_LOOKUP(hwmp-net-diameter-traversal-time,
-            hwmp_net_diameter_traversal_time);
-    CONFIG_LOOKUP(hwmp-rootmode,hwmp_rootmode);
-    CONFIG_LOOKUP(hwmp-rann-interval,hwmp_rann_interval);
+            hwmp_net_diameter_traversal_time, -1);
+    CONFIG_LOOKUP(hwmp-rootmode,hwmp_rootmode, -1);
+    CONFIG_LOOKUP(hwmp-rann-interval,hwmp_rann_interval, -1);
     CONFIG_LOOKUP(hwmp-active-path-to-root-timeout,
-            hwmp_active_path_to_root_timeout);
-    CONFIG_LOOKUP(hwmp-root-interval,hwmp_root_interval);
+            hwmp_active_path_to_root_timeout, -1);
+    CONFIG_LOOKUP(hwmp-root-interval,hwmp_root_interval, -1);
 #undef CONFIG_LOOKUP
 
     config->band = MESHD_11b;

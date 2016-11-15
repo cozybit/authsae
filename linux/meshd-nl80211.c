@@ -43,6 +43,11 @@
 #include <netlink/genl/genl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#if defined(__linux__) && !defined(__ANDROID__)
+  #ifdef __GLIBC__
+    #include <execinfo.h>
+  #endif
+#endif /* defined(__linux__) && !defined(__ANDROID__) */
 
 #include "ampe.h"
 #include "common.h"
@@ -1248,6 +1253,31 @@ void term_handle(int i)
     srv_cancel_main_loop(srvctx);
 }
 
+#if defined(__linux__) && !defined(__ANDROID__)
+__attribute__((noreturn))
+static void segv_handle(int sig) {
+
+#ifdef __GLIBC__
+  void *bt_array[64];
+  size_t bt_size;
+  size_t bt_index = 0;
+  char ** bt_syms;
+
+  bt_size = backtrace(bt_array, 64);
+  bt_syms = backtrace_symbols(bt_array, bt_size);
+
+  sae_debug(SAE_DEBUG_ERR, "%s\n", "crash");
+  while (bt_index < bt_size) {
+    sae_debug(SAE_DEBUG_ERR, "%s\n", bt_syms[bt_index++]);
+  }
+#else
+  sae_debug(SAE_DEBUG_ERR, "crash (logging a stack trace is not supported on this platform)", message);
+#endif
+
+  exit(126);
+}
+#endif /* defined(__linux__) && !defined(__ANDROID__) */
+
 /* TODO: This config stuff should be in a common file to be shared by other
  * meshd implementations
  */
@@ -1419,6 +1449,7 @@ int main(int argc, char *argv[])
     sae_debug_mask = SAE_DEBUG_ERR;
     signal(SIGTERM, term_handle);
     signal(SIGINT, term_handle);
+    signal(SIGSEGV, segv_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));
 

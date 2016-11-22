@@ -69,7 +69,7 @@ LIST(APPEND libsae_sources
 	crypto/aes_siv.c
 )
 
-ADD_LIBRARY(sae ${libsae_sources})
+ADD_LIBRARY(sae STATIC ${libsae_sources})
 TARGET_LINK_LIBRARIES(sae ${libsae_libs})
 
 #####################################################################

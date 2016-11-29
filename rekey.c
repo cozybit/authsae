@@ -456,6 +456,7 @@ static void ping_tx(timerid id, void *data) {
 
     /* check whether we can do another reauth */
     if (peer->rekey_reauth_count < cfg->conf->rekey_reauth_count_max) {
+      rekey_reopen_sockets();
       peer->rekey_reauth_count++;
       sae_debug(SAE_DEBUG_PROTOCOL_MSG, "rekey: reauthentication #%u for %02x:%02x:%02x:%02x:%02x:%02x\n",
           peer->rekey_reauth_count, EXPLODE_MAC(peer->peer_mac));

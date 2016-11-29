@@ -626,10 +626,10 @@ void rekey_close(void) {
  */
 
 /* volatile because it is accessed from multiple threads */
-static volatile bool ip_changes = false;
+static volatile bool reopen_sockets = false;
 
-void rekey_ip_changes(void) {
-  ip_changes = true;
+void rekey_reopen_sockets(void) {
+  reopen_sockets = true;
 }
 
 void rekey_verify_peer(struct candidate *peer) {
@@ -637,9 +637,9 @@ void rekey_verify_peer(struct candidate *peer) {
     return;
   }
 
-  if (ip_changes || !ALL_SOCKETS_OPEN) {
+  if (reopen_sockets || !ALL_SOCKETS_OPEN) {
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "rekey: reopening sockets\n");
-    ip_changes = false;
+    reopen_sockets = false;
     rekey_sockets_reopen();
   }
 

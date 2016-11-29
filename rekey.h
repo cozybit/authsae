@@ -59,6 +59,6 @@ void rekey_init(service_context srvctx, struct mesh_node *mesh);
 void rekey_close(void);
 
 void rekey_verify_peer(struct candidate *peer);
-void rekey_ip_changes(void);
+void rekey_reopen_sockets(void);
 
 #endif  /* _SAE_REKEY_H_ */

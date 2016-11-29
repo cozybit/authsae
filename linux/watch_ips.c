@@ -150,7 +150,7 @@ static void* monitor_interface_addresses(void *info) {
     }
 
     if (run && changed) {
-      rekey_ip_changes();
+      rekey_reopen_sockets();
     }
   }
 

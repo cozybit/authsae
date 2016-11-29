@@ -1283,7 +1283,7 @@ static void segv_handle(int sig) {
 
 void hup_handle(int i)
 {
-    rekey_ip_changes();
+    rekey_reopen_sockets();
 }
 
 /* TODO: This config stuff should be in a common file to be shared by other

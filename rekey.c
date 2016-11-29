@@ -145,6 +145,15 @@ static bool get_ip_address(int af, const char* iface, uint32_t* ip) {
   return r;
 }
 
+static bool bind_socket_to_interface(int sock, const char* iface) {
+  struct ifreq ifr;
+  memset(&ifr, 0, sizeof(ifr));
+  strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+  ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = '\0';
+
+  return !setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (void *) &ifr, sizeof(ifr));
+}
+
 static bool bind_socket(int sock, int af, uint32_t ip, in_port_t port) {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -281,13 +290,17 @@ static void pong_socket_close(void) {
   pong_socket = -1;
 }
 
-static void pong_socket_create(int af, uint32_t ip) {
+static void pong_socket_create(const char* iface, int af) {
   pong_socket = create_socket(af);
   if (pong_socket == -1) {
     goto err;
   }
 
-  if (!bind_socket(pong_socket, af, ip, cfg->conf->rekey_pong_port)) {
+  if (!bind_socket_to_interface(pong_socket, iface)) {
+    goto err;
+  }
+
+  if (!bind_socket(pong_socket, af, htonl(INADDR_ANY), cfg->conf->rekey_pong_port)) {
     goto err;
   }
 
@@ -381,7 +394,7 @@ static void ping_rx(int sock, void *data) {
       sizeof(packet->ping));
 }
 
-static void ping_socket_close_rx(int af, uint32_t ip) {
+static void ping_socket_close_rx(int af) {
   if (ping_socket_rx == -1) {
     return;
   }
@@ -389,7 +402,7 @@ static void ping_socket_close_rx(int af, uint32_t ip) {
   struct ip_mreq mreq;
   memset(&mreq, 0, sizeof(mreq));
   mreq.imr_multiaddr.s_addr = cfg->conf->rekey_multicast_group_address.v4.s_addr;
-  mreq.imr_interface.s_addr = ip;
+  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 
   (void) setsockopt(ping_socket_rx, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 
@@ -399,9 +412,13 @@ static void ping_socket_close_rx(int af, uint32_t ip) {
   ping_socket_rx = -1;
 }
 
-static void ping_socket_create_rx(int af, uint32_t ip) {
+static void ping_socket_create_rx(const char* iface, int af) {
   ping_socket_rx = create_socket(af);
   if (ping_socket_rx == -1) {
+    goto err;
+  }
+
+  if (!bind_socket_to_interface(ping_socket_rx, iface)) {
     goto err;
   }
 
@@ -417,7 +434,7 @@ static void ping_socket_create_rx(int af, uint32_t ip) {
   struct ip_mreq mreq;
   memset(&mreq, 0, sizeof(mreq));
   mreq.imr_multiaddr.s_addr = cfg->conf->rekey_multicast_group_address.v4.s_addr;
-  mreq.imr_interface.s_addr = ip;
+  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 
   if (setsockopt(ping_socket_rx, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == -1) {
     goto err;
@@ -429,7 +446,7 @@ static void ping_socket_create_rx(int af, uint32_t ip) {
 
   return;
 
-  err: ping_socket_close_rx(af, ip);
+  err: ping_socket_close_rx(af);
   return;
 }
 
@@ -513,13 +530,13 @@ static void ping_socket_close_tx(void) {
   ping_socket_tx = -1;
 }
 
-static void ping_socket_create_tx(int af, uint32_t ip) {
+static void ping_socket_create_tx(const char* iface, int af) {
   ping_socket_tx = create_socket(af);
   if (ping_socket_tx == -1) {
     goto err;
   }
 
-  if (!bind_socket(ping_socket_tx, af, ip, htons(0))) {
+  if (!bind_socket_to_interface(ping_socket_tx, iface)) {
     goto err;
   }
 
@@ -549,37 +566,38 @@ static void ping_socket_create_tx(int af, uint32_t ip) {
 
 #define ALL_SOCKETS_OPEN ((ping_socket_tx != -1) && (ping_socket_rx != -1) && (pong_socket != -1))
 
-static void rekey_sockets_close(void) {
-  int af = cfg->conf->rekey_multicast_group_family;
-
+static void rekey_sockets_close(int af) {
   ping_socket_close_tx();
-  ping_socket_close_rx(af, my_ip);
+  ping_socket_close_rx(af);
   pong_socket_close();
 }
 
 static void rekey_sockets_reopen(void) {
-  rekey_sockets_close();
-
   int af = cfg->conf->rekey_multicast_group_family;
+
+  rekey_sockets_close(af);
 
   if (!get_interface_mac_address(af, cfg->conf->interface, my_mac, sizeof(my_mac))) {
     goto err;
   }
 
   bool bridge = (cfg->conf->bridge[0] != '\0');
+  char *iface = NULL;
 
   memset(&my_ip, 0, sizeof(my_ip));
   bool ip_ok = false;
 
   if (bridge) {
-    ip_ok = get_ip_address(af, cfg->conf->bridge, &my_ip);
+    iface = cfg->conf->bridge;
+    ip_ok = get_ip_address(af, iface, &my_ip);
     cfg->conf->rekey_interface_is_bridge = ip_ok;
   }
 
   if (!ip_ok) {
     bridge = false;
+    iface = cfg->conf->interface;
     cfg->conf->rekey_interface_is_bridge = false;
-    ip_ok = get_ip_address(af, cfg->conf->interface, &my_ip);
+    ip_ok = get_ip_address(af, iface, &my_ip);
   }
 
   if (!ip_ok) {
@@ -593,15 +611,15 @@ static void rekey_sockets_reopen(void) {
     goto err;
   }
 
-  pong_socket_create(af, my_ip);
-  ping_socket_create_rx(af, my_ip);
-  ping_socket_create_tx(af, my_ip);
+  pong_socket_create(iface, af);
+  ping_socket_create_rx(iface, af);
+  ping_socket_create_tx(iface, af);
 
   if (ALL_SOCKETS_OPEN) {
     return;
   }
 
-  err: rekey_sockets_close();
+  err: rekey_sockets_close(af);
   memset(&my_ip, 0, sizeof(my_ip));
   memset(my_mac, 0, sizeof(my_mac));
 }
@@ -616,7 +634,9 @@ void rekey_init(service_context context, struct mesh_node *config) {
 }
 
 void rekey_close(void) {
-  rekey_sockets_close();
+  int af = cfg->conf->rekey_multicast_group_family;
+
+  rekey_sockets_close(af);
 
   cfg = NULL;
   ctx = NULL;

@@ -1281,6 +1281,11 @@ static void segv_handle(int sig) {
 }
 #endif /* defined(__linux__) && !defined(__ANDROID__) */
 
+void hup_handle(int i)
+{
+    rekey_ip_changes();
+}
+
 /* TODO: This config stuff should be in a common file to be shared by other
  * meshd implementations
  */
@@ -1537,6 +1542,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, term_handle);
     signal(SIGINT, term_handle);
     signal(SIGSEGV, segv_handle);
+    signal(SIGHUP, hup_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));
 

@@ -248,7 +248,7 @@ static void pong_rx(int sock, void *data) {
 
     struct candidate *peer = find_peer(packet->pong.pong_mac, 1);
     if (!peer) {
-      sae_debug(SAE_DEBUG_ERR, "rekey: pong from %s sent unknown peer MAC %u:%u:%u:%u:%u:%u, ignored\n",
+      sae_debug(SAE_DEBUG_ERR, "rekey: pong from %s sent unknown peer MAC %02x:%02x:%02x:%02x:%02x:%02x, ignored\n",
           inet_ntop(src.sa_family, get_socket_address_ip((struct sockaddr *) &src), str, sizeof(str)),
           EXPLODE_MAC(packet->pong.pong_mac));
       return;
@@ -350,7 +350,8 @@ static void ping_rx(int sock, void *data) {
     }
 
     if (memcmp(packet->ping.ping_mac, my_mac, sizeof(my_mac))) {
-      sae_debug(SAE_DEBUG_ERR, "rekey: ping from %s sent MAC %u:%u:%u:%u:%u:%u instead of %u:%u:%u:%u:%u:%u, ignored\n",
+      sae_debug(SAE_DEBUG_ERR,
+          "rekey: ping from %s sent MAC %02x:%02x:%02x:%02x:%02x:%02x instead of %02x:%02x:%02x:%02x:%02x:%02x, ignored\n",
           inet_ntop(src.sa_family, get_socket_address_ip((struct sockaddr *) &src), str, sizeof(str)),
           EXPLODE_MAC(packet->ping.ping_mac), EXPLODE_MAC(my_mac));
       return;
@@ -358,7 +359,7 @@ static void ping_rx(int sock, void *data) {
 
     struct candidate *peer = find_peer(packet->ping.pong_mac, 1);
     if (!peer) {
-      sae_debug(SAE_DEBUG_ERR, "rekey: ping from %s sent unknown peer MAC %u:%u:%u:%u:%u:%u, ignored\n",
+      sae_debug(SAE_DEBUG_ERR, "rekey: ping from %s sent unknown peer MAC %02x:%02x:%02x:%02x:%02x:%02x, ignored\n",
           inet_ntop(src.sa_family, get_socket_address_ip((struct sockaddr *) &src), str, sizeof(str)),
           EXPLODE_MAC(packet->ping.ping_mac));
       return;

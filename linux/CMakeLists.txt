@@ -90,6 +90,7 @@ LIST(APPEND meshd_sources
 	../common.c
 	../service.c
 	../ampe.c
+	../rekey.c
 	../crypto/aes_siv.c
 )
 
@@ -101,11 +102,14 @@ INSTALL(TARGETS meshd DESTINATION bin)
 MESSAGE(STATUS "")
 MESSAGE(STATUS "Configuring meshd-nl80211 ...")
 
+FIND_PACKAGE(Threads REQUIRED)
+
 LIST(APPEND meshd_nl80211_libs
 	${LIBCONFIG_LIBRARIES}
 	${LIBCRYPTO_LIBRARIES}
 	${LIBNL_LIBRARIES}
 	${LIBNL_GENL_LIBRARIES}
+	${CMAKE_THREAD_LIBS_INIT}
 	sae
 )
 
@@ -118,6 +122,7 @@ ENDIF(LIBRT)
 LIST(APPEND meshd_nl80211_sources
 	meshd-nl80211.c
 	nlutils.c
+	watch_ips.c
 )
 
 ADD_EXECUTABLE(meshd-nl80211 ${meshd_nl80211_sources})

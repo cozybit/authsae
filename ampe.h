@@ -2,6 +2,7 @@
 #define _SAE_AMPE_H_
 
 #include <net/if.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -52,6 +53,11 @@ struct ieee80211_supported_band {
 	struct local_ht_caps ht_cap;
 };
 
+typedef union {
+    struct in_addr v4;
+    struct in6_addr v6;
+} ip_address;
+
 /* mesh configuration parameters. Our bss_conf */
 struct meshd_config {
     char interface[IFNAMSIZ + 1];
@@ -79,6 +85,19 @@ struct meshd_config {
     int hwmp_rann_interval;
     int hwmp_active_path_to_root_timeout;
     int hwmp_root_interval;
+
+    int rekey_enable;
+    volatile bool rekey_interface_is_bridge;
+    char bridge[IFNAMSIZ + 1];
+    int rekey_multicast_group_family;
+    ip_address rekey_multicast_group_address;
+    int rekey_ping_port;
+    int rekey_pong_port;
+    int rekey_ping_count_max;
+    int rekey_ping_timeout;
+    int rekey_ping_jitter;
+    int rekey_reauth_count_max;
+    int rekey_ok_ping_count_max;
 };
 
 /* the single global interface and mesh node info we're handling.

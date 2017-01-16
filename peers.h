@@ -71,6 +71,12 @@ struct candidate {
     struct ampe_config *conf;
     unsigned int ch_type; /* nl80211_channel_type */
     int candidate_id;
+
+    timerid rekey_ping_timer;
+    unsigned int rekey_ping_count;
+    unsigned int rekey_reauth_count;
+    unsigned int rekey_ok;
+    unsigned int rekey_ok_ping_rx;
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

@@ -38,6 +38,7 @@
  * license (including the GNU public license).
  */
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <netlink/genl/genl.h>
@@ -54,8 +55,10 @@
 #include "nl80211-copy.h"
 #include "nlutils.h"
 #include "peers.h"
+#include "rekey.h"
 #include "sae.h"
 #include "service.h"
+#include "watch_ips.h"
 
 #define CIPHER_CCMP 0x000FAC04
 #define CIPHER_AES_CMAC 0x000FAC06
@@ -1278,6 +1281,11 @@ static void segv_handle(int sig) {
 }
 #endif /* defined(__linux__) && !defined(__ANDROID__) */
 
+void hup_handle(int i)
+{
+    rekey_reopen_sockets();
+}
+
 /* TODO: This config stuff should be in a common file to be shared by other
  * meshd implementations
  */
@@ -1307,30 +1315,29 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
         config->meshid_len = strlen(config->meshid);
     }
 
-#define CONFIG_LOOKUP(name, config_val) \
+#define CONFIG_LOOKUP(name, config_val, dflt) \
     if (CONFIG_FALSE == config_setting_lookup_int(meshd_section, #name, (config_int_t *)&config->config_val)) \
-        config->config_val = -1;
+        config->config_val = dflt;
 
-    CONFIG_LOOKUP(channel, channel);
-    CONFIG_LOOKUP(mcast-rate, mcast_rate);
-    CONFIG_LOOKUP(beacon-interval,beacon_interval);
+    CONFIG_LOOKUP(channel, channel, -1);
+    CONFIG_LOOKUP(mcast-rate, mcast_rate, -1);
+    CONFIG_LOOKUP(beacon-interval,beacon_interval, -1);
 
     config_setting_lookup_int(meshd_section, "pmf",
             (config_int_t *) &config->pmf);
 
     /* Get mesh parameter */
-    CONFIG_LOOKUP(path-refresh-time,path_refresh_time);
-    CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout);
-    CONFIG_LOOKUP(gate-announcements,gate_announcements);
-    CONFIG_LOOKUP(hwmp-active-path-timeout,hwmp_active_path_timeout);
+    CONFIG_LOOKUP(path-refresh-time,path_refresh_time, -1);
+    CONFIG_LOOKUP(min-discovery-timeout,min_discovery_timeout, -1);
+    CONFIG_LOOKUP(gate-announcements,gate_announcements, -1);
+    CONFIG_LOOKUP(hwmp-active-path-timeout,hwmp_active_path_timeout, -1);
     CONFIG_LOOKUP(hwmp-net-diameter-traversal-time,
-            hwmp_net_diameter_traversal_time);
-    CONFIG_LOOKUP(hwmp-rootmode,hwmp_rootmode);
-    CONFIG_LOOKUP(hwmp-rann-interval,hwmp_rann_interval);
+            hwmp_net_diameter_traversal_time, -1);
+    CONFIG_LOOKUP(hwmp-rootmode,hwmp_rootmode, -1);
+    CONFIG_LOOKUP(hwmp-rann-interval,hwmp_rann_interval, -1);
     CONFIG_LOOKUP(hwmp-active-path-to-root-timeout,
-            hwmp_active_path_to_root_timeout);
-    CONFIG_LOOKUP(hwmp-root-interval,hwmp_root_interval);
-#undef CONFIG_LOOKUP
+            hwmp_active_path_to_root_timeout, -1);
+    CONFIG_LOOKUP(hwmp-root-interval,hwmp_root_interval, -1);
 
     config->band = MESHD_11b;
 
@@ -1360,6 +1367,89 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
             sae_debug(MESHD_DEBUG, "unknown HT mode \"%s\", disabling\n", str);
         }
     }
+
+    CONFIG_LOOKUP(rekey_enable, rekey_enable, REKEY_ENABLE_DEF);
+    config->rekey_enable = (config->rekey_enable != 0);
+
+    if (config_setting_lookup_string(meshd_section, "bridge", (const char **) &str)) {
+      strncpy(config->bridge, str, sizeof(config->bridge));
+      if (config->bridge[sizeof(config->bridge) - 1] != '\0') {
+        fprintf(stderr, "Bridge name is too long\n");
+        return -1;
+      }
+    }
+
+    config->rekey_multicast_group_family = REKEY_MULTICAST_GROUP_FAMILY_DEF;
+    config->rekey_multicast_group_address.v4.s_addr = REKEY_MULTICAST_GROUP_ADDRESS_DEF;
+    bool groupValid = true;
+    if (config_setting_lookup_string(meshd_section, "rekey_multicast_group", (const char **) &str)) {
+      if (inet_pton(AF_INET, str, &config->rekey_multicast_group_address.v4)) {
+        config->rekey_multicast_group_family = AF_INET;
+        groupValid = IN_MULTICAST(ntohl(config->rekey_multicast_group_address.v4.s_addr));
+      } else if (inet_pton(AF_INET6, str, &config->rekey_multicast_group_address.v6)) {
+        config->rekey_multicast_group_family = AF_INET6;
+        groupValid = IN6_IS_ADDR_MULTICAST(&config->rekey_multicast_group_address.v6);
+      } else {
+        groupValid = false;
+      }
+    }
+
+    if (!groupValid) {
+      fprintf(stderr, "Invalid rekey multicast group '%s'\n", str);
+      return -1;
+    }
+
+    /* IPv6 is currently not implemented for rekey */
+    if (config->rekey_multicast_group_family == AF_INET6) {
+      fprintf(stderr, "IPv6 is currently not supported for rekey\n");
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_ping_port, rekey_ping_port, REKEY_PING_PORT_DEF);
+    if ((config->rekey_ping_port <= 0) || (config->rekey_ping_port >= 65536)) {
+      fprintf(stderr, "Invalid rekey ping port %d\n", config->rekey_ping_port);
+      return -1;
+    }
+    config->rekey_ping_port = htons(config->rekey_ping_port);
+
+    CONFIG_LOOKUP(rekey_pong_port, rekey_pong_port, REKEY_PONG_PORT_DEF);
+    if ((config->rekey_pong_port <= 0) || (config->rekey_pong_port >= 65536)) {
+      fprintf(stderr, "Invalid rekey pong port %d\n", config->rekey_pong_port);
+      return -1;
+    }
+    config->rekey_pong_port = htons(config->rekey_pong_port);
+
+    CONFIG_LOOKUP(rekey_ping_count_max, rekey_ping_count_max, REKEY_PING_COUNT_MAX_DEF);
+    if (config->rekey_ping_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey ping count maximum %d\n", config->rekey_ping_count_max);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_ping_timeout, rekey_ping_timeout, REKEY_PING_TIMEOUT_MSECS_DEF);
+    if (config->rekey_ping_timeout <= 0) {
+      fprintf(stderr, "Invalid rekey ping timeout %d\n", config->rekey_ping_timeout);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_ping_jitter, rekey_ping_jitter, REKEY_PING_JITTER_MSECS_DEF);
+    if (config->rekey_ping_jitter <= 0) {
+      fprintf(stderr, "Invalid rekey ping jitter %d\n", config->rekey_ping_jitter);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_reauth_count_max, rekey_reauth_count_max, REKEY_REAUTH_COUNT_MAX_DEF);
+    if (config->rekey_reauth_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey reauthorisation count maximum %d\n", config->rekey_reauth_count_max);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_ok_ping_count_max, rekey_ok_ping_count_max, REKEY_OK_PING_COUNT_MAX_DEF);
+    if (config->rekey_ok_ping_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey ok ping count maximum %d\n", config->rekey_ok_ping_count_max);
+      return -1;
+    }
+
+#undef CONFIG_LOOKUP
 
     return 0;
 }
@@ -1450,6 +1540,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, term_handle);
     signal(SIGINT, term_handle);
     signal(SIGSEGV, segv_handle);
+    signal(SIGHUP, hup_handle);
 
     memset(&nlcfg, 0, sizeof(nlcfg));
 
@@ -1604,8 +1695,16 @@ int main(int argc, char *argv[])
 
     get_wiphy(&nlcfg);
 
+    rekey_init(srvctx, &mesh);
+    watch_ips_init(&mesh);
+
     srv_main_loop(srvctx);
+
+    watch_ips_close();
+    rekey_close();
+
     leave_mesh(&nlcfg);
+
 out:
     return exitcode;
 }

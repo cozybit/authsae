@@ -37,6 +37,7 @@
 
 #include "os_glue.h"
 #include "peers.h"
+#include "rekey.h"
 #include "sae.h"
 
 /* Peer link cancel reasons */
@@ -814,6 +815,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
             changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
+            rekey_verify_peer(cand);
 			break;
 		default:
 			break;
@@ -852,6 +854,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			sae_debug(AMPE_DEBUG_FSM, "Mesh plink with "
                     MACSTR " ESTABLISHED\n", MAC2STR(cand->peer_mac));
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
+			rekey_verify_peer(cand);
 			break;
 		default:
 			break;

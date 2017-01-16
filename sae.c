@@ -241,6 +241,8 @@ delete_peer (struct candidate **delme)
             peer->t1 = 0;
             srv_rem_timeout(srvctx, peer->t2);     /*      ditto         */
             peer->t2 = 0;
+            srv_rem_timeout(srvctx, peer->rekey_ping_timer);
+            peer->rekey_ping_timer = 0;
             TAILQ_REMOVE(&peers, peer, entry);
             /*
              * PWE, the private value, the PMK and KCK are all secret so

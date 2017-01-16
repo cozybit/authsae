@@ -655,10 +655,6 @@ void rekey_reopen_sockets(void) {
 }
 
 void rekey_verify_peer(struct candidate *peer) {
-  if (!cfg || !cfg->conf->rekey_enable || !peer) {
-    return;
-  }
-
   if (reopen_sockets || !ALL_SOCKETS_OPEN) {
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "rekey: reopening sockets\n");
     reopen_sockets = false;
@@ -667,6 +663,10 @@ void rekey_verify_peer(struct candidate *peer) {
 
   if (!ALL_SOCKETS_OPEN) {
     sae_debug(SAE_DEBUG_ERR, "rekey: failed to open sockets\n");
+    return;
+  }
+
+  if (!cfg || !cfg->conf->rekey_enable || !peer) {
     return;
   }
 

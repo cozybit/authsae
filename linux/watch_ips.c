@@ -164,7 +164,7 @@ static void* monitor_interface_addresses(void *info) {
 }
 
 void watch_ips_init(struct mesh_node *config) {
-  if (thread || !config->conf->rekey_enable) {
+  if (thread) {
     return;
   }
 

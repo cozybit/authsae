@@ -1371,84 +1371,82 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     CONFIG_LOOKUP(rekey_enable, rekey_enable, REKEY_ENABLE_DEF);
     config->rekey_enable = (config->rekey_enable != 0);
 
-    if (config->rekey_enable) {
-      if (config_setting_lookup_string(meshd_section, "bridge", (const char **) &str)) {
-        strncpy(config->bridge, str, sizeof(config->bridge));
-        if (config->bridge[sizeof(config->bridge) - 1] != '\0') {
-          fprintf(stderr, "Bridge name is too long\n");
-          return -1;
-        }
-      }
-
-      config->rekey_multicast_group_family = REKEY_MULTICAST_GROUP_FAMILY_DEF;
-      config->rekey_multicast_group_address.v4.s_addr = REKEY_MULTICAST_GROUP_ADDRESS_DEF;
-      bool groupValid = true;
-      if (config_setting_lookup_string(meshd_section, "rekey_multicast_group", (const char **) &str)) {
-        if (inet_pton(AF_INET, str, &config->rekey_multicast_group_address.v4)) {
-          config->rekey_multicast_group_family = AF_INET;
-          groupValid = IN_MULTICAST(ntohl(config->rekey_multicast_group_address.v4.s_addr));
-        } else if (inet_pton(AF_INET6, str, &config->rekey_multicast_group_address.v6)) {
-          config->rekey_multicast_group_family = AF_INET6;
-          groupValid = IN6_IS_ADDR_MULTICAST(&config->rekey_multicast_group_address.v6);
-        } else {
-          groupValid = false;
-        }
-      }
-
-      if (!groupValid) {
-        fprintf(stderr, "Invalid rekey multicast group '%s'\n", str);
+    if (config_setting_lookup_string(meshd_section, "bridge", (const char **) &str)) {
+      strncpy(config->bridge, str, sizeof(config->bridge));
+      if (config->bridge[sizeof(config->bridge) - 1] != '\0') {
+        fprintf(stderr, "Bridge name is too long\n");
         return -1;
       }
+    }
 
-      /* IPv6 is currently not implemented for rekey */
-      if (config->rekey_multicast_group_family == AF_INET6) {
-        fprintf(stderr, "IPv6 is currently not supported for rekey\n");
-        return -1;
+    config->rekey_multicast_group_family = REKEY_MULTICAST_GROUP_FAMILY_DEF;
+    config->rekey_multicast_group_address.v4.s_addr = REKEY_MULTICAST_GROUP_ADDRESS_DEF;
+    bool groupValid = true;
+    if (config_setting_lookup_string(meshd_section, "rekey_multicast_group", (const char **) &str)) {
+      if (inet_pton(AF_INET, str, &config->rekey_multicast_group_address.v4)) {
+        config->rekey_multicast_group_family = AF_INET;
+        groupValid = IN_MULTICAST(ntohl(config->rekey_multicast_group_address.v4.s_addr));
+      } else if (inet_pton(AF_INET6, str, &config->rekey_multicast_group_address.v6)) {
+        config->rekey_multicast_group_family = AF_INET6;
+        groupValid = IN6_IS_ADDR_MULTICAST(&config->rekey_multicast_group_address.v6);
+      } else {
+        groupValid = false;
       }
+    }
 
-      CONFIG_LOOKUP(rekey_ping_port, rekey_ping_port, REKEY_PING_PORT_DEF);
-      if ((config->rekey_ping_port <= 0) || (config->rekey_ping_port >= 65536)) {
-        fprintf(stderr, "Invalid rekey ping port %d\n", config->rekey_ping_port);
-        return -1;
-      }
-      config->rekey_ping_port = htons(config->rekey_ping_port);
+    if (!groupValid) {
+      fprintf(stderr, "Invalid rekey multicast group '%s'\n", str);
+      return -1;
+    }
 
-      CONFIG_LOOKUP(rekey_pong_port, rekey_pong_port, REKEY_PONG_PORT_DEF);
-      if ((config->rekey_pong_port <= 0) || (config->rekey_pong_port >= 65536)) {
-        fprintf(stderr, "Invalid rekey pong port %d\n", config->rekey_pong_port);
-        return -1;
-      }
-      config->rekey_pong_port = htons(config->rekey_pong_port);
+    /* IPv6 is currently not implemented for rekey */
+    if (config->rekey_multicast_group_family == AF_INET6) {
+      fprintf(stderr, "IPv6 is currently not supported for rekey\n");
+      return -1;
+    }
 
-      CONFIG_LOOKUP(rekey_ping_count_max, rekey_ping_count_max, REKEY_PING_COUNT_MAX_DEF);
-      if (config->rekey_ping_count_max <= 0) {
-        fprintf(stderr, "Invalid rekey ping count maximum %d\n", config->rekey_ping_count_max);
-        return -1;
-      }
+    CONFIG_LOOKUP(rekey_ping_port, rekey_ping_port, REKEY_PING_PORT_DEF);
+    if ((config->rekey_ping_port <= 0) || (config->rekey_ping_port >= 65536)) {
+      fprintf(stderr, "Invalid rekey ping port %d\n", config->rekey_ping_port);
+      return -1;
+    }
+    config->rekey_ping_port = htons(config->rekey_ping_port);
 
-      CONFIG_LOOKUP(rekey_ping_timeout, rekey_ping_timeout, REKEY_PING_TIMEOUT_MSECS_DEF);
-      if (config->rekey_ping_timeout <= 0) {
-        fprintf(stderr, "Invalid rekey ping timeout %d\n", config->rekey_ping_timeout);
-        return -1;
-      }
+    CONFIG_LOOKUP(rekey_pong_port, rekey_pong_port, REKEY_PONG_PORT_DEF);
+    if ((config->rekey_pong_port <= 0) || (config->rekey_pong_port >= 65536)) {
+      fprintf(stderr, "Invalid rekey pong port %d\n", config->rekey_pong_port);
+      return -1;
+    }
+    config->rekey_pong_port = htons(config->rekey_pong_port);
 
-      CONFIG_LOOKUP(rekey_ping_jitter, rekey_ping_jitter, REKEY_PING_JITTER_MSECS_DEF);
-      if (config->rekey_ping_jitter <= 0) {
-        fprintf(stderr, "Invalid rekey ping jitter %d\n", config->rekey_ping_jitter);
-        return -1;
-      }
+    CONFIG_LOOKUP(rekey_ping_count_max, rekey_ping_count_max, REKEY_PING_COUNT_MAX_DEF);
+    if (config->rekey_ping_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey ping count maximum %d\n", config->rekey_ping_count_max);
+      return -1;
+    }
 
-      CONFIG_LOOKUP(rekey_reauth_count_max, rekey_reauth_count_max, REKEY_REAUTH_COUNT_MAX_DEF);
-      if (config->rekey_reauth_count_max <= 0) {
-        fprintf(stderr, "Invalid rekey reauthorisation count maximum %d\n", config->rekey_reauth_count_max);
-        return -1;
-      }
+    CONFIG_LOOKUP(rekey_ping_timeout, rekey_ping_timeout, REKEY_PING_TIMEOUT_MSECS_DEF);
+    if (config->rekey_ping_timeout <= 0) {
+      fprintf(stderr, "Invalid rekey ping timeout %d\n", config->rekey_ping_timeout);
+      return -1;
+    }
 
-      CONFIG_LOOKUP(rekey_ok_ping_count_max, rekey_ok_ping_count_max, REKEY_OK_PING_COUNT_MAX_DEF);
-      if (config->rekey_ok_ping_count_max <= 0) {
-        fprintf(stderr, "Invalid rekey ok ping count maximum %d\n", config->rekey_ok_ping_count_max);
-        return -1;
-      }
+    CONFIG_LOOKUP(rekey_ping_jitter, rekey_ping_jitter, REKEY_PING_JITTER_MSECS_DEF);
+    if (config->rekey_ping_jitter <= 0) {
+      fprintf(stderr, "Invalid rekey ping jitter %d\n", config->rekey_ping_jitter);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_reauth_count_max, rekey_reauth_count_max, REKEY_REAUTH_COUNT_MAX_DEF);
+    if (config->rekey_reauth_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey reauthorisation count maximum %d\n", config->rekey_reauth_count_max);
+      return -1;
+    }
+
+    CONFIG_LOOKUP(rekey_ok_ping_count_max, rekey_ok_ping_count_max, REKEY_OK_PING_COUNT_MAX_DEF);
+    if (config->rekey_ok_ping_count_max <= 0) {
+      fprintf(stderr, "Invalid rekey ok ping count maximum %d\n", config->rekey_ok_ping_count_max);
+      return -1;
     }
 
 #undef CONFIG_LOOKUP

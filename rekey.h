@@ -1,5 +1,6 @@
 /*
- * Copyright (c) Dan Harkins, 2008, 2009, 2010
+ * Copyright (c) CoCo Communications, 2015
+ * Copyright (c) Pelagic, 2017
  *
  *  Copyright holder grants permission for redistribution and use in source
  *  and binary forms, with or without modification, provided that the
@@ -15,7 +16,7 @@
  *	  or use of this software must display the following acknowledgement:
  *
  *        "This product includes software written by
- *         Dan Harkins (dharkins at lounge dot org)"
+ *         Jesse Jones (jjones at cococorp dot com)"
  *
  *  "DISCLAIMER OF LIABILITY
  *
@@ -36,43 +37,30 @@
  * license (including the GNU public license).
  */
 
-#ifndef _SAE_H_
-#define _SAE_H_
+#ifndef _SAE_REKEY_H_
+#define _SAE_REKEY_H_
 
-#include <libconfig.h>
+#include <netinet/in.h>
 
-#include "ieee802_11.h"
+#include "ampe.h"
 #include "peers.h"
+#include "service.h"
 
-#define    SAE_MAX_EC_GROUPS    10
-#define    SAE_MAX_PASSWORD_LEN 80
+#define REKEY_ENABLE_DEF                   (false)
+#define REKEY_MULTICAST_GROUP_FAMILY_DEF   (AF_INET)
+#define REKEY_MULTICAST_GROUP_ADDRESS_DEF  (htonl(0xE00000C8)) /* 224.0.0.200 */
+#define REKEY_PING_PORT_DEF                (4875)
+#define REKEY_PONG_PORT_DEF                (4876)
+#define REKEY_PING_COUNT_MAX_DEF           (32)
+#define REKEY_PING_TIMEOUT_MSECS_DEF       (500)
+#define REKEY_PING_JITTER_MSECS_DEF        (100)
+#define REKEY_REAUTH_COUNT_MAX_DEF         (8)
+#define REKEY_OK_PING_COUNT_MAX_DEF        (16)
 
-struct sae_config {
-    int group[SAE_MAX_EC_GROUPS];
-    int num_groups;
-    char pwd[SAE_MAX_PASSWORD_LEN];
-    int debug;
-    int retrans;
-    int pmk_expiry;
-    int open_threshold;
-    int blacklist_timeout;
-    int giveup_threshold;
-};
+void rekey_init(service_context srvctx, struct mesh_node *mesh);
+void rekey_close(void);
 
-/* You may choose not to call sae_parse_config and
- * populate sae_config in some other way before
- * invoking sae_initialize() */
-int sae_parse_config(char* confdir, struct sae_config *config);
-int sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* config);
-int sae_initialize(char *ssid, struct sae_config *config);
-int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
-                       unsigned char *local_mac_addr, void *cookie);
-void sae_read_config(int signal);
-void sae_dump_db (int signal);
-int prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
-     unsigned char *context, int contextlen,
-     unsigned char *result, int resultbitlen);
+void rekey_verify_peer(struct candidate *peer);
+void rekey_reopen_sockets(void);
 
-void do_reauth(struct candidate *peer);
-
-#endif  /* _SAE_H_ */
+#endif  /* _SAE_REKEY_H_ */

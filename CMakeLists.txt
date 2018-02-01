@@ -72,6 +72,19 @@ LIST(APPEND libsae_sources
 
 ADD_LIBRARY(sae STATIC ${libsae_sources})
 TARGET_LINK_LIBRARIES(sae ${libsae_libs})
+install(TARGETS sae DESTINATION lib)
+
+install(FILES
+  ampe.h
+  common.h
+  ieee802_11.h
+  os_glue.h
+  peers.h
+  rekey.h
+  sae.h
+  service.h
+  DESTINATION include/authsae
+)
 
 #####################################################################
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")

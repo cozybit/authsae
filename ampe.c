@@ -125,7 +125,7 @@ static int plink_free_count() {
     return 99;
 }
 
-static inline u8* start_of_ies(struct ieee80211_mgmt_frame *frame,
+static inline unsigned char* start_of_ies(struct ieee80211_mgmt_frame *frame,
     int len, u16 *ie_len)
 {
     int offset=0;
@@ -318,7 +318,7 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
     unsigned short cat_to_mic_len;
     struct mesh_node *mesh = cand->conf->mesh;
     size_t ampe_ie_len;
-    u8 ftype = mgmt->action.action_code;
+    unsigned char ftype = mgmt->action.action_code;
     le16 igtk_keyid;
 
     assert(mic_start && cand && mgmt && len);
@@ -414,8 +414,8 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     unsigned short ampe_ie_len, cat_to_mic_len;
     int r;
     unsigned int* key_expiration_p;
-    u8 ftype = mgmt->action.action_code;
-    u8 *gtkdata, *igtkdata;
+    unsigned char ftype = mgmt->action.action_code;
+    unsigned char *gtkdata, *igtkdata;
 
     assert(len && cand && mgmt);
 

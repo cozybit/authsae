@@ -66,9 +66,6 @@ void sae_debug (int level, const char *fmt, ...);
 void sae_hexdump(int level, const char *label, const unsigned char *start, int
         len);
 
-#ifndef u8
-#define u8 unsigned char
-#endif
 #ifndef le16
 #define le16 unsigned short
 #endif

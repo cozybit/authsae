@@ -89,6 +89,9 @@
 static struct netlink_config_s nlcfg;
 service_context srvctx;
 
+/* Mesh group temporal key */
+extern unsigned char mgtk_tx[16];
+
 /* global configuration data */
 static struct meshd_config meshd_conf;
 static struct mesh_node mesh;

@@ -36,6 +36,7 @@
 #include <string.h>
 
 #include "os_glue.h"
+#include "peer_lists.h"
 #include "peers.h"
 #include "rekey.h"
 #include "sae.h"

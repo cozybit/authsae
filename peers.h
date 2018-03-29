@@ -82,10 +82,4 @@ struct candidate {
 struct candidate *find_peer(unsigned char *mac, int accept);
 void delete_peer(struct candidate **peer);
 
-TAILQ_HEAD(fubar, candidate) blacklist;
-TAILQ_HEAD(blah, candidate) peers;
-
-#define for_each_peer(peer) \
-	TAILQ_FOREACH(peer, &peers, entry)
-
 #endif /* _SAE_PEERS_H_ */

@@ -43,6 +43,7 @@
 #include <string.h>
 
 #include "os_glue.h"
+#include "peer_lists.h"
 #include "peers.h"
 #include "service.h"
 

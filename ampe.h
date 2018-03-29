@@ -10,8 +10,6 @@
 #include "ieee802_11.h"
 
 unsigned char mgtk_tx[16];
-unsigned char *sta_fixed_ies;
-unsigned char sta_fixed_ies_len;
 
 enum plink_state {
     PLINK_LISTEN,

@@ -69,6 +69,10 @@ static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
 
+/* IEs */
+static unsigned char *sta_fixed_ies;
+static unsigned char sta_fixed_ies_len;
+
 /* global configuration data */
 static struct ampe_config ampe_conf;
 

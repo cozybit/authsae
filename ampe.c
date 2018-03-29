@@ -74,6 +74,9 @@ static const unsigned char null_nonce[32] = { 0 };
 static unsigned char *sta_fixed_ies;
 static unsigned char sta_fixed_ies_len;
 
+/* Mesh group temporal key */
+unsigned char mgtk_tx[16];
+
 /* global configuration data */
 static struct ampe_config ampe_conf;
 

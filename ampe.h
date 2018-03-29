@@ -9,8 +9,6 @@
 #include "common.h"
 #include "ieee802_11.h"
 
-unsigned char mgtk_tx[16];
-
 enum plink_state {
     PLINK_LISTEN,
     PLINK_OPN_SNT,

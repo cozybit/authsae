@@ -86,6 +86,12 @@ install(FILES
   DESTINATION include/authsae
 )
 
+install(FILES
+  crypto/aes_locl.h
+  crypto/siv.h
+  DESTINATION include/authsae/crypto
+)
+
 #####################################################################
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 	ADD_SUBDIRECTORY(linux)

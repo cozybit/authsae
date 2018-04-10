@@ -318,7 +318,7 @@ static int set_mesh_conf(struct netlink_config_s *nlcfg,
         goto nla_put_failure;
 
     if (changed & MESH_CONF_CHANGED_HT)
-        NLA_PUT_U32(msg, NL80211_MESHCONF_HT_OPMODE, mesh->conf->ht_prot_mode);
+        NLA_PUT_U16(msg, NL80211_MESHCONF_HT_OPMODE, mesh->conf->ht_prot_mode);
     nla_nest_end(msg, container);
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);

@@ -68,11 +68,11 @@
 /*
  * the functions H() and CN()
  */
-#define H_Init(ctx,x,l) HMAC_Init((ctx), (x), (l), EVP_sha256())
+#define H_Init(ctx,x,l) HMAC_Init_ex((ctx), (x), (l), EVP_sha256(), NULL)
 #define H_Update(ctx,x,l) HMAC_Update((ctx),(x),(l))
 #define H_Final(ctx,x) HMAC_Final((ctx), (x), &function_mdlen)
 
-#define CN_Init(ctx,x,l) HMAC_Init((ctx), (x), (l), EVP_sha256())
+#define CN_Init(ctx,x,l) HMAC_Init_ex((ctx), (x), (l), EVP_sha256(), NULL)
 #define CN_Update(ctx,x,l) HMAC_Update((ctx),(x),(l))
 #define CN_Final(ctx,x) HMAC_Final((ctx), (x), &function_mdlen)
 

@@ -8,6 +8,7 @@
 cleanup() {
     sudo killall meshd-nl80211
     rm -fr "${TMP1}" "${TMP2}"
+    exit 0
 }
 
 trap cleanup SIGINT
@@ -53,8 +54,8 @@ EOF
 LOG0=/tmp/authsae-0.log
 LOG1=/tmp/authsae-1.log
 sudo rm -f ${LOG0} ${LOG1}
-sudo ${MESHD}   -i mesh0 -c ${CONFIG} -o ${LOG0} -B
-sudo ${MESHD}   -i mesh1 -c ${CONFIG} -o ${LOG1} -B
+sudo ${MESHD} -i mesh0 -c ${CONFIG} -o ${LOG0} -B
+sudo ${MESHD} -i mesh1 -c ${CONFIG} -o ${LOG1} -B
 wait
 
 # Wait for peer link establishment

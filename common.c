@@ -89,7 +89,7 @@ void sae_debug (int level, const char *fmt, ...)
 
     if (sae_debug_mask & level) {
         va_start(argptr, fmt);
-        vfprintf(stderr, fmt, argptr);
+        vfprintf(stdout, fmt, argptr);
         va_end(argptr);
     }
 }
@@ -100,15 +100,15 @@ void sae_hexdump(int level, const char *label, const unsigned char *start, int l
     int i;
 
     if (sae_debug_mask & level) {
-        fprintf(stderr, "----------\n");
-        fprintf(stderr, "%s hexdump", label);
+        fprintf(stdout, "----------\n");
+        fprintf(stdout, "%s hexdump", label);
         pos = start;
         for (i=0; i<len; i++) {
             if (!(i%16))
-                fprintf(stderr, "\n%08x  ", i);
-            fprintf(stderr, "%02x ", (unsigned char) *pos++);
+                fprintf(stdout, "\n%08x  ", i);
+            fprintf(stdout, "%02x ", (unsigned char) *pos++);
         }
-        fprintf(stderr, "\n----------\n\n");
+        fprintf(stdout, "\n----------\n\n");
         fflush(stdout);
     }
     return;

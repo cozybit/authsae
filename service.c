@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -40,6 +40,7 @@
 
 #include <errno.h>
 #include <openssl/rand.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -147,10 +148,15 @@ srv_add_timeout_with_jitter (service_context context, microseconds usec,
 {
     struct timespec right_now;
     timerid id;
+    int i;
 
     if (jitter_usecs) {
         long long rand_number, delta, new_usec;
-        (void) RAND_pseudo_bytes((unsigned char *) &rand_number, sizeof(rand_number));
+        i = RAND_bytes((unsigned char *) &rand_number, sizeof(rand_number));
+        if (i == 0) {
+            fprintf(stderr, "failed to generate random jitter!\n");
+            return 0;
+        }
         delta = -(long long) jitter_usecs/2  + llabs(rand_number) % jitter_usecs;
 
         new_usec = (long long) usec + delta;
@@ -263,7 +269,7 @@ srv_rem_input (service_context context, int fd)
 	    context->inputs[i].fd = 0;
 	    context->ninputs--;
 	    /*
-	     * swap structures so it's contiguous 
+	     * swap structures so it's contiguous
 	     */
 	    context->inputs[i] = context->inputs[context->ninputs];
 	    FD_CLR(fd, &context->readfds);
@@ -283,7 +289,7 @@ int
 srv_add_output (service_context context, int fd, void *data, fdcb proc)
 {
     int i, next = -1;
-    
+
     /*
      * first see if there's any available, if not we add to the end and
      * bump the noutputs high-water-mark
@@ -345,7 +351,7 @@ srv_add_exceptor (service_context sc, fdcb proc)
     sc->exceptor = proc;
 }
 
-/* 
+/*
  * check_timers()
  *	internal routine to see if any timers have sprung
  */
@@ -357,7 +363,7 @@ check_timers (service_context sc)
 
     if (sc->ntimers) {
 	/*
-	 * check to see if any sprung, they're sorted so check the 
+	 * check to see if any sprung, they're sorted so check the
 	 * zeroth, if it went off call the callback and resort. Then
 	 * check the new zeroth....repeat until the zeroth is in the future.
 	 *

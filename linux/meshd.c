@@ -329,7 +329,7 @@ add_interface (char *ptr)
     /*
      * make up a bssid for the loopback interface
      */
-    RAND_pseudo_bytes(&inf->bssid[0], ETH_ALEN);
+    RAND_bytes(&inf->bssid[0], ETH_ALEN);
 
     srv_add_input(srvctx, inf->fd, inf, mgmt_frame_in);
     TAILQ_INSERT_TAIL(&interfaces, inf, entry);

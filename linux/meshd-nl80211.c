@@ -1665,11 +1665,19 @@ int main(int argc, char *argv[])
     /* conf is good */
     mesh.conf = &meshd_conf;
 
-    if (daemonize)
-        daemon(1, 0);
+    if (daemonize) {
+        if (daemon(1, 0) == -1) {
+            exitcode = errno;
+            goto out;
+        }
+    }
 
-    if (outfile)
-        freopen(outfile, "w", stdout);
+    if (outfile) {
+        if (freopen(outfile, "w", stdout) == NULL) {
+            exitcode = errno;
+            goto out;
+        }
+    }
 
     if (netlink_init(&nlcfg, event_handler)) {
         exitcode = -ESOCKTNOSUPPORT;

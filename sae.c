@@ -68,13 +68,29 @@
 /*
  * the functions H() and CN()
  */
-#define H_Init(ctx,x,l) HMAC_Init((ctx), (x), (l), EVP_sha256())
+#define H_Init(ctx,x,l) HMAC_Init_ex((ctx), (x), (l), EVP_sha256(), NULL)
 #define H_Update(ctx,x,l) HMAC_Update((ctx),(x),(l))
 #define H_Final(ctx,x) HMAC_Final((ctx), (x), &function_mdlen)
 
-#define CN_Init(ctx,x,l) HMAC_Init((ctx), (x), (l), EVP_sha256())
+#define CN_Init(ctx,x,l) HMAC_Init_ex((ctx), (x), (l), EVP_sha256(), NULL)
 #define CN_Update(ctx,x,l) HMAC_Update((ctx),(x),(l))
 #define CN_Final(ctx,x) HMAC_Final((ctx), (x), &function_mdlen)
+
+/* Pre 1.1.0 compatibility macros */
+#ifndef OPENSSL_API_COMPAT
+static HMAC_CTX* HMAC_CTX_new(void) {
+    return (HMAC_CTX*) calloc(sizeof(HMAC_CTX), 1);
+}
+
+static void HMAC_CTX_free(HMAC_CTX* ctx)
+{
+    if (ctx) {
+        HMAC_CTX_cleanup(ctx);
+        free(ctx);
+    }
+}
+#endif
+
 
 extern service_context srvctx;
 /*
@@ -149,32 +165,35 @@ prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
      unsigned char *context, int contextlen,
      unsigned char *result, int resultbitlen)
 {
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     unsigned char digest[SHA256_DIGEST_LENGTH];
     int resultlen, len = 0;
     unsigned int mdlen = SHA256_DIGEST_LENGTH;
     unsigned char mask = 0xff;
     unsigned short reslength;
     unsigned short i = 0, i_le;
-
     reslength = ieee_order(resultbitlen);
     resultlen = (resultbitlen + 7)/8;
     do {
         i++;
-        HMAC_Init(&ctx, key, keylen, EVP_sha256());
+        ctx = HMAC_CTX_new();
+        if (ctx == NULL)
+            return -1;
+        HMAC_Init_ex(ctx, key, keylen, EVP_sha256(), NULL);
         i_le = ieee_order(i);
-        HMAC_Update(&ctx, (unsigned char *) &i_le, sizeof(i_le));
-        HMAC_Update(&ctx, label, labellen);
-        HMAC_Update(&ctx, context, contextlen);
-        HMAC_Update(&ctx, (unsigned char *)&reslength, sizeof(unsigned short));
-        HMAC_Final(&ctx, digest, &mdlen);
+        HMAC_Update(ctx, (unsigned char *) &i_le, sizeof(i_le));
+        HMAC_Update(ctx, label, labellen);
+        HMAC_Update(ctx, context, contextlen);
+        HMAC_Update(ctx, (unsigned char *)&reslength, sizeof(unsigned short));
+        HMAC_Final(ctx, digest, &mdlen);
+        HMAC_CTX_free(ctx);
+        ctx = NULL;
         if ((len + mdlen) > resultlen) {
             memcpy(result+len, digest, resultlen - len);
         } else {
             memcpy(result+len, digest, mdlen);
         }
         len += mdlen;
-        HMAC_CTX_cleanup(&ctx);
     } while (len < resultlen);
     /*
      * we're expanding to a bit length, if this is not a
@@ -375,8 +394,13 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     BIGNUM *x = NULL;
     BIGNUM *y = NULL;
     EC_POINT *psum = NULL;
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     int offset;
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        r = ERR_FATAL;
+        goto out;
+    }
 
     if (len != (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) + SHA256_DIGEST_LENGTH)) {
         sae_debug(SAE_DEBUG_ERR, "bad size of confirm message (%d)\n", len);
@@ -391,20 +415,20 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
         goto out;
     }
 
-    CN_Init(&ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
+    CN_Init(ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
 
     peer->rc = ieee_order(*(frame->authenticate.u.var16));
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "processing confirm (%d)\n", peer->rc);
     /*
      * compute the confirm verifier using the over-the-air format of send_conf
      */
-    CN_Update(&ctx, frame->authenticate.u.var8, sizeof(unsigned short));
+    CN_Update(ctx, frame->authenticate.u.var8, sizeof(unsigned short));
 
         /* peer's scalar */
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
     memset(tmp, 0, offset);
     BN_bn2bin(peer->peer_scalar, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->peer_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of peer's element\n");
@@ -423,17 +447,17 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
     memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
         /* my scalar */
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
     memset(tmp, 0, offset);
     BN_bn2bin(peer->my_scalar, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->my_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of my element\n");
@@ -444,14 +468,15 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
     memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
-    CN_Final(&ctx, tmp);
-    HMAC_CTX_cleanup(&ctx);
+    CN_Final(ctx, tmp);
+    HMAC_CTX_free(ctx);
+    ctx = NULL;
 
     if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("peer's confirm",
@@ -468,6 +493,8 @@ process_confirm (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int
     r = NO_ERR;
 
 out:
+    HMAC_CTX_free(ctx);
+
     BN_free(x);
     BN_free(y);
     EC_POINT_free(psum);
@@ -483,9 +510,14 @@ confirm_to_peer (struct candidate *peer)
     struct ieee80211_mgmt_frame *frame;
     size_t len = 0;
     BIGNUM *x, *y;
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     unsigned short send_conf;
     int offset;
+    int ret = 0;
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 
     if (((x = BN_new()) == NULL) ||
         ((y = BN_new()) == NULL)) {
@@ -513,57 +545,54 @@ confirm_to_peer (struct candidate *peer)
     len += sizeof(unsigned short);
 
 
-    CN_Init(&ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
+    CN_Init(ctx, peer->kck, SHA256_DIGEST_LENGTH);     /* the key */
 
     /* send_conf is in over-the-air format now */
-    CN_Update(&ctx, (unsigned char *)&send_conf, sizeof(unsigned short));
+    CN_Update(ctx, (unsigned char *)&send_conf, sizeof(unsigned short));
 
         /* my scalar */
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->my_scalar);
     memset(tmp, 0, offset);
     BN_bn2bin(peer->my_scalar, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->my_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of my element\n");
-        BN_free(x);
-        BN_free(y);
-        return -1;
+        ret = -1;
+        goto fail;
     }
         /* my element */
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
     memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
         /* peer's scalar */
     offset = BN_num_bytes(peer->grp_def->order) - BN_num_bytes(peer->peer_scalar);
     memset(tmp, 0, offset);
     BN_bn2bin(peer->peer_scalar, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->order));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->order));
 
     if (!EC_POINT_get_affine_coordinates_GFp(peer->grp_def->group, peer->peer_element, x, y, bnctx)) {
         sae_debug(SAE_DEBUG_ERR, "unable to get x,y of peer's element\n");
-        BN_free(x);
-        BN_free(y);
-        return -1;
+        ret = -1;
+        goto fail;
     }
         /* peer's element */
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(x);
     memset(tmp, 0, offset);
     BN_bn2bin(x, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(y);
     memset(tmp, 0, offset);
     BN_bn2bin(y, tmp + offset);
-    CN_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    CN_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
 
-    CN_Final(&ctx, (frame->authenticate.u.var8 + sizeof(unsigned short)));
-    HMAC_CTX_cleanup(&ctx);
+    CN_Final(ctx, (frame->authenticate.u.var8 + sizeof(unsigned short)));
 
     if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
         print_buffer("local confirm",
@@ -581,22 +610,31 @@ confirm_to_peer (struct candidate *peer)
     if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                 MAC2STR(peer->peer_mac));
-        return -1;
+        ret = -1;
+        goto fail;
     }
+
+fail:
+
     BN_free(x);
     BN_free(y);
+    HMAC_CTX_free(ctx);
 
-    return 0;
+    return ret;
 }
 
 static int
 process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int len)
 {
-    BIGNUM *x, *y, *k, *nsum;
+    BIGNUM *x = NULL, *y = NULL, *k = NULL, *nsum;
     int offset, itemsize, ret = 0;
-    EC_POINT *K;
+    EC_POINT *K = NULL;
     unsigned char *ptr, *tmp, keyseed[SHA256_DIGEST_LENGTH], kckpmk[(SHA256_DIGEST_LENGTH * 2) * 8];
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 
     /*
      * check whether the frame is big enough (might be proprietary IEs or cruft appended)
@@ -608,14 +646,14 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
                   BN_num_bytes(peer->grp_def->order),
                   (IEEE802_11_HDR_LEN+sizeof(frame->authenticate)+
                    (2*BN_num_bytes(peer->grp_def->prime)) + BN_num_bytes(peer->grp_def->order)));
-        return -1;
+        goto fail;
     }
     if (((x = BN_new()) == NULL) ||
         ((y = BN_new()) == NULL) ||
         ((k = BN_new()) == NULL) ||
         ((K = EC_POINT_new(peer->grp_def->group)) == NULL)) {
         sae_debug(SAE_DEBUG_ERR, "unable to create x,y bignums\n");
-        return -1;
+        goto fail;
     }
     ptr = frame->authenticate.u.var8;
     /*
@@ -716,10 +754,9 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
     offset = BN_num_bytes(peer->grp_def->prime) - BN_num_bytes(k);
     memset(tmp, 0, offset);
     BN_bn2bin(k, tmp + offset);
-    H_Init(&ctx, allzero, SHA256_DIGEST_LENGTH);
-    H_Update(&ctx, tmp, BN_num_bytes(peer->grp_def->prime));
-    H_Final(&ctx, keyseed);
-    HMAC_CTX_cleanup(&ctx);
+    H_Init(ctx, allzero, SHA256_DIGEST_LENGTH);
+    H_Update(ctx, tmp, BN_num_bytes(peer->grp_def->prime));
+    H_Final(ctx, keyseed);
     free(tmp);
 
     /*
@@ -762,6 +799,7 @@ fail:
     BN_free(y);
     BN_free(k);
     EC_POINT_free(K);
+    HMAC_CTX_free(ctx);
 
     return ret;
 }
@@ -910,8 +948,12 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me, void *cookie
 {
     char buf[2048];
     struct ieee80211_mgmt_frame *frame;
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     size_t len = 0;
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 
     memset(buf, 0, sizeof(buf));
     frame = (struct ieee80211_mgmt_frame *)buf;
@@ -926,11 +968,12 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me, void *cookie
     frame->authenticate.status = ieee_order(WLAN_STATUS_ANTI_CLOGGING_TOKEN_NEEDED);
     len = IEEE802_11_HDR_LEN + sizeof(frame->authenticate);
 
-    H_Init(&ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
-    H_Update(&ctx, req->sa, ETH_ALEN);
-    H_Update(&ctx, me, ETH_ALEN);
-    H_Final(&ctx, frame->authenticate.u.var8);
-    HMAC_CTX_cleanup(&ctx);
+    H_Init(ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
+    H_Update(ctx, req->sa, ETH_ALEN);
+    H_Update(ctx, me, ETH_ALEN);
+    H_Final(ctx, frame->authenticate.u.var8);
+    HMAC_CTX_free(ctx);
+    ctx = NULL;
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
@@ -1009,7 +1052,7 @@ legendre (BIGNUM *a, BIGNUM *p, BIGNUM *exp, BN_CTX *bnctx)
 static int
 assign_group_to_peer (struct candidate *peer, GD *grp)
 {
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     BIGNUM *x_candidate = NULL, *x = NULL, *rnd = NULL, *qr = NULL, *qnr = NULL;
     BIGNUM *pm1 = NULL, *pm1d2 = NULL, *tmp1 = NULL, *tmp2 = NULL, *a = NULL, *b = NULL;
     unsigned char pwe_digest[SHA256_DIGEST_LENGTH], addrs[ETH_ALEN * 2], ctr;
@@ -1097,11 +1140,15 @@ assign_group_to_peer (struct candidate *peer, GD *grp)
             memcpy(addrs, peer->my_mac, ETH_ALEN);
             memcpy(addrs+ETH_ALEN, peer->peer_mac, ETH_ALEN);
         }
-        H_Init(&ctx, addrs, (ETH_ALEN * 2));
-        H_Update(&ctx, (unsigned char *) grp->password, strlen(grp->password));
-        H_Update(&ctx, &ctr, sizeof(ctr));
-        H_Final(&ctx, pwe_digest);
-        HMAC_CTX_cleanup(&ctx);
+        ctx = HMAC_CTX_new();
+        if (ctx == NULL)
+            goto fail;
+        H_Init(ctx, addrs, (ETH_ALEN * 2));
+        H_Update(ctx, (unsigned char *) grp->password, strlen(grp->password));
+        H_Update(ctx, &ctr, sizeof(ctr));
+        H_Final(ctx, pwe_digest);
+        HMAC_CTX_free(ctx);
+        ctx = NULL;
 
         if (sae_debug_mask & SAE_DEBUG_CRYPTO_VERB) {
             if (memcmp(peer->peer_mac, peer->my_mac, ETH_ALEN) > 0) {
@@ -1755,8 +1802,13 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
     unsigned short seq = ieee_order(frame->authenticate.auth_seq);
     unsigned short alg;
     unsigned char token[SHA256_DIGEST_LENGTH];
-    HMAC_CTX ctx;
+    HMAC_CTX *ctx;
     GD *group_def;
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        fprintf(stderr, "Failed to allocate HMAC context\n");
+        return -1;
+    }
 
     /*
      * if it's not a commit then by definition there's no token: bad
@@ -1792,11 +1844,12 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
              */
             return 1;
         }
-        H_Init(&ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
-        H_Update(&ctx, frame->sa, ETH_ALEN);
-        H_Update(&ctx, me, ETH_ALEN);
-        H_Final(&ctx, token);
-        HMAC_CTX_cleanup(&ctx);
+        H_Init(ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
+        H_Update(ctx, frame->sa, ETH_ALEN);
+        H_Update(ctx, me, ETH_ALEN);
+        H_Final(ctx, token);
+        HMAC_CTX_free(ctx);
+        ctx = NULL;
         if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * there's something there but it's not a token, so ask for one.
@@ -1827,11 +1880,12 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
                        (2 * BN_num_bytes(group_def->prime))));
             return 1;
         }
-        H_Init(&ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
-        H_Update(&ctx, frame->sa, ETH_ALEN);
-        H_Update(&ctx, me, ETH_ALEN);
-        H_Final(&ctx, token);
-        HMAC_CTX_cleanup(&ctx);
+        H_Init(ctx, (unsigned char *)&token_generator, sizeof(unsigned long));
+        H_Update(ctx, frame->sa, ETH_ALEN);
+        H_Update(ctx, me, ETH_ALEN);
+        H_Final(ctx, token);
+        HMAC_CTX_free(ctx);
+        ctx = NULL;
         if (memcmp(token, (frame->authenticate.u.var8 + sizeof(unsigned short)), SHA256_DIGEST_LENGTH)) {
             /*
              * bad token
@@ -2253,7 +2307,11 @@ JC: Commented out until we decide whether this is needed (in which case we must
 #endif
     TAILQ_INIT(&peers);
     TAILQ_INIT(&blacklist);
-    RAND_pseudo_bytes((unsigned char *)&token_generator, sizeof(unsigned long));
+    i = RAND_bytes((unsigned char *)&token_generator, sizeof(unsigned long));
+    if (i == 0) {
+        fprintf(stderr, "failed to generate random token!\n");
+        return -1;
+    }
     if ((bnctx = BN_CTX_new()) == NULL) {
         fprintf(stderr, "cannot create bignum context!\n");
         return -1;

@@ -626,9 +626,9 @@ fail:
 static int
 process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int len)
 {
-    BIGNUM *x, *y, *k, *nsum;
+    BIGNUM *x = NULL, *y = NULL, *k = NULL, *nsum;
     int offset, itemsize, ret = 0;
-    EC_POINT *K;
+    EC_POINT *K = NULL;
     unsigned char *ptr, *tmp, keyseed[SHA256_DIGEST_LENGTH], kckpmk[(SHA256_DIGEST_LENGTH * 2) * 8];
     HMAC_CTX *ctx;
     ctx = HMAC_CTX_new();

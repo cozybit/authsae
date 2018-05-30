@@ -38,6 +38,7 @@
 
 #include "sae.h"
 
+#include <libconfig.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
 #include <string.h>
@@ -107,9 +108,6 @@ BIO *out;
 int curr_open, open_threshold, retrans;
 unsigned long blacklist_timeout, giveup_threshold, pmk_expiry;
 unsigned long token_generator;
-#if 0
-char mesh_ssid[33]
-#endif
 char conffile[PATH_MAX], allzero[SHA256_DIGEST_LENGTH];
 unsigned int function_mdlen = SHA256_DIGEST_LENGTH;
 
@@ -2232,42 +2230,6 @@ sae_parse_config (char *confdir, struct sae_config* config)
     return 0;
 }
 
-int
-sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* config)
-{
-    struct config_setting_t *setting, *group;
-    char *pwd;
-
-    memset(config, 0, sizeof(struct sae_config));
-    config_setting_lookup_int(sae_section, "debug", (config_int_t *)&config->debug);
-    setting = config_setting_get_member(sae_section, "group");
-    if (setting != NULL) {
-        while (1) {
-            group = config_setting_get_elem(setting, config->num_groups);
-            if (!group)
-                break;
-            config->group[config->num_groups] =
-                config_setting_get_int_elem(setting, config->num_groups);
-            config->num_groups++;
-            if (config->num_groups == SAE_MAX_EC_GROUPS)
-                break;
-        }
-    }
-    if (config_setting_lookup_string(sae_section, "password", (const char **)&pwd)) {
-        strncpy(config->pwd, pwd, SAE_MAX_PASSWORD_LEN);
-        if (config->pwd[SAE_MAX_PASSWORD_LEN - 1] != 0) {
-            fprintf(stderr, "WARNING: Truncating password\n");
-            config->pwd[SAE_MAX_PASSWORD_LEN - 1] = 0;
-        }
-    }
-    config_setting_lookup_int(sae_section, "retrans", (config_int_t *)&config->retrans);
-    config_setting_lookup_int(sae_section, "lifetime", (config_int_t *)&config->pmk_expiry);
-    config_setting_lookup_int(sae_section, "thresh", (config_int_t *)&config->open_threshold);
-    config_setting_lookup_int(sae_section, "blacklist", (config_int_t *)&config->blacklist_timeout);
-    config_setting_lookup_int(sae_section, "giveup", (config_int_t *)&config->giveup_threshold);
-    return 0;
-}
-
 void
 sae_dump_db (int unused)
 {
@@ -2298,13 +2260,6 @@ sae_initialize (char *ourssid, struct sae_config *config)
      * initialize globals
      */
     memset(allzero, 0, SHA256_DIGEST_LENGTH);
-#if 0
-JC: Commented out until we decide whether this is needed (in which case we must
-    be prepared to accept a binary, non-null terminated mesh ID) or not (the
-    mesh_ssid is not used anywhere in this module, so maybe it can be dumped).
-
-    memcpy(mesh_ssid, ourssid, strlen(ourssid));
-#endif
     TAILQ_INIT(&peers);
     TAILQ_INIT(&blacklist);
     i = RAND_bytes((unsigned char *)&token_generator, sizeof(unsigned long));
@@ -2351,4 +2306,3 @@ JC: Commented out until we decide whether this is needed (in which case we must
     }
     return 1;
 }
-

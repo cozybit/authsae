@@ -39,8 +39,6 @@
 #ifndef _SAE_H_
 #define _SAE_H_
 
-#include <libconfig.h>
-
 #include "ieee802_11.h"
 #include "peers.h"
 
@@ -63,7 +61,6 @@ struct sae_config {
  * populate sae_config in some other way before
  * invoking sae_initialize() */
 int sae_parse_config(char* confdir, struct sae_config *config);
-int sae_parse_libconfig (struct config_setting_t *sae_section, struct sae_config* config);
 int sae_initialize(char *ssid, struct sae_config *config);
 int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
                        unsigned char *local_mac_addr, void *cookie);

@@ -41,7 +41,7 @@
 
 #include <stdint.h>
 
-#ifdef LINUX
+#if defined(linux) || defined(__linux__)
 #include <endian.h>
 #else
 #include <sys/endian.h>

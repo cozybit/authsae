@@ -108,9 +108,6 @@ BIO *out;
 int curr_open, open_threshold, retrans;
 unsigned long blacklist_timeout, giveup_threshold, pmk_expiry;
 unsigned long token_generator;
-#if 0
-char mesh_ssid[33]
-#endif
 char conffile[PATH_MAX], allzero[SHA256_DIGEST_LENGTH];
 unsigned int function_mdlen = SHA256_DIGEST_LENGTH;
 
@@ -2263,13 +2260,6 @@ sae_initialize (char *ourssid, struct sae_config *config)
      * initialize globals
      */
     memset(allzero, 0, SHA256_DIGEST_LENGTH);
-#if 0
-JC: Commented out until we decide whether this is needed (in which case we must
-    be prepared to accept a binary, non-null terminated mesh ID) or not (the
-    mesh_ssid is not used anywhere in this module, so maybe it can be dumped).
-
-    memcpy(mesh_ssid, ourssid, strlen(ourssid));
-#endif
     TAILQ_INIT(&peers);
     TAILQ_INIT(&blacklist);
     i = RAND_bytes((unsigned char *)&token_generator, sizeof(unsigned long));
@@ -2316,4 +2306,3 @@ JC: Commented out until we decide whether this is needed (in which case we must
     }
     return 1;
 }
-

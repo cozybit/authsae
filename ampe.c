@@ -1078,11 +1078,18 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         }
     }
 
+    /* FIXME bounds check both ends */
+    if (elems.ht_cap) {
+        memcpy(&cand->ht_cap, elems.ht_cap, elems.ht_cap_len);
+    }
+
+    if (elems.ht_info) {
+        memcpy(&cand->ht_info, elems.ht_info, elems.ht_info_len);
+    }
+
     check_frame_protection(cand, mgmt, len, &elems);
 
     cand->cookie = cookie;
-
-
 
 	if (cand->link_state == PLINK_BLOCKED) {
 		return 0;

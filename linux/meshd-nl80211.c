@@ -429,13 +429,17 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
 	return 0;
 }
 
-static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
-                                    unsigned char *peer, struct info_elems *elems)
+static int add_station(struct netlink_config_s *nlcfg,
+                       unsigned char *peer, struct info_elems *elems)
 {
     struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_SET_STATION;
+    uint8_t cmd = NL80211_CMD_NEW_STATION;
     int ret;
     char *pret;
+    struct nl80211_sta_flag_update flags;
+
+    /* FIXME: copy rates from elems */
+    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
 
     if (!peer)
         return -EINVAL;
@@ -453,6 +457,17 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
+            supported_rates);
+    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
+                 (1 << NL80211_STA_FLAG_WME);
+    flags.set = (1 << NL80211_STA_FLAG_WME);
+
+    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
+
+    /* FIXME: generate AID */
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
     /* unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */
     if (elems->ht_info &&
@@ -468,7 +483,7 @@ static int new_unauthenticated_peer(struct netlink_config_s *nlcfg,
     nlmsg_free(msg);
     msg = NULL;
     if (ret < 0)
-        fprintf(stderr,"New unauthenticated station failed: %d (%s)\n", ret, strerror(-ret));
+        fprintf(stderr, "add station failed: %d (%s)\n", ret, strerror(-ret));
     else
         ret = 0;
 
@@ -528,7 +543,9 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
      */
     if ((peer = find_peer(bcn.sa, 0))) {
         peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *) elems.ht_info);
-        new_unauthenticated_peer(&nlcfg, bcn.sa, &elems);
+        if (add_station(&nlcfg, bcn.sa, &elems) == 0) {
+            peer->uploaded = true;
+        }
     }
 
     return NL_SKIP;
@@ -1130,79 +1147,66 @@ void estab_peer_link(unsigned char *peer,
         unsigned short rates_len,
         void *cookie)
 {
+    struct candidate *cand;
+    int ret;
+
     assert(cookie == &nlcfg);
 
     assert(mtk_len == 16 && peer_mgtk_len == 16);
 
-    if (peer) {
-        sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
+    if (!peer)
+        return;
 
-        set_authenticated_flag(&nlcfg, peer);
-        /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
-	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
+    cand = find_peer(peer, 0);
+    if (!cand)
+        return;
 
-        /* key to decrypt multicast data traffic from this peer */
-	    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+    sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 
-        /* to check integrity of multicast mgmt frames from this peer */
-        if (peer_igtk) {
-	        install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
-        }
+    if (!cand->uploaded) {
+        struct info_elems elems = {};
+
+        elems.sup_rates = cand->sup_rates;
+        elems.sup_rates_len = cand->sup_rates_len;
+
+        elems.ht_cap = (unsigned char *) &cand->ht_cap;
+        elems.ht_cap_len = sizeof(cand->ht_cap);
+
+        elems.ht_info = (unsigned char *) &cand->ht_info;
+        elems.ht_info_len = sizeof(cand->ht_info);
+
+        ret = add_station(&nlcfg, peer, &elems);
+        if (ret)
+            return;
+
+        cand->uploaded = true;
+    }
+
+    set_authenticated_flag(&nlcfg, peer);
+    /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
+	install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
+
+    /* key to decrypt multicast data traffic from this peer */
+	install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+
+    /* to check integrity of multicast mgmt frames from this peer */
+    if (peer_igtk) {
+	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
     }
 }
 
 void peer_created(unsigned char *peer)
 {
-    /* Create a candidate */
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_NEW_STATION;
-    int ret;
-    char *pret;
-    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 }; /* XXX: Try to use IE rates, or otherwise basic rate? */
-    struct nl80211_sta_flag_update flags;
-
-    if (!peer)
-        return;
-
-    msg = nlmsg_alloc();
-
-    if (!msg)
-        return;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
-
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
-    NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
-            supported_rates);
-    flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
-                 (1 << NL80211_STA_FLAG_WME);
-    flags.set = (1 << NL80211_STA_FLAG_WME);
-    NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
-
-    /* unused for mesh but mandatory for NL80211_CMD_NEW_STATION */
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
-
-    nlcfg.supress_error = -EEXIST;
-    ret = send_nlmsg(nlcfg.nl_sock, msg);
-    sae_debug(MESHD_DEBUG, "new peer candidate (seq num=%d)\n",
-            nlmsg_hdr(msg)->nlmsg_seq);
-    nlmsg_free(msg);
-    msg = NULL;
-    if (ret < 0)
-        fprintf(stderr,"New candidate failed: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return;
-nla_put_failure:
-    nlmsg_free(msg);
-    msg = NULL;
+    /*
+     * We don't have to do anything here:
+     *
+     *  - if peer was created from SAE state machine, then
+     *    it will be added to kernel when the IEs are known (e.g.
+     *    on estab plink)
+     *
+     *  - if peer is created from a beacon, we will know the IEs
+     *    and will go ahead and create the peer in new_candidate_handler.
+     */
 }
 
 void peer_deleted(unsigned char *peer)

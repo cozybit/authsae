@@ -77,6 +77,11 @@ struct candidate {
     unsigned int rekey_reauth_count;
     unsigned int rekey_ok;
     unsigned int rekey_ok_ping_rx;
+
+    struct ht_cap_ie ht_cap;
+    struct ht_op_ie ht_info;
+
+    bool uploaded;
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

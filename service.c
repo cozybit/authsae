@@ -359,7 +359,6 @@ static void
 check_timers (service_context sc)
 {
     struct timespec right_now, tdiff;
-    timerid tid;
 
     if (sc->ntimers) {
 	/*
@@ -382,9 +381,8 @@ check_timers (service_context sc)
         clock_gettime(CLOCK_MONOTONIC, &right_now);
         tdiff = sc->timers[0].to;
         while (cmp_time(&tdiff, &right_now) < 1) {
-            tid = sc->timers[0].id;
             sc->timers[0].id = 0;
-            (*sc->timers[0].proc)(tid, sc->timers[0].data);
+            (*sc->timers[0].proc)(sc->timers[0].data);
             sc->timers[0].to.tv_sec = sc->timers[0].to.tv_nsec = 0;
             qsort(sc->timers, sc->ntimers, sizeof(struct timer),
                   (int (*)())cmp_timers);

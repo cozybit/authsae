@@ -523,6 +523,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         igtkdata += 2 + 6;
         memcpy(cand->igtk, igtkdata, sizeof(cand->igtk));
         cand->has_igtk = true;
+        sae_hexdump(AMPE_DEBUG_KEYS, "Received igtk: ", cand->igtk, sizeof(cand->igtk));
     }
     free(clear_ampe_ie);
     return -1;

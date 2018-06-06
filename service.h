@@ -57,7 +57,7 @@ typedef unsigned long long microseconds;
  * input callbacks and timer callbacks
  */
 typedef void (*fdcb)(int fd, void *data);
-typedef void (*timercb)(timerid id, void *data);
+typedef void (*timercb)(void *data);
 typedef void (*dumpcb)(timerid id, int num, int secs, int usecs, char *msg);
 
 /*

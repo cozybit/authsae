@@ -522,6 +522,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
         cand->igtk_keyid = le16toh(*(u16 *) igtkdata);
         igtkdata += 2 + 6;
         memcpy(cand->igtk, igtkdata, 16);
+        cand->has_igtk = true;
     }
     free(clear_ampe_ie);
     return -1;
@@ -816,7 +817,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
-                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
+                    (cand->has_igtk) ? cand->igtk : NULL,
+                    (cand->has_igtk) ? sizeof(cand->igtk) : 0,
+                    cand->igtk_keyid,
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
@@ -851,7 +854,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
-                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
+                    (cand->has_igtk) ? cand->igtk : NULL,
+                    (cand->has_igtk) ? sizeof(cand->igtk) : 0,
+                    cand->igtk_keyid,
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);

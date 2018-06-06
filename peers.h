@@ -62,8 +62,11 @@ struct candidate {
     unsigned char mtk[16];
     unsigned char mgtk[16];
     unsigned int mgtk_expiration;
+
     unsigned char igtk[16];
     u16 igtk_keyid;
+    bool has_igtk;
+
     unsigned char sup_rates[MAX_SUPP_RATES];
     unsigned short sup_rates_len;
     siv_ctx sivctx;

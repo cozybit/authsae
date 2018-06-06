@@ -11,16 +11,29 @@ cleanup() {
     exit 0
 }
 
+get_hwsim_radios() {
+    local radios=""
+    for dev in /sys/devices/virtual/mac80211_hwsim/*; do
+        phy=$(basename $dev/ieee80211/*)
+        radios="$radios $phy"
+    done
+    echo $radios
+}
+
 trap cleanup SIGINT
 
 sudo modprobe -r mac80211-hwsim &> /dev/null
 sudo modprobe mac80211-hwsim radios=4 || { echo "Failed to load mac80211-hwsim module."; echo 1; }
 
-sudo iw phy phy2 interface add mesh0 type mesh
-sudo iw phy phy3 interface add mesh1 type mesh
+read -a radios <<<$(get_hwsim_radios)
+ifaces=("smesh0", "smesh1")
 
-sudo ip link set mesh0 up
-sudo ip link set mesh1 up
+rfkill unblock wifi
+sudo iw phy ${radios[0]} interface add ${ifaces[0]} type mesh
+sudo iw phy ${radios[1]} interface add ${ifaces[1]} type mesh
+
+sudo ip link set ${ifaces[0]} up
+sudo ip link set ${ifaces[1]} up
 
 MESHD=$(dirname $(realpath $0))/../build/linux/meshd-nl80211
 
@@ -54,8 +67,8 @@ EOF
 LOG0=/tmp/authsae-0.log
 LOG1=/tmp/authsae-1.log
 sudo rm -f ${LOG0} ${LOG1}
-sudo ${MESHD} -i mesh0 -c ${CONFIG} -o ${LOG0} -B
-sudo ${MESHD} -i mesh1 -c ${CONFIG} -o ${LOG1} -B
+sudo ${MESHD} -i ${ifaces[0]} -c ${CONFIG} -o ${LOG0} -B
+sudo ${MESHD} -i ${ifaces[1]} -c ${CONFIG} -o ${LOG1} -B
 wait
 
 # Wait for peer link establishment
@@ -74,12 +87,12 @@ do
     sleep 1
 done
 
-[ $i -eq ${TRIES} ] && { echo "FAIL: mesh0 failed to establish a link"; exit 1; }
-[ $j -eq ${TRIES} ] && { echo "FAIL: mesh1 failed to establish a link"; exit 1; }
+[ $i -eq ${TRIES} ] && { echo "FAIL: ${ifaces[0]} failed to establish a link"; exit 1; }
+[ $j -eq ${TRIES} ] && { echo "FAIL: ${ifaces[1]} failed to establish a link"; exit 1; }
 echo -en "\r            \r"
 
 # Additional tests
-grep established ${LOG1} &> /dev/null || { echo "FAIL: mesh1 failed to establish a link"; exit 1; }
+grep established ${LOG1} &> /dev/null || { echo "FAIL: ${ifaces[1]} failed to establish a link"; exit 1; }
 
 TMP0=$(mktemp)
 TMP1=$(mktemp)

@@ -342,7 +342,7 @@ add_interface (char *ptr)
  *      simulating this protocol over the loopback we need to send them here.
  */
 static void
-send_beacon (timerid tid, void *data)
+send_beacon (void *data)
 {
     struct interface *inf = (struct interface *)data;
     struct ieee80211_mgmt_frame *frame;

@@ -521,7 +521,7 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     if (mesh->conf->pmf) {
         cand->igtk_keyid = le16toh(*(u16 *) igtkdata);
         igtkdata += 2 + 6;
-        memcpy(cand->igtk, igtkdata, 16);
+        memcpy(cand->igtk, igtkdata, sizeof(cand->igtk));
         cand->has_igtk = true;
     }
     free(clear_ampe_ie);
@@ -1083,12 +1083,11 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         }
     }
 
-    /* FIXME bounds check both ends */
-    if (elems.ht_cap) {
+    if (elems.ht_cap && elems.ht_cap_len <= sizeof(cand->ht_cap)) {
         memcpy(&cand->ht_cap, elems.ht_cap, elems.ht_cap_len);
     }
 
-    if (elems.ht_info) {
+    if (elems.ht_info && elems.ht_info_len <= sizeof(cand->ht_info)) {
         memcpy(&cand->ht_info, elems.ht_info, elems.ht_info_len);
     }
 

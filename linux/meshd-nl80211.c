@@ -70,7 +70,7 @@
  *  Stations in this context are either mesh neighbors, peer candidates or
  *  candidates.
  *
- *  Stations are created in the unauthenticated kernel when a
+ *  Stations are created unauthenticated in the kernel when a
  *  NEW_PEER_CANDIDATE is received from the kernel.  Creating the
  *  unauthenticated station supresses further NEW_PEER_CANDIDATE (otherwise
  *  we would keep getting the event for every beacon received).
@@ -79,13 +79,13 @@
  *  Failure to authenticate involves the destruction of a station.
  *
  *  Every station in the kernel exists also in userspace, in the 'peers' list
- *  maintained by sae.c and updated by ampe.c
+ *  maintained by sae.c and updated by ampe.c.
  *
- *  SAE determines when a station is authenticated.  The kernel is informed
- *  of that by setting the AUTH flag on the station.
+ *  SAE determines when a station is authenticated, while AMPE determines
+ *  the peering state of a station.
  *
- *  AMPE determines the peering state of a station.  AMPE invokes a meshd
- *  callback when a station needs to change its state.
+ *  The kernel is informed of the authenticated and established plink state
+ *  when AMPE completes, through the estab_peer_link() callback.
  */
 
 static struct netlink_config_s nlcfg;
@@ -429,8 +429,9 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg)
 	return 0;
 }
 
-static int add_station(struct netlink_config_s *nlcfg,
-                       unsigned char *peer, struct info_elems *elems)
+static int add_unauthenticated_sta(struct netlink_config_s *nlcfg,
+                                   unsigned char *peer,
+                                   struct info_elems *elems)
 {
     struct nl_msg *msg;
     uint8_t cmd = NL80211_CMD_NEW_STATION;
@@ -544,8 +545,9 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
      */
     if ((peer = find_peer(bcn.sa, 0))) {
         peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *) elems.ht_info);
-        if (add_station(&nlcfg, bcn.sa, &elems) == 0) {
-            peer->uploaded = true;
+        if (!peer->in_kernel &&
+            add_unauthenticated_sta(&nlcfg, bcn.sa, &elems) == 0) {
+            peer->in_kernel = true;
         }
     }
 
@@ -1153,7 +1155,11 @@ void estab_peer_link(unsigned char *peer,
 
     assert(cookie == &nlcfg);
 
-    assert(mtk_len == 16 && peer_mgtk_len == 16);
+    if (mtk_len != KEY_LEN_AES_CCMP || peer_mgtk_len != KEY_LEN_AES_CCMP)
+        return;
+
+    if (peer_igtk && peer_igtk_len != KEY_LEN_AES_CMAC)
+        return;
 
     if (!peer)
         return;
@@ -1164,7 +1170,7 @@ void estab_peer_link(unsigned char *peer,
 
     sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 
-    if (!cand->uploaded) {
+    if (!cand->in_kernel) {
         struct info_elems elems = {};
 
         elems.sup_rates = cand->sup_rates;
@@ -1176,28 +1182,29 @@ void estab_peer_link(unsigned char *peer,
         elems.ht_info = (unsigned char *) &cand->ht_info;
         elems.ht_info_len = sizeof(cand->ht_info);
 
-        ret = add_station(&nlcfg, peer, &elems);
+        ret = add_unauthenticated_sta(&nlcfg, peer, &elems);
         if (ret)
             return;
 
-        cand->uploaded = true;
+        cand->in_kernel = true;
     }
 
     set_authenticated_flag(&nlcfg, peer);
     /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
-	install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
+    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
     /* key to decrypt multicast data traffic from this peer */
-	install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
 
     /* to check integrity of multicast mgmt frames from this peer */
     if (peer_igtk) {
-	    install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
+        install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
     }
 }
 
 void peer_created(unsigned char *peer)
 {
+    struct candidate *cand;
     /*
      * We don't have to do anything here:
      *
@@ -1207,7 +1214,17 @@ void peer_created(unsigned char *peer)
      *
      *  - if peer is created from a beacon, we will know the IEs
      *    and will go ahead and create the peer in new_candidate_handler.
+     *
+     * Validate the invariant that this is only called before the
+     * is updated.
      */
+    cand = find_peer(peer, 0);
+    if (!cand)
+        return;
+
+    if (cand->in_kernel) {
+        sae_debug(SAE_DEBUG_ERR, "attempting to create peer that is already in kernel: " MACSTR "\n", MAC2STR(peer));
+    }
 }
 
 void peer_deleted(unsigned char *peer)

@@ -97,7 +97,7 @@ extern service_context srvctx;
 /*
  * forward declarations
  */
-static void reauth(timerid id, void *data);
+static void reauth(void *data);
 
 /*
  * global variables
@@ -205,7 +205,7 @@ prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
 }
 
 static void
-remove_from_blacklist (timerid id, void *data)
+remove_from_blacklist (void *data)
 {
     struct candidate *peer, *delme;
 
@@ -286,7 +286,7 @@ delete_peer (struct candidate **delme)
  * a callback-able version of delete peer
  */
 static void
-destroy_peer (timerid id, void *data)
+destroy_peer (void *data)
 {
     struct candidate *peer = (struct candidate *)data;
 
@@ -1314,7 +1314,7 @@ fail:
 }
 
 static void
-retransmit_peer (timerid id, void *data)
+retransmit_peer (void *data)
 {
     struct candidate *peer;
 
@@ -1458,7 +1458,7 @@ do_reauth (struct candidate *peer)
 }
 
 static void
-reauth (timerid id, void *data)
+reauth (void *data)
 {
     struct candidate *peer = (struct candidate *)data;
     do_reauth(peer);

@@ -240,7 +240,7 @@ static void peer_ampe_init(struct ampe_config *aconf,
 	return;
 }
 
-static void plink_timer(timerid id, void *data)
+static void plink_timer(void *data)
 {
 	le16 reason;
     struct candidate *cand;

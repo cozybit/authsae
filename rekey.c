@@ -487,7 +487,7 @@ static void ping_socket_create_rx(const char* iface, int af) {
 
 static int ping_socket_tx = -1;
 
-static void ping_tx(timerid id, void *data) {
+static void ping_tx(void *data) {
   if (!data || !cfg) {
     return;
   }

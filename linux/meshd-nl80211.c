@@ -438,9 +438,6 @@ static int add_station(struct netlink_config_s *nlcfg,
     char *pret;
     struct nl80211_sta_flag_update flags;
 
-    /* FIXME: copy rates from elems */
-    uint8_t supported_rates[] = { 2, 4, 10, 22, 96, 108 };
-
     if (!peer)
         return -EINVAL;
 
@@ -457,8 +454,12 @@ static int add_station(struct netlink_config_s *nlcfg,
 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-    NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, sizeof(supported_rates),
-            supported_rates);
+
+    if (elems->sup_rates) {
+        NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, elems->sup_rates_len,
+                elems->sup_rates);
+    }
+
     flags.mask = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
                  (1 << NL80211_STA_FLAG_WME);
     flags.set = (1 << NL80211_STA_FLAG_WME);

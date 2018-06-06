@@ -120,6 +120,9 @@ ieee_order (unsigned short x)                   /* if BE, byte-swap */
 #define IEEE80211_HT_CAP_40MHZ_INTOLERANT       0x4000
 #define IEEE80211_HT_CAP_LSIG_TXOP_PROT         0x8000
 
+#define KEY_LEN_AES_CCMP    16
+#define KEY_LEN_AES_CMAC    16
+
 /*
  * all we're interested in is mgmt frames of subtype beacon and auth,
  * so instead of depending on platform-specific data structures just

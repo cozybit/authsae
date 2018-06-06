@@ -59,11 +59,14 @@ struct candidate {
     unsigned short retries;
     unsigned int timeout;
     unsigned char aek[SHA256_DIGEST_LENGTH];
-    unsigned char mtk[16];
-    unsigned char mgtk[16];
+    unsigned char mtk[KEY_LEN_AES_CCMP];
+    unsigned char mgtk[KEY_LEN_AES_CCMP];
     unsigned int mgtk_expiration;
-    unsigned char igtk[16];
+
+    unsigned char igtk[KEY_LEN_AES_CMAC];
     u16 igtk_keyid;
+    bool has_igtk;
+
     unsigned char sup_rates[MAX_SUPP_RATES];
     unsigned short sup_rates_len;
     siv_ctx sivctx;
@@ -77,6 +80,11 @@ struct candidate {
     unsigned int rekey_reauth_count;
     unsigned int rekey_ok;
     unsigned int rekey_ok_ping_rx;
+
+    struct ht_cap_ie ht_cap;
+    struct ht_op_ie ht_info;
+
+    bool in_kernel;
 };
 
 struct candidate *find_peer(unsigned char *mac, int accept);

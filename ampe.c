@@ -521,7 +521,8 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
     if (mesh->conf->pmf) {
         cand->igtk_keyid = le16toh(*(u16 *) igtkdata);
         igtkdata += 2 + 6;
-        memcpy(cand->igtk, igtkdata, 16);
+        memcpy(cand->igtk, igtkdata, sizeof(cand->igtk));
+        cand->has_igtk = true;
     }
     free(clear_ampe_ie);
     return -1;
@@ -816,7 +817,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
-                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
+                    (cand->has_igtk) ? cand->igtk : NULL,
+                    (cand->has_igtk) ? sizeof(cand->igtk) : 0,
+                    cand->igtk_keyid,
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
@@ -851,7 +854,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
-                    cand->igtk, sizeof(cand->igtk), cand->igtk_keyid,
+                    (cand->has_igtk) ? cand->igtk : NULL,
+                    (cand->has_igtk) ? sizeof(cand->igtk) : 0,
+                    cand->igtk_keyid,
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
@@ -1078,11 +1083,17 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         }
     }
 
+    if (elems.ht_cap && elems.ht_cap_len <= sizeof(cand->ht_cap)) {
+        memcpy(&cand->ht_cap, elems.ht_cap, elems.ht_cap_len);
+    }
+
+    if (elems.ht_info && elems.ht_info_len <= sizeof(cand->ht_info)) {
+        memcpy(&cand->ht_info, elems.ht_info, elems.ht_info_len);
+    }
+
     check_frame_protection(cand, mgmt, len, &elems);
 
     cand->cookie = cookie;
-
-
 
 	if (cand->link_state == PLINK_BLOCKED) {
 		return 0;

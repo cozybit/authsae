@@ -43,7 +43,7 @@
 #include <sys/select.h>
 #include <time.h>
 
-typedef unsigned int timerid;
+typedef unsigned long long timerid;
 
 /* On 32-bit platforms an unsigned long only gives us:
  * 4294967295 us = 4294967 ms = 4294 s = 71 min

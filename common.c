@@ -90,6 +90,7 @@ void sae_debug (int level, const char *fmt, ...)
     if (sae_debug_mask & level) {
         va_start(argptr, fmt);
         vfprintf(stdout, fmt, argptr);
+        fflush(stdout);
         va_end(argptr);
     }
 }

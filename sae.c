@@ -43,6 +43,7 @@
 #include <openssl/rand.h>
 #include <string.h>
 
+#include "aid.h"
 #include "os_glue.h"
 #include "peer_lists.h"
 #include "peers.h"
@@ -274,6 +275,7 @@ delete_peer (struct candidate **delme)
             EC_POINT_free(peer->peer_element);
             BN_free(peer->my_scalar);
             EC_POINT_free(peer->my_element);
+            release_aid(peer->association_id);
             free(*delme);
             *delme = NULL;
             return;
@@ -1349,8 +1351,6 @@ retransmit_peer (void *data)
     }
 }
 
-static int next_candidate_id = 0;
-
 struct candidate *
 create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie)
 {
@@ -1376,7 +1376,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     TAILQ_INSERT_TAIL(&peers, peer, entry);
     peer->state = SAE_NOTHING;
     peer->cookie = cookie;
-    peer->candidate_id = next_candidate_id++;
+    peer->association_id = get_free_aid();
     curr_open++;
 
     peer_created(her_mac);

@@ -73,7 +73,7 @@ struct candidate {
     void *cookie;
     struct ampe_config *conf;
     unsigned int ch_type; /* nl80211_channel_type */
-    int candidate_id;
+    unsigned short association_id;
 
     timerid rekey_ping_timer;
     unsigned int rekey_ping_count;

@@ -61,6 +61,7 @@ LIST(APPEND libsae_libs
 )
 
 LIST(APPEND libsae_sources
+    aid.c
 	common.c
 	sae.c
 	service.c
@@ -74,6 +75,7 @@ TARGET_LINK_LIBRARIES(sae ${libsae_libs})
 install(TARGETS sae DESTINATION lib)
 
 install(FILES
+  aid.h
   ampe.h
   common.h
   ieee802_11.h

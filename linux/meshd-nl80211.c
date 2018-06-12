@@ -467,8 +467,9 @@ static int add_unauthenticated_sta(struct netlink_config_s *nlcfg,
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
-    /* FIXME: generate AID */
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, 1);
+    uint16_t peerAid = find_peer(peer, /* accept */ 0)->association_id;
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, peerAid);
+
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 
     /* unset 20/40mhz in ht_cap if ht op ie indicates this is a 20mhz STA */

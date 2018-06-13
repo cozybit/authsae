@@ -275,7 +275,7 @@ delete_peer (struct candidate **delme)
             EC_POINT_free(peer->peer_element);
             BN_free(peer->my_scalar);
             EC_POINT_free(peer->my_element);
-            release_aid(peer->association_id);
+            aid_free(peer->association_id);
             free(*delme);
             *delme = NULL;
             return;
@@ -1376,7 +1376,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     TAILQ_INSERT_TAIL(&peers, peer, entry);
     peer->state = SAE_NOTHING;
     peer->cookie = cookie;
-    peer->association_id = get_free_aid();
+    peer->association_id = aid_alloc();
     curr_open++;
 
     peer_created(her_mac);

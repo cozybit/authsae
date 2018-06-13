@@ -61,7 +61,7 @@ LIST(APPEND libsae_libs
 )
 
 LIST(APPEND libsae_sources
-    aid.c
+	aid.c
 	common.c
 	sae.c
 	service.c

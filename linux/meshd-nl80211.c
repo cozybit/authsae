@@ -467,8 +467,8 @@ static int add_unauthenticated_sta(struct netlink_config_s *nlcfg,
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
-    uint16_t peerAid = find_peer(peer, /* accept */ 0)->association_id;
-    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, peerAid);
+    uint16_t peer_aid = find_peer(peer, /* accept */ 0)->association_id;
+    NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, peer_aid);
 
     NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL, 100);
 

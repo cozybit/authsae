@@ -572,7 +572,8 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
             *pos++ = 0;
             if (action == PLINK_CONFIRM) {
                 /* AID */
-                memset(pos, 0, 2);
+                uint16_t* aid = (uint16_t*)pos;
+                *aid = ieee_order(cand->association_id);
                 pos += 2;
             }
         }

@@ -47,7 +47,7 @@
 static uint8_t aidmap_initialized;
 static uint32_t aidmap[AID_BITMAP_LEN];
 
-void init_aidmap() {
+static void aid_initmap() {
   // A value of 1 indicates "free"
   memset(aidmap, 0xff, sizeof(aidmap));
 
@@ -57,10 +57,10 @@ void init_aidmap() {
   aidmap_initialized = 1;
 }
 
-void aid_set(uint16_t aid, uint8_t mark_used) {
+static void aid_set(uint16_t aid, uint8_t mark_used) {
   // On first access we need to initialise the bitmap
   if (!aidmap_initialized) {
-    init_aidmap();
+    aid_initmap();
   }
 
   // 0 is an invalid AID, we never modify it
@@ -87,7 +87,7 @@ void aid_free(uint16_t aid) {
 uint16_t aid_alloc() {
   // On first access we need to initialise the bitmap
   if (!aidmap_initialized) {
-    init_aidmap();
+    aid_initmap();
   }
 
   for (uint32_t word = 0; word < AID_BITMAP_LEN; word++) {

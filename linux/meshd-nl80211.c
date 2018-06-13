@@ -1334,7 +1334,7 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     }
 
     if (config_setting_lookup_string(meshd_section, "meshid", (const char **)&str)) {
-        strncpy(config->meshid, str, MESHD_MAX_SSID_LEN);
+        strncpy(config->meshid, str, MESHD_MAX_SSID_LEN + 1);
         if (config->meshid[MESHD_MAX_SSID_LEN] != 0) {
             fprintf(stderr, "WARNING: Truncating meshid\n");
             config->meshid[MESHD_MAX_SSID_LEN] = 0;

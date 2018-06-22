@@ -1739,6 +1739,7 @@ int main(int argc, char *argv[])
             exitcode = errno;
             goto out;
         }
+        dup2(fileno(stdout), fileno(stderr));
     }
 
     if (netlink_init(&nlcfg, event_handler)) {

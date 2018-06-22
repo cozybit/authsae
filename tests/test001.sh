@@ -17,22 +17,10 @@ trap cleanup SIGINT
 
 nradios=2
 load_hwsim $nradios || err_exit "Failed to load mac80211-hwsim module."
-set_default_config
+set_default_configs $nradios
 start_meshd $(get_hwsim_radios) || exit 2
 
-# Wait for peer link establishment
-TRIES=50
-for i in $(seq 0 $((nradios-1))); do
-    log=${LOGS[$i]}
-    iface=${IFACES[$i]}
-    for j in $(seq $TRIES); do
-        grep established $log &> /dev/null && break
-        echo -n .
-        sleep 1
-    done
-    [ $i -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
-done
-echo
+wait_for_plinks $nradios
 
 # Additional tests
 TMP0=$(mktemp)

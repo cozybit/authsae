@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Minimal test established a peer link between two meshd instances over hwsim
+# Test exchange with IGTKs
 #
 
 . `dirname $0`/include.sh
@@ -18,6 +18,8 @@ trap cleanup SIGINT
 nradios=2
 load_hwsim $nradios || err_exit "Failed to load mac80211-hwsim module."
 set_default_config
+# enable PMF
+sed -i 's/meshid/pmf=1;&/' $CONFIG
 start_meshd $(get_hwsim_radios) || exit 2
 
 # Wait for peer link establishment
@@ -56,6 +58,19 @@ cat ${LOG0} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP0}
 cat ${LOG1} | grep ^mgtk -A 1 | tail -1 > ${TMP1}
 
 diff ${TMP0} ${TMP1} || { echo "FAIL: mgtk exchange failed"; cat ${TMP0} ${TMP1}; exit 1; }
+
+# igtk exchange in both directions
+cat ${LOG0} | grep ^igtk -A 1 | tail -1 > ${TMP0}
+cat ${LOG1} | grep "Received igtk:" -A 1 | tail -1 > ${TMP1}
+
+[ -s $TMP0 ] || err_exit "FAIL: no igtk received"
+
+diff ${TMP0} ${TMP1} || { echo "FAIL: igtk exchange failed"; cat ${TMP0} ${TMP1}; exit 1; }
+
+cat ${LOG0} | grep "Received igtk:" -A 1 | tail -1 > ${TMP0}
+cat ${LOG1} | grep ^igtk -A 1 | tail -1 > ${TMP1}
+
+diff ${TMP0} ${TMP1} || { echo "FAIL: igtk exchange failed"; cat ${TMP0} ${TMP1}; exit 1; }
 
 echo PASS
 cleanup

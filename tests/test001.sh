@@ -9,7 +9,7 @@
 
 cleanup() {
     sudo killall meshd-nl80211
-    rm -fr "${TMP1}" "${TMP2}"
+    rm -fr "${TMP0}" "${TMP1}"
     exit 0
 }
 

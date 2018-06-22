@@ -1,7 +1,5 @@
 #!/bin/bash
 
-CONFIG=/tmp/authsae.cfg
-
 load_hwsim() {
     local nradios=$1
     sudo modprobe -r mac80211-hwsim &> /dev/null
@@ -17,8 +15,11 @@ get_hwsim_radios() {
     echo $radios
 }
 
-set_default_config() {
-    cat > ${CONFIG} <<EOF
+set_default_configs() {
+    CONFIGS=()
+    for i in $(seq $1); do
+        config=/tmp/authsae-$((i-1)).cfg
+        cat > $config <<EOF
 authsae:
 {
  sae:
@@ -41,6 +42,8 @@ authsae:
   };
 };
 EOF
+        CONFIGS+=($config)
+    done
 }
 
 start_meshd() {
@@ -52,6 +55,7 @@ start_meshd() {
 
     sudo rfkill unblock all
     for radio in ${radios[@]}; do
+        conf=${CONFIGS[$i]}
         iface="smesh$i"
         log=/tmp/authsae-$i.log
 
@@ -63,7 +67,7 @@ start_meshd() {
 
         let i=$((i+1))
         sudo rm -f $log
-        sudo ${MESHD} -i $iface -c ${CONFIG} -o $log -B
+        sudo ${MESHD} -i $iface -c $conf -o $log -B 2>>$log
 
         IFACES+=($iface)
         LOGS+=($log)
@@ -75,4 +79,22 @@ start_meshd() {
 err_exit() {
     echo $1
     exit 1
+}
+
+wait_for_plinks() {
+    local nradios=$1
+
+    # Wait for peer link establishment
+    TRIES=50
+    for i in $(seq 0 $((nradios-1))); do
+        log=${LOGS[$i]}
+        iface=${IFACES[$i]}
+        for j in $(seq $TRIES); do
+            grep established $log &> /dev/null && break
+            echo -n .
+            sleep 1
+        done
+        [ $i -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
+    done
+    echo
 }

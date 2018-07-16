@@ -1763,6 +1763,9 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     /*
                      * something stinks in state machine land...
                      */
+                    sae_debug(SAE_DEBUG_STATE_MACHINE, "got a COMMIT from " MACSTR " when already ACCEPTED, deleting to start over\n",
+                              MAC2STR(peer->peer_mac));
+                    return ERR_FATAL;
                     break;
                 case SAE_AUTH_CONFIRM:
                     if (peer->sync > giveup_threshold) {

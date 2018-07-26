@@ -804,7 +804,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
             break;
         case NL80211_CMD_FRAME:
             if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
-                sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%d.%d)\n", now.tv_sec, now.tv_usec);
+                sae_debug(MESHD_DEBUG, "NL80211_CMD_FRAME (%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
                 frame = nla_data(tb[NL80211_ATTR_FRAME]);
                 frame_len = nla_len(tb[NL80211_ATTR_FRAME]);
                 frame_control = ieee_order(frame->frame_control);
@@ -816,18 +816,18 @@ static int event_handler(struct nl_msg *msg, void *arg)
                     if (process_mgmt_frame(frame, frame_len, mesh.mymacaddr, &nlcfg))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else
-                    sae_debug(MESHD_DEBUG, "got unexpected frame (%d.%d)\n", now.tv_sec, now.tv_usec);
+                    sae_debug(MESHD_DEBUG, "got unexpected frame (%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
             }
             break;
         case NL80211_CMD_NEW_STATION:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_STATION (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_STATION (%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
             break;
         case NL80211_CMD_NEW_PEER_CANDIDATE:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_PEER_CANDIDATE(%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_NEW_PEER_CANDIDATE(%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
             new_candidate_handler(msg, arg);
             break;
         case NL80211_CMD_FRAME_TX_STATUS:
-            sae_debug(MESHD_DEBUG, "NL80211_CMD_TX_STATUS (%d.%d)\n", now.tv_sec, now.tv_usec);
+            sae_debug(MESHD_DEBUG, "NL80211_CMD_TX_STATUS (%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
             if (!tb[NL80211_ATTR_ACK] || !tb[NL80211_ATTR_FRAME])
                 sae_debug(MESHD_DEBUG, "tx frame failed!");
             break;

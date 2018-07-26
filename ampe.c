@@ -404,7 +404,7 @@ static int protect_frame(struct candidate *cand, struct ieee80211_mgmt_frame *mg
 
     sae_debug(AMPE_DEBUG_KEYS, "Protecting frame from " MACSTR " to " MACSTR "\n",
             MAC2STR(cand->my_mac), MAC2STR(cand->peer_mac));
-    sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %d\n",
+    sae_debug(AMPE_DEBUG_KEYS, "Checking tricky lengths of protected frame %d, %zu\n",
             cat_to_mic_len, ampe_ie_len + 2);
 
     sae_hexdump(AMPE_DEBUG_KEYS, "SIV- Put AAD[3]: ", (unsigned char *) &mgmt->action, cat_to_mic_len);

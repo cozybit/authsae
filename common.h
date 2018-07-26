@@ -62,7 +62,8 @@ int parse_buffer(char *, char **);
 #define AMPE_DEBUG_ERR         0x200
 #define SAE_DEBUG_REKEY        0x400
 extern unsigned int sae_debug_mask;
-void sae_debug (int level, const char *fmt, ...);
+void sae_debug (int level, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
 void sae_hexdump(int level, const char *label, const unsigned char *start, int
         len);
 

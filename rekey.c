@@ -198,8 +198,8 @@ static void pong_tx(struct candidate *peer, struct sockaddr_storage *src, in_por
     return;
   }
 
-  sae_debug(SAE_DEBUG_REKEY, "rekey: pong to   " MACSTR " (%s) sent %d bytes instead of %d\n", MAC2STR(peer->peer_mac),
-      bytes, inet_ntop(dst.ss_family, get_socket_address_ip(&dst), str, sizeof(str)), sizeof(packet.pong));
+  sae_debug(SAE_DEBUG_REKEY, "rekey: pong to   " MACSTR " (%s) sent %d bytes instead of %zu\n", MAC2STR(peer->peer_mac),
+      inet_ntop(dst.ss_family, get_socket_address_ip(&dst), str, sizeof(str)), bytes, sizeof(packet.pong));
 }
 
 static void pong_rx(int sock, void *data) {
@@ -260,7 +260,7 @@ static void pong_rx(int sock, void *data) {
     return;
   }
 
-  sae_debug(SAE_DEBUG_REKEY, "rekey: pong from %s sent %d bytes instead of %d\n",
+  sae_debug(SAE_DEBUG_REKEY, "rekey: pong from %s sent %d bytes instead of %zu\n",
       inet_ntop(src.ss_family, get_socket_address_ip(&src), str, sizeof(str)), bytes, sizeof(packet->pong));
 }
 
@@ -384,7 +384,7 @@ static void ping_rx(int sock, void *data) {
     return;
   }
 
-  sae_debug(SAE_DEBUG_REKEY, "rekey: ping from %s sent %d bytes instead of %d\n",
+  sae_debug(SAE_DEBUG_REKEY, "rekey: ping from %s sent %d bytes instead of %zu\n",
       inet_ntop(src.ss_family, get_socket_address_ip(&src), str, sizeof(str)), bytes, sizeof(packet->ping));
 }
 
@@ -569,7 +569,7 @@ static void ping_tx(void *data) {
     return;
   }
 
-  sae_debug(SAE_DEBUG_REKEY, "rekey: ping %u to " MACSTR " sent %d bytes instead of %d\n", peer->rekey_ping_count,
+  sae_debug(SAE_DEBUG_REKEY, "rekey: ping %u to " MACSTR " sent %d bytes instead of %zu\n", peer->rekey_ping_count,
       MAC2STR(peer->peer_mac), bytes, sizeof(packet.ping));
 }
 

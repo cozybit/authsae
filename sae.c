@@ -602,7 +602,7 @@ confirm_to_peer (struct candidate *peer)
 
     len += SHA256_DIGEST_LENGTH;
 
-    sae_debug(SAE_DEBUG_PROTOCOL_MSG, MACSTR " in %s, sending %s (sc=%d), len %d\n",
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, MACSTR " in %s, sending %s (sc=%d), len %zu\n",
               MAC2STR(peer->peer_mac),
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
@@ -641,7 +641,7 @@ process_commit (struct candidate *peer, struct ieee80211_mgmt_frame *frame, int 
      */
     if (len < (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) +
                 (2 * BN_num_bytes(peer->grp_def->prime)) + BN_num_bytes(peer->grp_def->order))) {
-        sae_debug(SAE_DEBUG_ERR, "invalid size for commit message (%d < %d+%d+(2*%d)+%d = %d))\n", len,
+        sae_debug(SAE_DEBUG_ERR, "invalid size for commit message (%d < %d+%zu+(2*%d)+%d = %zu))\n", len,
                   IEEE802_11_HDR_LEN, sizeof(frame->authenticate), BN_num_bytes(peer->grp_def->prime),
                   BN_num_bytes(peer->grp_def->order),
                   (IEEE802_11_HDR_LEN+sizeof(frame->authenticate)+
@@ -926,7 +926,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
 
     len += (2 * BN_num_bytes(peer->grp_def->prime));
 
-    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "peer " MACSTR " in %s, sending %s (%s token), len %d, group %d\n",
+    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "peer " MACSTR " in %s, sending %s (%s token), len %zu, group %d\n",
               MAC2STR(peer->peer_mac),
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
@@ -1321,7 +1321,7 @@ retransmit_peer (void *data)
     struct candidate *peer;
 
     peer = (struct candidate *)data;
-    sae_debug(SAE_DEBUG_STATE_MACHINE, "timer %d fired! retrans = %d, incrementing\n", peer->t0, peer->sync);
+    sae_debug(SAE_DEBUG_STATE_MACHINE, "timer %llu fired! retrans = %d, incrementing\n", peer->t0, peer->sync);
     if (peer->sync > giveup_threshold) {
         sae_debug(SAE_DEBUG_STATE_MACHINE, "peer not listening!\n");
         if (peer->state == SAE_COMMITTED) {
@@ -1555,7 +1555,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      */
                     if (status == WLAN_STATUS_ANTI_CLOGGING_TOKEN_NEEDED) {
                         sae_debug(SAE_DEBUG_STATE_MACHINE,
-                                  "received a token request, add a token, length %d, and resend commit\n",
+                                  "received a token request, add a token, length %zu, and resend commit\n",
                                   (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
                         commit_to_peer(peer, frame->authenticate.u.var8,
                                        (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
@@ -1745,7 +1745,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         }
                         fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
-                    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %d seconds\n", pmk_expiry);
+                    sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %lu seconds\n", pmk_expiry);
                     if (peer->t1)
                         srv_rem_timeout(srvctx, peer->t1);
                     peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
@@ -1874,7 +1874,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
                     SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) +
                     (2 * BN_num_bytes(group_def->prime)))) {
             sae_debug(SAE_DEBUG_PROTOCOL_MSG,
-                      "checking for token in offer of group %d but length is wrong: %d vs. %d\n",
+                      "checking for token in offer of group %d but length is wrong: %d vs. %zu\n",
                       group_def->group_num, len,
                       (IEEE802_11_HDR_LEN + sizeof(frame->authenticate) + sizeof(unsigned short) +
                        SHA256_DIGEST_LENGTH + BN_num_bytes(group_def->order) +

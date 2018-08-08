@@ -855,6 +855,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case OPN_ACPT:
 			set_link_state(cand, PLINK_ESTAB);
+            derive_mtk(cand);
             estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),

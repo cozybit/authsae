@@ -237,7 +237,10 @@ static void peer_ampe_init(struct ampe_config *aconf,
     cand->conf = aconf;
     derive_aek(cand);
     siv_init(&cand->sivctx, cand->aek, SIV_256);
-	return;
+    memset(cand->mtk, 0, sizeof(cand->mtk));
+    memset(cand->mgtk, 0, sizeof(cand->mgtk));
+    memset(cand->igtk, 0, sizeof(cand->igtk));
+    cand->has_igtk = false;
 }
 
 static void plink_timer(void *data)

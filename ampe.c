@@ -115,8 +115,6 @@ static inline void fsm_restart(struct candidate *cand)
     cand->retries = 0;
 }
 
-extern service_context srvctx;
-
 enum plink_event {
         PLINK_UNDEFINED,
         OPN_ACPT,
@@ -279,8 +277,7 @@ static void plink_timer(void *data)
             }
             cand->timeout += rand % cand->timeout;
 			++cand->retries;
-            cand->t2 = srv_add_timeout(srvctx,
-                    SRV_MSEC(cand->timeout), plink_timer,
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer,
                     cand);
 			plink_frame_tx(cand, PLINK_OPEN, 0);
 			break;
@@ -292,8 +289,7 @@ static void plink_timer(void *data)
 		if (!reason)
 			reason = htole16(MESH_CONFIRM_TIMEOUT);
 		set_link_state(cand, PLINK_HOLDING);
-        cand->t2 = srv_add_timeout(srvctx,
-                    SRV_MSEC(cand->conf->holding_timeout_ms), plink_timer,
+        cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->conf->holding_timeout_ms), plink_timer,
                     cand);
 		plink_frame_tx(cand, PLINK_CLOSE, reason);
 		break;
@@ -756,7 +752,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case OPN_ACPT:
             cand->timeout = aconf->retry_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_OPEN, 0);
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
 			break;
@@ -777,7 +773,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->reason = reason;
 			set_link_state(cand, PLINK_HOLDING);
             cand->timeout = aconf->holding_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
@@ -788,7 +784,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case CNF_ACPT:
 			set_link_state(cand, PLINK_CNF_RCVD);
             cand->timeout = aconf->confirm_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			break;
 		default:
 			break;
@@ -807,7 +803,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->reason = reason;
 			set_link_state(cand, PLINK_HOLDING);
             cand->timeout = aconf->holding_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
@@ -851,7 +847,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->reason = reason;
 			set_link_state(cand, PLINK_HOLDING);
             cand->timeout = aconf->holding_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
 		case OPN_ACPT:
@@ -888,7 +884,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			cand->reason = reason;
 			set_link_state(cand, PLINK_HOLDING);
             cand->timeout = aconf->holding_timeout_ms;
-            cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
             changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             //TODO: update the number of available peer "slots" in mesh config
 			//if (deactivated)
@@ -956,7 +952,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
 
     peer_ampe_init(&ampe_conf, cand, me, cookie);
 	set_link_state(cand, PLINK_OPN_SNT);
-    cand->t2 = srv_add_timeout(srvctx, SRV_MSEC(cand->timeout), plink_timer, cand);
+    cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 
 	sae_debug(AMPE_DEBUG_FSM, "Mesh plink: starting establishment "
             "with " MACSTR "\n", MAC2STR(peer_mac));

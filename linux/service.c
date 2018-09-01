@@ -486,33 +486,33 @@ srv_main_loop(service_context sc)
     return 0;
 }
 
+
 /*
  * srv_create_context()
  *	create a service context
  */
+static service_context srvctx;
 service_context
 srv_create_context(void)
 {
-    service_context blah;
-
-    if ((blah = (service_context)malloc(sizeof(struct _servcxt))) == NULL) {
+    if ((srvctx = (service_context)malloc(sizeof(struct _servcxt))) == NULL) {
         sae_debug(SAE_DEBUG_ERR, "context was NULL\n");
         return NULL;
     }
-    blah->timer_id = 0;
-    FD_ZERO(&blah->readfds);
-    FD_ZERO(&blah->writefds);
-    FD_ZERO(&blah->exceptfds);
-    bzero((char *)blah->timers, (NTIMERS * sizeof(struct timer)));
-    bzero((char *)blah->inputs, (NFDS * sizeof(struct source)));
-    bzero((char *)blah->outputs, (NFDS * sizeof(struct source)));
-    blah->ntimers = blah->ninputs = blah->noutputs = 0;
-    blah->gbl_timer.tv_sec = 1000;
-    blah->gbl_timer.tv_nsec = 0;
-    blah->exceptor = NULL;
-    blah->keep_running = 1;
+    srvctx->timer_id = 0;
+    FD_ZERO(&srvctx->readfds);
+    FD_ZERO(&srvctx->writefds);
+    FD_ZERO(&srvctx->exceptfds);
+    bzero((char *)srvctx->timers, (NTIMERS * sizeof(struct timer)));
+    bzero((char *)srvctx->inputs, (NFDS * sizeof(struct source)));
+    bzero((char *)srvctx->outputs, (NFDS * sizeof(struct source)));
+    srvctx->ntimers = srvctx->ninputs = srvctx->noutputs = 0;
+    srvctx->gbl_timer.tv_sec = 1000;
+    srvctx->gbl_timer.tv_nsec = 0;
+    srvctx->exceptor = NULL;
+    srvctx->keep_running = 1;
 
-    return blah;
+    return srvctx;
 }
 
 /*
@@ -526,4 +526,41 @@ void
 srv_cancel_main_loop(service_context context)
 {
 	context->keep_running = 0;
+}
+
+/* Definition of event loop operations for libsae */
+static timerid add_timeout_with_jitter(microseconds usec, timercb proc,
+                                   void *data, microseconds jitter_usecs)
+{
+    return srv_add_timeout_with_jitter(srvctx, usec, proc, data, jitter_usecs);
+}
+
+static timerid add_timeout(microseconds usec, timercb proc, void *data)
+{
+    return srv_add_timeout_with_jitter(srvctx, usec, proc, data, 0);
+}
+
+static int rem_timeout(timerid tid)
+{
+    return srv_rem_timeout(srvctx, tid);
+}
+
+static int add_input(int fd, void * data, fdcb cb)
+{
+    return srv_add_input(srvctx, fd, data, cb);
+}
+
+static void rem_input(int fd)
+{
+    return srv_rem_input(srvctx, fd);
+}
+
+struct evl_ops* get_evl_ops() {
+    static struct evl_ops ops;
+    ops.add_timeout_with_jitter = add_timeout_with_jitter;
+    ops.add_timeout = add_timeout;
+    ops.rem_timeout = rem_timeout;
+    ops.add_input = add_input;
+    ops.rem_input = rem_input;
+    return &ops;
 }

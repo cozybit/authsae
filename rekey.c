@@ -83,7 +83,7 @@ typedef union {
   packet_pong pong;
 }__attribute__((packed)) packet_struct;
 
-static service_context ctx = NULL;
+static struct evl_ops *evl = NULL;
 static struct mesh_node *cfg = NULL;
 
 #define IPPROTO(af)   ((af == AF_INET) ? IPPROTO_IP : IPPROTO_IPV6)
@@ -246,7 +246,7 @@ static void pong_rx(int sock, void *data) {
     sae_debug(SAE_DEBUG_REKEY, "rekey: pong from " MACSTR " (%s): keys are installed correctly\n",
         MAC2STR(packet->pong.src_mac), inet_ntop(src.ss_family, get_socket_address_ip(&src), str, sizeof(str)));
 
-    srv_rem_timeout(ctx, peer->rekey_ping_timer);
+    evl->rem_timeout(peer->rekey_ping_timer);
     peer->rekey_ping_timer = 0;
     peer->rekey_ping_count = 0;
     peer->rekey_reauth_count = 0;
@@ -269,7 +269,7 @@ static void pong_socket_close(void) {
     return;
   }
 
-  srv_rem_input(ctx, pong_socket);
+  evl->rem_input(pong_socket);
 
   close(pong_socket);
   pong_socket = -1;
@@ -305,7 +305,7 @@ static void pong_socket_create(const char* iface, int af) {
     goto err;
   }
 
-  if (srv_add_input(ctx, pong_socket, NULL, pong_rx)) {
+  if (evl->add_input(pong_socket, NULL, pong_rx)) {
     goto err;
   }
 
@@ -393,7 +393,7 @@ static void ping_socket_close_rx(void) {
     return;
   }
 
-  srv_rem_input(ctx, ping_socket_rx);
+  evl->rem_input(ping_socket_rx);
 
   if (ping_socket_rx_ifindex) {
     if (ping_socket_rx_af == AF_INET) {
@@ -472,7 +472,7 @@ static void ping_socket_create_rx(const char* iface, int af) {
     }
   }
 
-  if (srv_add_input(ctx, ping_socket_rx, NULL, ping_rx)) {
+  if (evl->add_input(ping_socket_rx, NULL, ping_rx)) {
     goto err;
   }
 
@@ -501,7 +501,7 @@ static void ping_tx(void *data) {
     sae_debug(SAE_DEBUG_REKEY, "rekey: too many pings (%u) to " MACSTR "\n", peer->rekey_ping_count,
         MAC2STR(peer->peer_mac));
 
-    srv_rem_timeout(ctx, peer->rekey_ping_timer);
+    evl->rem_timeout(peer->rekey_ping_timer);
     peer->rekey_ping_timer = 0;
     peer->rekey_ping_count = 0;
 
@@ -554,8 +554,8 @@ static void ping_tx(void *data) {
   int bytes = sendto(ping_socket_tx, &packet.ping, sizeof(packet.ping), 0, (struct sockaddr *) &dst, sizeof(dst));
 
   if (bytes == sizeof(packet.ping)) {
-    srv_rem_timeout(ctx, peer->rekey_ping_timer);
-    peer->rekey_ping_timer = srv_add_timeout(ctx, SRV_MSEC(cfg->conf->rekey_ping_timeout), ping_tx, peer);
+    evl->rem_timeout(peer->rekey_ping_timer);
+    peer->rekey_ping_timer = evl->add_timeout(SRV_MSEC(cfg->conf->rekey_ping_timeout), ping_tx, peer);
     if (!peer->rekey_ping_timer) {
       sae_debug(SAE_DEBUG_ERR, "rekey: ping %u to " MACSTR " failed to reschedule its ping timeout\n",
           peer->rekey_ping_count, MAC2STR(peer->peer_mac));
@@ -686,7 +686,7 @@ void rekey_verify_peer(struct candidate *peer) {
     peer->rekey_ping_count = 0;
     peer->rekey_ok = 0;
     peer->rekey_ok_ping_rx = 0;
-    peer->rekey_ping_timer = srv_add_timeout_with_jitter(ctx, SRV_MSEC(cfg->conf->rekey_ping_timeout), ping_tx, peer,
+    peer->rekey_ping_timer = evl->add_timeout_with_jitter(SRV_MSEC(cfg->conf->rekey_ping_timeout), ping_tx, peer,
         SRV_MSEC(cfg->conf->rekey_ping_jitter));
     if (!peer->rekey_ping_timer) {
       sae_debug(SAE_DEBUG_ERR, "rekey: failed to schedule ping timeout for " MACSTR "\n", MAC2STR(peer->peer_mac));
@@ -700,15 +700,15 @@ void rekey_verify_peer(struct candidate *peer) {
  * lifecycle
  */
 
-void rekey_init(service_context context, struct mesh_node *config) {
+void rekey_init(struct mesh_node *config, struct evl_ops *event_loop_ops) {
   if (cfg) {
     return;
   }
 
-  assert(context);
   assert(config);
+  assert(event_loop_ops);
 
-  ctx = context;
+  evl = event_loop_ops;
   cfg = config;
 
   rekey_reopen_sockets();
@@ -722,5 +722,5 @@ void rekey_close(void) {
   rekey_sockets_close();
 
   cfg = NULL;
-  ctx = NULL;
+  evl = NULL;
 }

@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Dan Harkins, 2008, 2009, 2010
  *
- *  Copyright holder grants permission for redistribution and use in source 
- *  and binary forms, with or without modification, provided that the 
+ *  Copyright holder grants permission for redistribution and use in source
+ *  and binary forms, with or without modification, provided that the
  *  following conditions are met:
  *     1. Redistribution of source code must retain the above copyright
  *        notice, this list of conditions, and the following disclaimer
@@ -18,13 +18,13 @@
  *         Dan Harkins (dharkins at lounge dot org)"
  *
  *  "DISCLAIMER OF LIABILITY
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY DAN HARKINS ``AS IS'' AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INDUSTRIAL LOUNGE BE LIABLE
  *  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  *  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -43,21 +43,11 @@
 #include <sys/select.h>
 #include <time.h>
 
-typedef unsigned long long timerid;
-
-/* On 32-bit platforms an unsigned long only gives us:
- * 4294967295 us = 4294967 ms = 4294 s = 71 min
- * That's not very much time especially given that
- * we'd like to do some math using signed integers
- * so we use a long long.
- */
-typedef unsigned long long microseconds;
+#include "evl_ops.h"
 
 /*
  * input callbacks and timer callbacks
  */
-typedef void (*fdcb)(int fd, void *data);
-typedef void (*timercb)(void *data);
 typedef void (*dumpcb)(timerid id, int num, int secs, int usecs, char *msg);
 
 /*
@@ -69,10 +59,6 @@ struct timer {
     timerid id;
     void *data;
 };
-
-#define SRV_SEC(x)	((x) * 1000000ULL)
-#define SRV_MSEC(x)	((x) * 1000ULL)
-#define SRV_USEC(x)	x
 
 /*
  * an I/O definition
@@ -112,7 +98,7 @@ typedef struct _servcxt {
 typedef struct _servcxt *service_context;
 
 /*
- * service context APIs 
+ * service context APIs
  */
 timerid srv_add_timeout_with_jitter(service_context context, microseconds usec, timercb proc, void *data, microseconds jitter_usecs);
 
@@ -140,5 +126,7 @@ int srv_main_loop(service_context);
 service_context srv_create_context(void);
 
 void srv_cancel_main_loop(service_context);
+
+struct evl_ops* get_evl_ops();
 
 #endif	/* _SAE_SERVICE_H_ */

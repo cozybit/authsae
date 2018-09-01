@@ -46,7 +46,6 @@
 #include "aid.h"
 #include "peer_lists.h"
 #include "peers.h"
-#include "service.h"
 
 #define COUNTER_INFINITY        65535
 #define REAUTH_JITTER		30
@@ -94,7 +93,6 @@ static void HMAC_CTX_free(HMAC_CTX* ctx)
 
 struct sae_cb *cb;
 
-extern service_context srvctx;
 /*
  * forward declarations
  */
@@ -228,7 +226,7 @@ blacklist_peer (struct candidate *peer)
     if ((fubar = (struct candidate *)malloc(sizeof(struct candidate))) != NULL) {
         memcpy(fubar->peer_mac, peer->peer_mac, ETH_ALEN);
         TAILQ_INSERT_TAIL(&blacklist, fubar, entry);
-        (void)srv_add_timeout(srvctx, SRV_SEC(blacklist_timeout), remove_from_blacklist, fubar);
+        (void)cb->evl->add_timeout(SRV_SEC(blacklist_timeout), remove_from_blacklist, fubar);
     }
 }
 
@@ -254,13 +252,13 @@ delete_peer (struct candidate **delme)
                     sae_debug(SAE_DEBUG_ERR, "***ERROR*** we have %d currently open sessions\n", curr_open);
                 }
             }
-            srv_rem_timeout(srvctx, peer->t0);     /* no harm if not set */
+            cb->evl->rem_timeout(peer->t0);     /* no harm if not set */
             peer->t0 = 0;
-            srv_rem_timeout(srvctx, peer->t1);     /*      ditto         */
+            cb->evl->rem_timeout(peer->t1);     /*      ditto         */
             peer->t1 = 0;
-            srv_rem_timeout(srvctx, peer->t2);     /*      ditto         */
+            cb->evl->rem_timeout(peer->t2);     /*      ditto         */
             peer->t2 = 0;
-            srv_rem_timeout(srvctx, peer->rekey_ping_timer);
+            cb->evl->rem_timeout(peer->rekey_ping_timer);
             peer->rekey_ping_timer = 0;
             TAILQ_REMOVE(&peers, peer, entry);
             /*
@@ -1339,11 +1337,11 @@ retransmit_peer (void *data)
     switch (peer->state) {
         case SAE_COMMITTED:
             commit_to_peer(peer, NULL, 0);
-            peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+            peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
             break;
         case SAE_CONFIRMED:
             confirm_to_peer(peer);
-            peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+            peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
             break;
         default:
             sae_debug(SAE_DEBUG_STATE_MACHINE, "timer fired and not committed or confirmed!\n");
@@ -1440,7 +1438,7 @@ do_reauth (struct candidate *peer)
                 delete_peer(&newpeer);
             } else {
                 commit_to_peer(newpeer, NULL, 0);
-                newpeer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, newpeer);
+                newpeer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, newpeer);
                 newpeer->state = SAE_COMMITTED;
             }
         }
@@ -1448,12 +1446,12 @@ do_reauth (struct candidate *peer)
          * make a hard deletion of this guy in case the reauth fails and we
          * don't end up deleting this instance
          */
-        peer->t2 = srv_add_timeout(srvctx, SRV_SEC(5), destroy_peer, peer);
+        peer->t2 = cb->evl->add_timeout(SRV_SEC(5), destroy_peer, peer);
 
     } else {
         if (peer->t1)
-            srv_rem_timeout(srvctx, peer->t1);
-        peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
+            cb->evl->rem_timeout(peer->t1);
+        peer->t1 = cb->evl->add_timeout_with_jitter(SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
     }
 }
 
@@ -1478,7 +1476,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
               seq_to_string(seq), MAC2STR(frame->sa),
               state_to_string(peer->state));
 
-    srv_rem_timeout(srvctx, peer->t0);
+    cb->evl->rem_timeout(peer->t0);
     peer->t0 = 0;
     /*
      * implement the state machine for SAE
@@ -1532,7 +1530,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                      */
                     confirm_to_peer(peer);
                     peer->sync = 0;
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                    peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                     peer->state = SAE_CONFIRMED;
                     break;
                 case SAE_AUTH_CONFIRM:
@@ -1560,7 +1558,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         commit_to_peer(peer, frame->authenticate.u.var8,
                                        (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
                         peer->sync = 0;
-                        peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                        peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                         break;
                     }
                     /*
@@ -1593,14 +1591,14 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                             sae_debug(SAE_DEBUG_STATE_MACHINE,
                                       "peer is rejecting something (%d) not offered, must be old, ignore...\n", grp);
                         }
-                        peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                        peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                         break;
                     }
                     /*
                      * silently drop any other failure
                      */
                     if (status != 0) {
-                        peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                        peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                         break;
                     }
                     /*
@@ -1626,7 +1624,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                             sae_debug(SAE_DEBUG_STATE_MACHINE, "group %d not supported, send rejection\n", grp);
                             peer->sync++;
                             reject_to_peer(peer, frame);
-                            peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                            peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                             break;
                         }
                         /*
@@ -1641,7 +1639,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                              * the numerically greater MAC address retransmits
                              */
                             commit_to_peer(peer, NULL, 0);
-                            peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                            peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                             break;
                         } else {
                             sae_debug(SAE_DEBUG_STATE_MACHINE,
@@ -1672,7 +1670,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         }
                     }
                     confirm_to_peer(peer);
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                    peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                     peer->state = SAE_CONFIRMED;
                     break;
                 case SAE_AUTH_CONFIRM:
@@ -1682,7 +1680,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     }
                     peer->sync++;
                     commit_to_peer(peer, NULL, 0);
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                    peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                     break;
                 default:
                     sae_debug(SAE_DEBUG_ERR, "unknown SAE frame (%d) from " MACSTR "\n",
@@ -1695,7 +1693,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                 /*
                  * silently discard, but since we cancelled the timer above, reset it
                  */
-                peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                 break;
             }
             switch (seq) {
@@ -1710,7 +1708,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         commit_to_peer(peer, NULL, 0);
                         confirm_to_peer(peer);
                     }
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                    peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                     break;
                 case SAE_AUTH_CONFIRM:
                     ret = process_confirm(peer, frame, len);
@@ -1747,8 +1745,8 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %lu seconds\n", pmk_expiry);
                     if (peer->t1)
-                        srv_rem_timeout(srvctx, peer->t1);
-                    peer->t1 = srv_add_timeout_with_jitter(srvctx, SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
+                        cb->evl->rem_timeout(peer->t1);
+                    peer->t1 = cb->evl->add_timeout_with_jitter(SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
                     peer->state = SAE_ACCEPTED;
                     break;
                 default:
@@ -1967,7 +1965,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                     delete_peer(&peer);
                 } else {
                     commit_to_peer(peer, NULL, 0);
-                    peer->t0 = srv_add_timeout(srvctx, SRV_SEC(retrans), retransmit_peer, peer);
+                    peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
                     peer->state = SAE_COMMITTED;
                     sae_debug(SAE_DEBUG_STATE_MACHINE, "state of " MACSTR " is now (%d) %s\n\n",
                               MAC2STR(peer->peer_mac), peer->state, state_to_string(peer->state));

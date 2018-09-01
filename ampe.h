@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "common.h"
+#include "evl_ops.h"
 #include "ieee802_11.h"
 
 enum plink_state {
@@ -134,6 +135,7 @@ struct ampe_cb {
             unsigned char *sup_rates,
             unsigned short sup_rates_len,
             void *cookie);
+    struct evl_ops* evl;
 };
 
 /*  app calls these:  */

@@ -39,6 +39,7 @@
 #ifndef _SAE_H_
 #define _SAE_H_
 
+#include "evl_ops.h"
 #include "ieee802_11.h"
 #include "peers.h"
 
@@ -60,8 +61,9 @@ struct sae_config {
 struct sae_cb {
     int (*meshd_write_mgmt)(char *frame, int framelen, void *cookie);
     void (*peer_created)(unsigned char *peer_mac);
-    void (*fin)(unsigned short reason, unsigned char *peer_mac, unsigned char *key, int keylen, void *cookie);
-    struct event_loop_ops *evl;
+    void (*fin)(unsigned short reason, unsigned char *peer_mac,
+                unsigned char *key, int keylen, void *cookie);
+    struct evl_ops *evl;
 };
 
 /* You may choose not to call sae_parse_config and

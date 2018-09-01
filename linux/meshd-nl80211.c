@@ -1502,6 +1502,7 @@ static struct ampe_cb *get_ampe_cbs()
     cb.meshd_set_mesh_conf = meshd_set_mesh_conf;
     cb.set_plink_state = set_plink_state;
     cb.estab_peer_link = estab_peer_link;
+    cb.evl = get_evl_ops();
     return &cb;
 }
 
@@ -1511,6 +1512,7 @@ static struct sae_cb *get_sae_cbs()
     cb.meshd_write_mgmt = meshd_write_mgmt;
     cb.peer_created = peer_created;
     cb.fin = fin;
+    cb.evl = get_evl_ops();
     return &cb;
 }
 
@@ -1773,7 +1775,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
-    rekey_init(srvctx, &mesh);
+    rekey_init(&mesh, get_evl_ops());
     watch_ips_init(&mesh);
 
     /* Add netlink sockets to our event loop */

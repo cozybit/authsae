@@ -123,20 +123,21 @@ struct ampe_config {
 /* meshd_set_mesh_conf */
 #define MESH_CONF_CHANGED_HT 1 << 0
 
-/*  meshd calls these:  */
-int ampe_initialize(struct mesh_node *mesh);
+struct ampe_cb {
+    int (*meshd_set_mesh_conf)(struct mesh_node *mesh, uint32_t changed);
+    int (*set_plink_state)(unsigned char *peer, int state, void *cookie);
+    void (*estab_peer_link)(unsigned char *peer, unsigned char *mtk,
+            int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
+            unsigned int mgtk_expiration,
+            unsigned char *peer_igtk, int peer_igtk_len, int peer_igtk_keyid,
+            unsigned char *sup_rates,
+            unsigned short sup_rates_len,
+            void *cookie);
+};
+
+/*  app calls these:  */
+int ampe_initialize(struct mesh_node *mesh, struct ampe_cb *cb);
 int process_ampe_frame(struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie);
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
-
-/*  and implements these:  */
-int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed);
-int set_plink_state(unsigned char *peer, int state, void *cookie);
-void estab_peer_link(unsigned char *peer, unsigned char *mtk,
-        int mtk_len, unsigned char *peer_mgtk, int peer_mgtk_len,
-        unsigned int mgtk_expiration,
-        unsigned char *peer_igtk, int peer_igtk_len, int peer_igtk_keyid,
-        unsigned char *sup_rates,
-        unsigned short sup_rates_len,
-        void *cookie);
 
 #endif /* _SAE_AMPE_H_ */

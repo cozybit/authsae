@@ -1495,6 +1495,15 @@ static int channel_to_freq(int chan)
 	return (chan + 1000) * 5;
 }
 
+static struct ampe_cb *init_callbacks()
+{
+    static struct ampe_cb cb;
+    cb.meshd_set_mesh_conf = meshd_set_mesh_conf;
+    cb.set_plink_state = set_plink_state;
+    cb.estab_peer_link = estab_peer_link;
+    return &cb;
+}
+
 static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
 {
     int exitcode = 0;
@@ -1514,7 +1523,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     set_sup_basic_rates(mesh->conf, mesh->bands[mesh->band].rates,
                         mesh->bands[mesh->band].n_bitrates);
 
-    if (ampe_initialize(mesh) < 0) {
+    if (ampe_initialize(mesh, init_callbacks()) < 0) {
         fprintf(stderr, "cannot configure AMPE!\n");
         exit(EXIT_FAILURE);
     }

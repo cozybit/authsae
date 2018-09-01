@@ -70,6 +70,8 @@ static const unsigned char akm_suite_selector[4] = { 0x0, 0xf, 0xac, 0x8 };     
 static const unsigned char pw_suite_selector[4] = { 0x0, 0xf, 0xac, 0x4 };     /*  CCMP  */
 static const unsigned char null_nonce[32] = { 0 };
 
+static struct ampe_cb *cb;
+
 /* IEs */
 static unsigned char *sta_fixed_ies;
 static unsigned char sta_fixed_ies_len;
@@ -98,7 +100,7 @@ static int plink_frame_tx(struct candidate *cand, enum
 static inline void set_link_state(struct candidate *cand, enum plink_state state)
 {
 	cand->link_state = state;
-	set_plink_state(cand->peer_mac, state, cand->cookie);
+	cb->set_plink_state(cand->peer_mac, state, cand->cookie);
 }
 
 /**
@@ -818,7 +820,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
             derive_mtk(cand);
-            estab_peer_link(cand->peer_mac,
+            cb->estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
@@ -856,7 +858,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_ACPT:
 			set_link_state(cand, PLINK_ESTAB);
             derive_mtk(cand);
-            estab_peer_link(cand->peer_mac,
+            cb->estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
                     cand->mgtk, sizeof(cand->mgtk),
                     cand->mgtk_expiration,
@@ -925,7 +927,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 	}
 
     if (changed)
-        meshd_set_mesh_conf(cand->conf->mesh, changed);
+        cb->meshd_set_mesh_conf(cand->conf->mesh, changed);
 }
 
 #define PLINK_GET_LLID(p) (p + 2)
@@ -1172,10 +1174,23 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     return 0;
 }
 
-int ampe_initialize(struct mesh_node *mesh)
+bool check_callbacks(struct ampe_cb *callbacks)
+{
+    bool valid = true;
+    valid = valid && callbacks->meshd_set_mesh_conf != NULL;
+    valid = valid && callbacks->set_plink_state != NULL;
+    valid = valid && callbacks->estab_peer_link != NULL;
+    return valid;
+}
+
+int ampe_initialize(struct mesh_node *mesh, struct ampe_cb *callbacks)
 {
         int sup_rates_len;
 
+        if (!check_callbacks(callbacks))
+            return -1;
+
+        cb = callbacks;
 
         /* TODO: move these to a config file */
         ampe_conf.retry_timeout_ms = 1000;

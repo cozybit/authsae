@@ -64,7 +64,6 @@ LIST(APPEND libsae_sources
 	aid.c
 	common.c
 	sae.c
-	service.c
 	rekey.c
 	ampe.c
 	crypto/aes_siv.c
@@ -83,7 +82,6 @@ install(FILES
   peers.h
   rekey.h
   sae.h
-  service.h
   DESTINATION include/authsae
 )
 

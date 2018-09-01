@@ -51,7 +51,7 @@ MESSAGE(STATUS "Configuring mon ...")
 
 LIST(APPEND mon_sources
 	mon.c
-	../service.c
+	service.c
 	../common.c
 )
 
@@ -87,8 +87,8 @@ ENDIF(LIBRT)
 
 LIST(APPEND meshd_sources
 	meshd.c
+	service.c
 	../common.c
-	../service.c
 	../ampe.c
 	../rekey.c
 	../crypto/aes_siv.c
@@ -123,6 +123,7 @@ LIST(APPEND meshd_nl80211_sources
 	meshd-nl80211.c
 	nlutils.c
 	watch_ips.c
+    service.c
 )
 
 ADD_EXECUTABLE(meshd-nl80211 ${meshd_nl80211_sources})

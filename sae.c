@@ -44,7 +44,6 @@
 #include <string.h>
 
 #include "aid.h"
-#include "os_glue.h"
 #include "peer_lists.h"
 #include "peers.h"
 #include "service.h"
@@ -93,6 +92,7 @@ static void HMAC_CTX_free(HMAC_CTX* ctx)
 }
 #endif
 
+struct sae_cb *cb;
 
 extern service_context srvctx;
 /*
@@ -607,7 +607,7 @@ confirm_to_peer (struct candidate *peer)
               state_to_string(peer->state),
               seq_to_string(ieee_order(frame->authenticate.auth_seq)),
               peer->sc, len);
-    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
+    if (cb->meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                 MAC2STR(peer->peer_mac));
         ret = -1;
@@ -934,7 +934,7 @@ commit_to_peer (struct candidate *peer, unsigned char *token, int token_len)
               peer->grp_def->group_num);
     BN_free(x);
     BN_free(y);
-    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
+    if (cb->meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                   MAC2STR(peer->peer_mac));
         return -1;
@@ -977,7 +977,7 @@ request_token (struct ieee80211_mgmt_frame *req, unsigned char *me, void *cookie
     len += SHA256_DIGEST_LENGTH;
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending a token request to " MACSTR "\n", MAC2STR(req->sa));
-    if (meshd_write_mgmt(buf, len, cookie) != len) {
+    if (cb->meshd_write_mgmt(buf, len, cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send a rejection frame to " MACSTR "\n",
                 MAC2STR(req->sa));
         return -1;
@@ -1012,7 +1012,7 @@ reject_to_peer (struct candidate *peer, struct ieee80211_mgmt_frame *frame)
     len += sizeof(unsigned long);
 
     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "sending REJECTION to " MACSTR "\n", MAC2STR(peer->peer_mac));
-    if (meshd_write_mgmt(buf, len, peer->cookie) != len) {
+    if (cb->meshd_write_mgmt(buf, len, peer->cookie) != len) {
         sae_debug(SAE_DEBUG_ERR, "can't send an authentication frame to " MACSTR "\n",
                 MAC2STR(peer->peer_mac));
         return -1;
@@ -1331,7 +1331,7 @@ retransmit_peer (void *data)
             sae_debug(SAE_DEBUG_STATE_MACHINE, MACSTR " never responded, adding to blacklist\n", MAC2STR(peer->peer_mac));
             blacklist_peer(peer);
         }
-        fin(WLAN_STATUS_AUTHENTICATION_TIMEOUT, peer->peer_mac, NULL, 0, peer->cookie);
+        cb->fin(WLAN_STATUS_AUTHENTICATION_TIMEOUT, peer->peer_mac, NULL, 0, peer->cookie);
         delete_peer(&peer);
         return;
     }
@@ -1379,7 +1379,7 @@ create_candidate (unsigned char *her_mac, unsigned char *my_mac, unsigned short 
     peer->association_id = aid_alloc();
     curr_open++;
 
-    peer_created(her_mac);
+    cb->peer_created(her_mac);
 
     return peer;
 }
@@ -1743,7 +1743,7 @@ process_authentication_frame (struct candidate *peer, struct ieee80211_mgmt_fram
                         if (sae_debug_mask & SAE_DEBUG_CRYPTO) {
                             print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
                         }
-                        fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
+                        cb->fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
                     }
                     sae_debug(SAE_DEBUG_PROTOCOL_MSG, "setting reauth timer for %lu seconds\n", pmk_expiry);
                     if (peer->t1)
@@ -1963,7 +1963,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                  * assign the first group in the list as the one to try
                  */
                 if (assign_group_to_peer(peer, gd) < 0) {
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
+                    cb->fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
                     delete_peer(&peer);
                 } else {
                     commit_to_peer(peer, NULL, 0);
@@ -2052,7 +2052,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                      * a "del" event
                      */
                     blacklist_peer(peer);
-                    fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
+                    cb->fin(WLAN_STATUS_UNSPECIFIED_FAILURE, peer->peer_mac, NULL, 0, peer->cookie);
                     /* no break / fall-through intentional */
                 case ERR_FATAL:
                     /*
@@ -2088,7 +2088,7 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                           "too many state machine syncronization errors, adding " MACSTR " to blacklist\n",
                           MAC2STR(peer->peer_mac));
                 blacklist_peer(peer);
-                fin(WLAN_STATUS_REQUEST_DECLINED, peer->peer_mac, NULL, 0, peer->cookie);
+                cb->fin(WLAN_STATUS_REQUEST_DECLINED, peer->peer_mac, NULL, 0, peer->cookie);
                 delete_peer(&peer);
             }
             break;
@@ -2244,11 +2244,25 @@ sae_dump_db (int unused)
     }
 }
 
+static bool check_callbacks(struct sae_cb *callbacks)
+{
+    bool valid = callbacks != NULL;
+    valid = valid && callbacks->meshd_write_mgmt != NULL;
+    valid = valid && callbacks->peer_created != NULL;
+    valid = valid && callbacks->fin != NULL;
+    return valid;
+}
+
 int
-sae_initialize (char *ourssid, struct sae_config *config)
+sae_initialize (char *ourssid, struct sae_config *config, struct sae_cb *callbacks)
 {
     GD *curr, *prev = NULL;
     int i;
+
+    if (!check_callbacks(callbacks))
+        return -1;
+
+    cb = callbacks;
 
     /* TODO: detect duplicate calls.  validate config. */
 

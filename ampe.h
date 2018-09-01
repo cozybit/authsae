@@ -124,6 +124,7 @@ struct ampe_config {
 #define MESH_CONF_CHANGED_HT 1 << 0
 
 struct ampe_cb {
+    int (*meshd_write_mgmt)(char *frame, int framelen, void *cookie);
     int (*meshd_set_mesh_conf)(struct mesh_node *mesh, uint32_t changed);
     int (*set_plink_state)(unsigned char *peer, int state, void *cookie);
     void (*estab_peer_link)(unsigned char *peer, unsigned char *mtk,

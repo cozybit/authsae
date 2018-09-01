@@ -199,7 +199,7 @@ mgmt_frame_in (int fd, void *data)
 /*
  * service provided to sae: sending of management frames over-the-air
  */
-int meshd_write_mgmt (char *data, int len)
+int meshd_write_mgmt (char *data, int len, void* c)
 {
     struct interface *inf = NULL;
     struct ieee80211_mgmt_frame *frame = (struct ieee80211_mgmt_frame *)data;
@@ -227,7 +227,7 @@ int meshd_write_mgmt (char *data, int len)
  *      is because it was successful, there will be a key (PMK) to plumb
  */
 void
-fin (unsigned short reason, unsigned char *mac, unsigned char *key, int keylen)
+fin (unsigned short reason, unsigned char *mac, unsigned char *key, int keylen, void* c)
 {
     printf("status of " MACSTR " is %d, ", MAC2STR(mac), reason);
     if ((reason == 0) && (key != NULL) && (keylen > 0)) {
@@ -384,6 +384,15 @@ send_beacon (void *data)
     return;
 }
 
+static struct sae_cb *get_sae_cbs()
+{
+    static struct sae_cb cb;
+    cb.meshd_write_mgmt = meshd_write_mgmt;
+    cb.peer_created = peer_created;
+    cb.fin = fin;
+    return &cb;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -488,7 +497,7 @@ main (int argc, char **argv)
      * initialize SAE...
      */
     sae_parse_config(confdir, &config);
-    if (sae_initialize(mesh_ssid, &config) < 0) {
+    if (sae_initialize(mesh_ssid, &config, get_sae_cbs()) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(1);
     }

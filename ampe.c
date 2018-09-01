@@ -35,7 +35,6 @@
 #include <openssl/rand.h>
 #include <string.h>
 
-#include "os_glue.h"
 #include "peer_lists.h"
 #include "peers.h"
 #include "rekey.h"
@@ -687,7 +686,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         if (protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len) < 0)
             sae_debug(SAE_DEBUG_ERR, "Failed to protect frame\n");
 
-        if (meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
+        if (cb->meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
             sae_debug(SAE_DEBUG_ERR, "can't send a peering "
                     "frame to " MACSTR "\n", MAC2STR(cand->peer_mac));
         }
@@ -1174,9 +1173,10 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     return 0;
 }
 
-bool check_callbacks(struct ampe_cb *callbacks)
+static bool check_callbacks(struct ampe_cb *callbacks)
 {
-    bool valid = true;
+    bool valid = callbacks != NULL;
+    valid = valid && callbacks->meshd_write_mgmt != NULL;
     valid = valid && callbacks->meshd_set_mesh_conf != NULL;
     valid = valid && callbacks->set_plink_state != NULL;
     valid = valid && callbacks->estab_peer_link != NULL;

@@ -44,7 +44,6 @@
 
 #include "ampe.h"
 #include "peers.h"
-#include "service.h"
 
 #define REKEY_ENABLE_DEF                   (false)
 #define REKEY_MULTICAST_GROUP_FAMILY_DEF   (AF_INET)
@@ -57,7 +56,7 @@
 #define REKEY_REAUTH_COUNT_MAX_DEF         (8)
 #define REKEY_OK_PING_COUNT_MAX_DEF        (16)
 
-void rekey_init(service_context srvctx, struct mesh_node *mesh);
+void rekey_init(struct mesh_node *mesh, struct evl_ops* evl);
 void rekey_close(void);
 
 void rekey_verify_peer(struct candidate *peer);

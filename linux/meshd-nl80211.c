@@ -1495,6 +1495,27 @@ static int channel_to_freq(int chan)
 	return (chan + 1000) * 5;
 }
 
+static struct ampe_cb *get_ampe_cbs()
+{
+    static struct ampe_cb cb;
+    cb.meshd_write_mgmt = meshd_write_mgmt;
+    cb.meshd_set_mesh_conf = meshd_set_mesh_conf;
+    cb.set_plink_state = set_plink_state;
+    cb.estab_peer_link = estab_peer_link;
+    cb.evl = get_evl_ops();
+    return &cb;
+}
+
+static struct sae_cb *get_sae_cbs()
+{
+    static struct sae_cb cb;
+    cb.meshd_write_mgmt = meshd_write_mgmt;
+    cb.peer_created = peer_created;
+    cb.fin = fin;
+    cb.evl = get_evl_ops();
+    return &cb;
+}
+
 static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
 {
     int exitcode = 0;
@@ -1514,7 +1535,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
     set_sup_basic_rates(mesh->conf, mesh->bands[mesh->band].rates,
                         mesh->bands[mesh->band].n_bitrates);
 
-    if (ampe_initialize(mesh) < 0) {
+    if (ampe_initialize(mesh, get_ampe_cbs()) < 0) {
         fprintf(stderr, "cannot configure AMPE!\n");
         exit(EXIT_FAILURE);
     }
@@ -1719,7 +1740,7 @@ int main(int argc, char *argv[])
     if (exitcode)
         goto out;
 
-    if (sae_initialize(meshd_conf.meshid, &sae_conf) < 0) {
+    if (sae_initialize(meshd_conf.meshid, &sae_conf, get_sae_cbs()) < 0) {
         fprintf(stderr, "%s: cannot configure SAE, check config file!\n", argv[0]);
         exit(EXIT_FAILURE);
     }
@@ -1754,7 +1775,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
-    rekey_init(srvctx, &mesh);
+    rekey_init(&mesh, get_evl_ops());
     watch_ips_init(&mesh);
 
     /* Add netlink sockets to our event loop */

@@ -39,6 +39,7 @@
 #ifndef _SAE_H_
 #define _SAE_H_
 
+#include "evl_ops.h"
 #include "ieee802_11.h"
 #include "peers.h"
 
@@ -57,11 +58,19 @@ struct sae_config {
     int giveup_threshold;
 };
 
+struct sae_cb {
+    int (*meshd_write_mgmt)(char *frame, int framelen, void *cookie);
+    void (*peer_created)(unsigned char *peer_mac);
+    void (*fin)(unsigned short reason, unsigned char *peer_mac,
+                unsigned char *key, int keylen, void *cookie);
+    struct evl_ops *evl;
+};
+
 /* You may choose not to call sae_parse_config and
  * populate sae_config in some other way before
  * invoking sae_initialize() */
 int sae_parse_config(char* confdir, struct sae_config *config);
-int sae_initialize(char *ssid, struct sae_config *config);
+int sae_initialize(char *ssid, struct sae_config *config, struct sae_cb *callbacks);
 int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
                        unsigned char *local_mac_addr, void *cookie);
 void sae_read_config(int signal);

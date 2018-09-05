@@ -10,7 +10,6 @@
 #include "crypto/siv.h"
 #include "common.h"
 #include "ieee802_11.h"
-#include "service.h"
 
 typedef struct group_def_ {
     unsigned short group_num;

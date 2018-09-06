@@ -71,35 +71,6 @@ INSTALL(TARGETS mon DESTINATION bin)
 
 #####################################################################
 MESSAGE(STATUS "")
-MESSAGE(STATUS "Configuring meshd ...")
-
-LIST(APPEND meshd_libs
-	${LIBCONFIG_LIBRARIES}
-	${LIBCRYPTO_LIBRARIES}
-	sae
-)
-
-IF(LIBRT)
-LIST(APPEND meshd_libs
-	${LIBRT}
-)
-ENDIF(LIBRT)
-
-LIST(APPEND meshd_sources
-	meshd.c
-	service.c
-	../common.c
-	../ampe.c
-	../rekey.c
-	../crypto/aes_siv.c
-)
-
-ADD_EXECUTABLE(meshd ${meshd_sources})
-TARGET_LINK_LIBRARIES(meshd ${meshd_libs})
-INSTALL(TARGETS meshd DESTINATION bin)
-
-#####################################################################
-MESSAGE(STATUS "")
 MESSAGE(STATUS "Configuring meshd-nl80211 ...")
 
 FIND_PACKAGE(Threads REQUIRED)

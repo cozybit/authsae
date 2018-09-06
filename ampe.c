@@ -102,19 +102,6 @@ static inline void set_link_state(struct candidate *cand, enum plink_state state
 	cb->set_plink_state(cand->peer_mac, state, cand->cookie);
 }
 
-/**
- * fsm_restart - restart a mesh peer link finite state machine
- *
- * @cand: mesh peer link to restart
- *
- * */
-static inline void fsm_restart(struct candidate *cand)
-{
-    set_link_state(cand, PLINK_LISTEN);
-    cand->my_lid = cand->peer_lid = cand->reason = 0;
-    cand->retries = 0;
-}
-
 enum plink_event {
         PLINK_UNDEFINED,
         OPN_ACPT,
@@ -220,20 +207,21 @@ out:
 }
 
 static void peer_ampe_init(struct ampe_config *aconf,
-                           struct candidate *cand, unsigned char *me, void *cookie)
+                           struct candidate *cand, void *cookie)
 {
-	le16 llid;
+    le16 llid;
 
-    assert(cand && me);
+    assert(cand);
 
-    RAND_bytes((unsigned char *) &llid, 2);
+    RAND_bytes((unsigned char *) &llid, sizeof(llid));
     RAND_bytes(cand->my_nonce, sizeof(cand->my_nonce));
     cand->cookie = cookie;
-	cand->my_lid = llid;
-	cand->peer_lid = 0;
-	set_link_state(cand, PLINK_LISTEN);
+    cand->my_lid = llid;
+    cand->peer_lid = 0;
+    set_link_state(cand, PLINK_LISTEN);
     cand->timeout = aconf->retry_timeout_ms;
     cand->conf = aconf;
+
     derive_aek(cand);
     siv_init(&cand->sivctx, cand->aek, SIV_256);
     memset(cand->mtk, 0, sizeof(cand->mtk));
@@ -241,6 +229,18 @@ static void peer_ampe_init(struct ampe_config *aconf,
     memset(cand->igtk, 0, sizeof(cand->igtk));
     cand->has_igtk = false;
 }
+
+/**
+ * fsm_restart - restart a mesh peer link finite state machine
+ *
+ * @cand: mesh peer link to restart
+ *
+ * */
+static inline void fsm_restart(struct candidate *cand)
+{
+    peer_ampe_init(&ampe_conf, cand, cand->cookie);
+}
+
 
 static void plink_timer(void *data)
 {
@@ -950,7 +950,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie)
             return -EPERM;
 	}
 
-    peer_ampe_init(&ampe_conf, cand, me, cookie);
+    peer_ampe_init(&ampe_conf, cand, cookie);
 	set_link_state(cand, PLINK_OPN_SNT);
     cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 
@@ -1073,7 +1073,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
     }
 
     if (cand->my_lid == 0)
-        peer_ampe_init(&ampe_conf, cand, me, cookie);
+        peer_ampe_init(&ampe_conf, cand, cookie);
 
     if (elems.sup_rates) {
         memcpy(cand->sup_rates, elems.sup_rates,

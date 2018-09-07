@@ -65,6 +65,7 @@ struct meshd_config {
     int channel;
     int band;
     int debug;
+    int is_secure;
     enum ht_channel_type channel_type;     /* HT mode */
     /* ready to be copied into rate IEs. Includes BSSBasicRateSet */
 #define MAX_SUPP_RATES 32

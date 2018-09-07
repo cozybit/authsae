@@ -222,12 +222,15 @@ static void peer_ampe_init(struct ampe_config *aconf,
     cand->timeout = aconf->retry_timeout_ms;
     cand->conf = aconf;
 
-    derive_aek(cand);
-    siv_init(&cand->sivctx, cand->aek, SIV_256);
     memset(cand->mtk, 0, sizeof(cand->mtk));
     memset(cand->mgtk, 0, sizeof(cand->mgtk));
     memset(cand->igtk, 0, sizeof(cand->igtk));
     cand->has_igtk = false;
+
+    if (aconf->mesh->conf->is_secure) {
+        derive_aek(cand);
+        siv_init(&cand->sivctx, cand->aek, SIV_256);
+    }
 }
 
 /**
@@ -427,6 +430,9 @@ static int check_frame_protection(struct candidate *cand, struct ieee80211_mgmt_
 
     assert(len && cand && mgmt);
 
+    if (!mesh->conf->is_secure)
+        return 0;
+
     if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
 		sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
         return -1;
@@ -541,6 +547,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         struct ht_op_ie *ht_op;
         unsigned char ie_len;
         int len;
+        int ret;
         unsigned char *ies;
         unsigned char *pos;
         u16 peering_proto = htole16(0x0001);    /* AMPE */
@@ -569,7 +576,7 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
 
         if (action != PLINK_CLOSE) {
             /* capability info */
-            *pos++ = 0x10;       /* securitu */
+            *pos++ = (mesh->conf->is_secure) ? 0x10: 0;
             *pos++ = 0;
             if (action == PLINK_CONFIRM) {
                 /* AID */
@@ -598,11 +605,21 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
         *ies++ = MESH_CONFIG_PM_ALM;
         *ies++ = MESH_CONFIG_CC_NONE;
         *ies++ = MESH_CONFIG_SP_NEIGHBOR_OFFSET;
-        *ies++ = MESH_CONFIG_AUTH_SAE;
+
+        if (mesh->conf->is_secure) {
+            *ies++ = MESH_CONFIG_AUTH_SAE;
+        } else {
+            *ies++ = 0;
+        }
+
         *ies++ = 0; /* TODO formation info */
         *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
 
-        ie_len = 4 + 16;        /* min. + PMKID */
+        ie_len = 4;
+        if (mesh->conf->is_secure) {
+            ie_len += sizeof(cand->pmkid);
+        }
+
         /* IE: Mesh Peering Management element */
         switch (action) {
             case PLINK_OPEN:
@@ -635,8 +652,11 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
             memcpy(ies, &cand->reason, 2);
             ies += 2;
         }
-        memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
-        ies += sizeof(cand->pmkid);
+
+        if (mesh->conf->is_secure) {
+            memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
+            ies += sizeof(cand->pmkid);
+        }
 
         if (mesh->conf->channel_type != CHAN_NO_HT &&
             sband->ht_cap.ht_supported) {
@@ -678,9 +698,18 @@ static int plink_frame_tx(struct candidate *cand, enum plink_action_code action,
             ies += sizeof(*ht_op);
         }
 
-        /* IE: Add MIC and encrypted AMPE */
-        if (protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len) < 0)
-            sae_debug(SAE_DEBUG_ERR, "Failed to protect frame\n");
+        if (mesh->conf->is_secure) {
+            /* IE: Add MIC and encrypted AMPE */
+            ret = protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies,
+                                &len);
+            if (ret) {
+                sae_debug(SAE_DEBUG_ERR, "Failed to protect frame\n");
+                free(buf);
+                return ret;
+            }
+        } else {
+            len = ies - buf;
+        }
 
         if (cb->meshd_write_mgmt((char *)buf, len, cand->cookie) != len) {
             sae_debug(SAE_DEBUG_ERR, "can't send a peering "
@@ -811,7 +840,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 			break;
 		case CNF_ACPT:
 			//del_timer(&cand->plink_timer);
-			set_link_state(cand, PLINK_ESTAB);
 			//mesh_plink_inc_estab_count(sdata);
 			//ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
             derive_mtk(cand);
@@ -825,6 +853,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
+            set_link_state(cand, PLINK_ESTAB);
             changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
@@ -850,8 +879,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
             cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 			plink_frame_tx(cand, PLINK_CLOSE, reason);
 			break;
-		case OPN_ACPT:
-			set_link_state(cand, PLINK_ESTAB);
+        case OPN_ACPT:
             derive_mtk(cand);
             cb->estab_peer_link(cand->peer_mac,
                     cand->mtk, sizeof(cand->mtk),
@@ -863,6 +891,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     cand->sup_rates,
                     cand->sup_rates_len,
                     cand->cookie);
+            set_link_state(cand, PLINK_ESTAB);
             changed |= mesh_set_ht_op_mode(cand->conf->mesh);
             //TODO: update the number of available peer "slots" in mesh config
 			//mesh_plink_inc_estab_count(sdata);
@@ -1005,6 +1034,7 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	unsigned short plid = 0, llid = 0;
     unsigned char *ies;
     unsigned short ies_len;
+    size_t pmkid_len;
 
 #define FAKE_LOSS_PROBABILITY 0
 #if (FAKE_LOSS_PROBABILITY > 0)
@@ -1038,9 +1068,11 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
 	ftype = mgmt->action.action_code;
 	ie_len = elems.mesh_peering_len;
 
-	if ((ftype == PLINK_OPEN && ie_len != 20) ||
-	    (ftype == PLINK_CONFIRM && ie_len != 22) ||
-	    (ftype == PLINK_CLOSE && ie_len != 22 && ie_len != 24)) {
+	pmkid_len = ampe_conf.mesh->conf->is_secure ? sizeof(cand->pmkid) : 0;
+
+	if ((ftype == PLINK_OPEN && ie_len != 4 + pmkid_len) ||
+	    (ftype == PLINK_CONFIRM && ie_len != 6 + pmkid_len) ||
+	    (ftype == PLINK_CLOSE && ie_len != 6 + pmkid_len && ie_len != 8 + pmkid_len)) {
 		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: incorrect plink ie length %d %d\n",
 		    ftype, ie_len);
 		return 0;
@@ -1065,11 +1097,29 @@ int process_ampe_frame(struct ieee80211_mgmt_frame *mgmt, int len,
         return 0;
     }
 
-    /* "1" here means only get peers in SAE_ACCEPTED */
-    if ((cand = find_peer(mgmt->sa, 1)) == NULL) {
-		sae_debug(AMPE_DEBUG_FSM, "Mesh plink: plink open from unauthed peer "MACSTR"\n",
-                  MAC2STR(mgmt->sa));
-        return 0;
+    /* require authed peers if secure mesh */
+    if (ampe_conf.mesh->conf->is_secure) {
+        /* "1" here means only get peers in SAE_ACCEPTED */
+        if ((cand = find_peer(mgmt->sa, 1)) == NULL) {
+            sae_debug(AMPE_DEBUG_FSM, "Mesh plink: plink open from unauthed peer "MACSTR"\n",
+                      MAC2STR(mgmt->sa));
+            return 0;
+        }
+    } else {
+        /*
+         * In open mesh, there's no auth stage, so we create the station
+         * when the first mgmt frame or beacon is received.  Do that now
+         * if we haven't already.
+         */
+        cand = find_peer(mgmt->sa, 0);
+        if (!cand) {
+            cand = create_candidate(mgmt->sa, me, 0, cookie);
+            if (!cand) {
+                sae_debug(AMPE_DEBUG_FSM, "Mesh plink: could not create new peer "MACSTR"\n",
+                          MAC2STR(mgmt->sa));
+                return 0;
+            }
+        }
     }
 
     if (cand->my_lid == 0)
@@ -1195,8 +1245,10 @@ int ampe_initialize(struct mesh_node *mesh, struct ampe_cb *callbacks)
         ampe_conf.max_retries = 10;
         ampe_conf.mesh = mesh;
 
-        RAND_bytes(mgtk_tx, 16);
-        sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
+        if (mesh->conf->is_secure) {
+            RAND_bytes(mgtk_tx, 16);
+            sae_hexdump(AMPE_DEBUG_KEYS, "mgtk: ", mgtk_tx, sizeof(mgtk_tx));
+        }
 
         if (mesh->conf->pmf) {
             RAND_bytes(mesh->igtk_tx, 16);

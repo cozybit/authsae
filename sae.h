@@ -72,7 +72,8 @@ struct sae_cb {
 int sae_parse_config(char* confdir, struct sae_config *config);
 int sae_initialize(char *ssid, struct sae_config *config, struct sae_cb *callbacks);
 int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
-                       unsigned char *local_mac_addr, void *cookie);
+                       unsigned char *local_mac_addr, void *cookie, bool skip_sae);
+struct candidate *create_candidate(unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie);
 void sae_read_config(int signal);
 void sae_dump_db (int signal);
 int prf (unsigned char *key, int keylen, unsigned char *label, int labellen,

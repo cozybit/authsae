@@ -78,7 +78,7 @@ install(FILES
   ampe.h
   common.h
   ieee802_11.h
-  os_glue.h
+  evl_ops.h
   peers.h
   rekey.h
   sae.h

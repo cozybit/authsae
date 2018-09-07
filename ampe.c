@@ -782,6 +782,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
 		case OPN_ACPT:
             cand->timeout = aconf->retry_timeout_ms;
             cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
+			set_link_state(cand, PLINK_OPN_RCVD);
 			plink_frame_tx(cand, PLINK_OPEN, 0);
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
 			break;

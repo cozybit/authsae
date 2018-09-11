@@ -520,13 +520,15 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
     ie_len = nla_len(tb[NL80211_ATTR_IE]);
 
     parse_ies(ie, ie_len, &elems);
-    if (elems.rsn == NULL) {
-        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
-        return NL_SKIP;
-    }
+
     if (elems.mesh_id == NULL || elems.mesh_id_len != meshd_conf.meshid_len ||
             memcmp(elems.mesh_id, meshd_conf.meshid, meshd_conf.meshid_len) != 0) {
         sae_debug(MESHD_DEBUG, "Candidate from different Mesh ID\n");
+        return NL_SKIP;
+    }
+
+    if (!elems.rsn && meshd_conf.is_secure) {
+        sae_debug(MESHD_DEBUG, "No RSN IE from this candidate\n");
         return NL_SKIP;
     }
 
@@ -536,7 +538,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg)
              IEEE802_11_FC_STYPE_BEACON << 4));
     memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
 
-    if (process_mgmt_frame(&bcn, sizeof(bcn), mesh.mymacaddr, &nlcfg) != 0) {
+    if (process_mgmt_frame(&bcn, sizeof(bcn), mesh.mymacaddr, &nlcfg, !meshd_conf.is_secure) != 0) {
         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
         return NL_SKIP;
     }
@@ -813,7 +815,7 @@ static int event_handler(struct nl_msg *msg, void *arg)
                 if (IEEE802_11_FC_GET_TYPE(frame_control) == IEEE802_11_FC_TYPE_MGMT &&
                      (IEEE802_11_FC_GET_STYPE(frame_control) == IEEE802_11_FC_STYPE_ACTION ||
                       IEEE802_11_FC_GET_STYPE(frame_control) == IEEE802_11_FC_STYPE_AUTH)) {
-                    if (process_mgmt_frame(frame, frame_len, mesh.mymacaddr, &nlcfg))
+                    if (process_mgmt_frame(frame, frame_len, mesh.mymacaddr, &nlcfg, !meshd_conf.is_secure))
                         fprintf(stderr, "libsae: process_mgmt_frame failed\n");
                 } else
                     sae_debug(MESHD_DEBUG, "got unexpected frame (%lld.%ld)\n", (long long) now.tv_sec, (long) now.tv_usec);
@@ -864,8 +866,12 @@ static int set_authenticated_flag(struct netlink_config_s *nlcfg, unsigned char 
     NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
     flags.mask = flags.set = (1 << NL80211_STA_FLAG_AUTHENTICATED) |
-                                (1 << NL80211_STA_FLAG_MFP) |
-                                (1 << NL80211_STA_FLAG_AUTHORIZED);
+                             (1 << NL80211_STA_FLAG_MFP) |
+                             (1 << NL80211_STA_FLAG_AUTHORIZED);
+
+    if (!meshd_conf.is_secure || !meshd_conf.pmf) {
+        flags.set &= ~(1 << NL80211_STA_FLAG_MFP);
+    }
 
     NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
@@ -1001,8 +1007,8 @@ nla_put_failure:
     return -ENOBUFS;
 }
 
-static int join_mesh_rsn(struct netlink_config_s *nlcfg,
-                         struct mesh_node *mesh)
+static int join_mesh(struct netlink_config_s *nlcfg,
+                     struct mesh_node *mesh)
 {
     struct nl_msg *msg;
     struct meshd_config *mconf = mesh->conf;
@@ -1101,14 +1107,15 @@ static int join_mesh_rsn(struct netlink_config_s *nlcfg,
 
     /* We'll be creating stations, not the kernel */
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
+    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_MPM);
 
-    /* Tell the kernel we're using SAE */
-    NLA_PUT_U8(msg, NL80211_MESH_SETUP_AUTH_PROTOCOL, 0x1);
+    if (mconf->is_secure) {
+        /* Tell the kernel we're using SAE */
+        NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
+        NLA_PUT_U8(msg, NL80211_MESH_SETUP_AUTH_PROTOCOL, 0x1);
+        NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
+    }
 
-    /* We'll handle peer state transitions */
-    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
-
-    NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);
     nla_nest_end(msg, container);
 
     NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
@@ -1151,16 +1158,11 @@ void estab_peer_link(unsigned char *peer,
         unsigned short rates_len,
         void *cookie)
 {
+    struct meshd_config *mconf;
     struct candidate *cand;
     int ret;
 
     assert(cookie == &nlcfg);
-
-    if (mtk_len != KEY_LEN_AES_CCMP || peer_mgtk_len != KEY_LEN_AES_CCMP)
-        return;
-
-    if (peer_igtk && peer_igtk_len != KEY_LEN_AES_CMAC)
-        return;
 
     if (!peer)
         return;
@@ -1168,6 +1170,16 @@ void estab_peer_link(unsigned char *peer,
     cand = find_peer(peer, 0);
     if (!cand)
         return;
+
+    mconf = cand->conf->mesh->conf;
+
+    if (mconf->is_secure) {
+        if (mtk_len != KEY_LEN_AES_CCMP || peer_mgtk_len != KEY_LEN_AES_CCMP)
+            return;
+
+        if (peer_igtk && peer_igtk_len != KEY_LEN_AES_CMAC)
+            return;
+    }
 
     sae_debug(MESHD_DEBUG, "estab with " MACSTR "\n", MAC2STR(peer));
 
@@ -1191,15 +1203,18 @@ void estab_peer_link(unsigned char *peer,
     }
 
     set_authenticated_flag(&nlcfg, peer);
-    /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
-    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
-    /* key to decrypt multicast data traffic from this peer */
-    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+    if (mconf->is_secure) {
+        /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
+        install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
-    /* to check integrity of multicast mgmt frames from this peer */
-    if (peer_igtk) {
-        install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
+        /* key to decrypt multicast data traffic from this peer */
+        install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+
+        /* to check integrity of multicast mgmt frames from this peer */
+        if (peer_igtk) {
+            install_key(&nlcfg, peer, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, peer_igtk_keyid, peer_igtk);
+        }
     }
 }
 
@@ -1272,7 +1287,9 @@ void fin(unsigned short reason, unsigned char *peer, unsigned char *buf, int len
             MACSTR " me:" MACSTR "\n", reason, len, MAC2STR(peer),
             MAC2STR(mesh.mymacaddr));
     if (!reason && len) {
-        sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
+        if (meshd_conf.is_secure) {
+            sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
+        }
         start_peer_link(peer, (unsigned char *) mesh.mymacaddr, cookie);
     } else if (reason) {
         peer_deleted(peer);
@@ -1350,6 +1367,8 @@ meshd_parse_libconfig (struct config_setting_t *meshd_section,
     CONFIG_LOOKUP(channel, channel, -1);
     CONFIG_LOOKUP(mcast-rate, mcast_rate, -1);
     CONFIG_LOOKUP(beacon-interval,beacon_interval, -1);
+
+    CONFIG_LOOKUP(is-secure, is_secure, 1);
 
     config_setting_lookup_int(meshd_section, "pmf",
             (config_int_t *) &config->pmf);
@@ -1540,7 +1559,7 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         exit(EXIT_FAILURE);
     }
 
-    exitcode = join_mesh_rsn(nlcfg, mesh);
+    exitcode = join_mesh(nlcfg, mesh);
     if (exitcode) {
         fprintf(stderr, "Failed to join mesh\n");
         goto out;
@@ -1556,13 +1575,15 @@ static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh)
         goto out;
     }
 
-    if (mesh->conf->pmf) {
-        /* key to protect integrity of multicast mgmt frames tx*/
-        install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, mesh->igtk_keyid, mesh->igtk_tx);
-    }
+    if (mesh->conf->is_secure) {
+        if (mesh->conf->pmf) {
+            /* key to protect integrity of multicast mgmt frames tx*/
+            install_key(nlcfg, NULL, CIPHER_AES_CMAC, NL80211_KEYTYPE_GROUP, mesh->igtk_keyid, mesh->igtk_tx);
+        }
 
-    /* key to encrypt multicast data traffic */
-    install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, mgtk_tx);
+        /* key to encrypt multicast data traffic */
+        install_key(nlcfg, NULL, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, mgtk_tx);
+    }
 
 out:
     return 0;

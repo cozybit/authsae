@@ -94,7 +94,7 @@ wait_for_plinks() {
             echo -n .
             sleep 1
         done
-        [ $i -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
+        [ $j -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
     done
     echo
 }

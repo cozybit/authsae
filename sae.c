@@ -1903,7 +1903,7 @@ have_token (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me)
  * "protocol instances".
  */
 int
-process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie)
+process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *me, void *cookie, bool skip_sae)
 {
     unsigned short frame_control, type, auth_alg;
     int need_token;
@@ -1944,6 +1944,14 @@ process_mgmt_frame (struct ieee80211_mgmt_frame *frame, int len, unsigned char *
                  * we're already dealing with this guy, ignore his beacons now
                  */
                 peer->beacons++;
+            } else if (skip_sae) {
+                sae_debug(SAE_DEBUG_PROTOCOL_MSG, "received a beacon from " MACSTR "\n", MAC2STR(frame->sa));
+                sae_debug(SAE_DEBUG_STATE_MACHINE, "Initiate event\n");
+                if ((peer = create_candidate(frame->sa, me, 0, cookie)) == NULL) {
+                    return -1;
+                }
+                peer->cookie = cookie;
+                cb->fin(WLAN_STATUS_SUCCESSFUL, peer->peer_mac, peer->pmk, SHA256_DIGEST_LENGTH, peer->cookie);
             } else {
                 /*
                  * This is actually not part of the parent state machine but handling

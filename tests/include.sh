@@ -46,6 +46,25 @@ EOF
     done
 }
 
+start_mesh_iw() {
+    local i=0
+    read -a radios <<<"$@"
+
+    IW_IFACES=()
+
+    sudo rfkill unblock all
+    for radio in ${radios[@]}; do
+        iface="iwmesh$i"
+
+        sudo iw phy $radio interface add $iface type mesh
+        sudo ip link set $iface up
+        # basic-rates must match that in set_sup_basic_rates()
+        sudo iw dev $iface mesh join byteme freq 2412 NOHT basic-rates 1,2,5.5,11,6,12,24
+
+        IW_IFACES+=($iface)
+    done
+}
+
 start_meshd() {
     local i=0
     read -a radios <<<"$@"
@@ -90,7 +109,7 @@ wait_for_plinks() {
         log=${LOGS[$i]}
         iface=${IFACES[$i]}
         for j in $(seq $TRIES); do
-            grep established $log &> /dev/null && break
+            sudo iw dev $iface station dump | grep -q ESTAB && break
             echo -n .
             sleep 1
         done

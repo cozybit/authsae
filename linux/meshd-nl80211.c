@@ -1106,11 +1106,11 @@ static int join_mesh(struct netlink_config_s *nlcfg,
         goto nla_put_failure;
 
     /* We'll be creating stations, not the kernel */
-    NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
     NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_MPM);
 
     if (mconf->is_secure) {
         /* Tell the kernel we're using SAE */
+        NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AUTH);
         NLA_PUT_FLAG(msg, NL80211_MESH_SETUP_USERSPACE_AMPE);
         NLA_PUT_U8(msg, NL80211_MESH_SETUP_AUTH_PROTOCOL, 0x1);
         NLA_PUT(msg, NL80211_MESH_SETUP_IE, sizeof(rsn_ie), rsn_ie);

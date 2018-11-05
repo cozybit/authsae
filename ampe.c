@@ -302,6 +302,12 @@ static void plink_timer(void *data)
 		break;
 	case PLINK_ESTAB:
 		/* nothing to do */
+
+        /* test the case where both STAs go back to listen mode after holding */
+        sae_debug(AMPE_DEBUG_FSM, "Closing plink with " MACSTR
+                "\n", MAC2STR(cand->peer_mac));
+		plink_frame_tx(cand, PLINK_CLOSE, htole16(MESH_CONFIRM_TIMEOUT));
+
 		break;
 	default:
         sae_debug(AMPE_DEBUG_FSM, "Timeout for peer " MACSTR
@@ -859,6 +865,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
             sae_debug(AMPE_DEBUG_FSM, "mesh plink with "
                     MACSTR " established\n", MAC2STR(cand->peer_mac));
             rekey_verify_peer(cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(20000), plink_timer, cand);
 			break;
 		default:
 			break;
@@ -901,6 +908,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event)
                     MACSTR " ESTABLISHED\n", MAC2STR(cand->peer_mac));
 			plink_frame_tx(cand, PLINK_CONFIRM, 0);
 			rekey_verify_peer(cand);
+            cand->t2 = cb->evl->add_timeout(SRV_MSEC(20000), plink_timer, cand);
 			break;
 		default:
 			break;

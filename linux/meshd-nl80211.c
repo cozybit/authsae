@@ -367,11 +367,16 @@ int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed) {
   return set_mesh_conf(&nlcfg, mesh, changed);
 }
 
+static void delete_peer_by_addr(unsigned char *addr) {
+  struct candidate *peer;
+  if ((peer = find_peer(addr, 0)))
+    delete_peer(&peer);
+}
+
 static int
 handle_del_peer(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-  struct candidate *peer;
 
   nla_parse(
       tb,
@@ -386,8 +391,7 @@ handle_del_peer(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg) {
   if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
     return -1;
 
-  if ((peer = find_peer(nla_data(tb[NL80211_ATTR_MAC]), 0)))
-    delete_peer(&peer);
+  delete_peer_by_addr(nla_data(tb[NL80211_ATTR_MAC]));
 
   return 0;
 }
@@ -1683,6 +1687,7 @@ static struct ampe_cb *get_ampe_cbs() {
   cb.meshd_set_mesh_conf = meshd_set_mesh_conf;
   cb.set_plink_state = set_plink_state;
   cb.estab_peer_link = estab_peer_link;
+  cb.delete_peer = delete_peer_by_addr;
   cb.evl = get_evl_ops();
   return &cb;
 }

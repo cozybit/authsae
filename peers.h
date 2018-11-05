@@ -56,6 +56,7 @@ struct candidate {
   unsigned char peer_nonce[32];
   unsigned short reason;
   unsigned short retries;
+  unsigned int estab_attempts;
   unsigned int timeout;
   unsigned char aek[SHA256_DIGEST_LENGTH];
   unsigned char mtk[KEY_LEN_AES_CCMP];

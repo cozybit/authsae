@@ -137,6 +137,7 @@ struct ampe_cb {
       unsigned char *sup_rates,
       unsigned short sup_rates_len,
       void *cookie);
+  void (*delete_peer)(unsigned char *peer);
   struct evl_ops *evl;
 };
 

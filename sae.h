@@ -43,43 +43,64 @@
 #include "ieee802_11.h"
 #include "peers.h"
 
-#define    SAE_MAX_EC_GROUPS    10
-#define    SAE_MAX_PASSWORD_LEN 80
+#define SAE_MAX_EC_GROUPS 10
+#define SAE_MAX_PASSWORD_LEN 80
 
 struct sae_config {
-    int group[SAE_MAX_EC_GROUPS];
-    int num_groups;
-    char pwd[SAE_MAX_PASSWORD_LEN];
-    int debug;
-    int retrans;
-    int pmk_expiry;
-    int open_threshold;
-    int blacklist_timeout;
-    int giveup_threshold;
+  int group[SAE_MAX_EC_GROUPS];
+  int num_groups;
+  char pwd[SAE_MAX_PASSWORD_LEN];
+  int debug;
+  int retrans;
+  int pmk_expiry;
+  int open_threshold;
+  int blacklist_timeout;
+  int giveup_threshold;
 };
 
 struct sae_cb {
-    int (*meshd_write_mgmt)(char *frame, int framelen, void *cookie);
-    void (*peer_created)(unsigned char *peer_mac);
-    void (*fin)(unsigned short reason, unsigned char *peer_mac,
-                unsigned char *key, int keylen, void *cookie);
-    struct evl_ops *evl;
+  int (*meshd_write_mgmt)(char *frame, int framelen, void *cookie);
+  void (*peer_created)(unsigned char *peer_mac);
+  void (*fin)(
+      unsigned short reason,
+      unsigned char *peer_mac,
+      unsigned char *key,
+      int keylen,
+      void *cookie);
+  struct evl_ops *evl;
 };
 
 /* You may choose not to call sae_parse_config and
  * populate sae_config in some other way before
  * invoking sae_initialize() */
-int sae_parse_config(char* confdir, struct sae_config *config);
-int sae_initialize(char *ssid, struct sae_config *config, struct sae_cb *callbacks);
-int process_mgmt_frame(struct ieee80211_mgmt_frame *frame, int len,
-                       unsigned char *local_mac_addr, void *cookie, bool skip_sae);
-struct candidate *create_candidate(unsigned char *her_mac, unsigned char *my_mac, unsigned short got_token, void *cookie);
+int sae_parse_config(char *confdir, struct sae_config *config);
+int sae_initialize(
+    char *ssid,
+    struct sae_config *config,
+    struct sae_cb *callbacks);
+int process_mgmt_frame(
+    struct ieee80211_mgmt_frame *frame,
+    int len,
+    unsigned char *local_mac_addr,
+    void *cookie,
+    bool skip_sae);
+struct candidate *create_candidate(
+    unsigned char *her_mac,
+    unsigned char *my_mac,
+    unsigned short got_token,
+    void *cookie);
 void sae_read_config(int signal);
-void sae_dump_db (int signal);
-int prf (unsigned char *key, int keylen, unsigned char *label, int labellen,
-     unsigned char *context, int contextlen,
-     unsigned char *result, int resultbitlen);
+void sae_dump_db(int signal);
+int prf(
+    unsigned char *key,
+    int keylen,
+    unsigned char *label,
+    int labellen,
+    unsigned char *context,
+    int contextlen,
+    unsigned char *result,
+    int resultbitlen);
 
 void do_reauth(struct candidate *peer);
 
-#endif  /* _SAE_H_ */
+#endif /* _SAE_H_ */

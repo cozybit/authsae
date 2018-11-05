@@ -45,4 +45,4 @@
 void watch_ips_init(struct mesh_node *config);
 void watch_ips_close();
 
-#endif  /* _SAE_WATCH_IPS_H_ */
+#endif /* _SAE_WATCH_IPS_H_ */

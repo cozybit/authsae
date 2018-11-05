@@ -54,45 +54,45 @@ typedef void (*dumpcb)(timerid id, int num, int secs, int usecs, char *msg);
  * a timer definition
  */
 struct timer {
-    struct timespec to;
-    timercb proc;
-    timerid id;
-    void *data;
+  struct timespec to;
+  timercb proc;
+  timerid id;
+  void *data;
 };
 
 /*
  * an I/O definition
  */
 struct source {
-    int fd;
-    fdcb proc;
-    void *data;
+  int fd;
+  fdcb proc;
+  void *data;
 };
 
 /*
  * the number of timers and file descriptors we'll dispatch
  * are fixed. If you hit that ceiling bump here.
  */
-#define NTIMERS		1024
-#define NFDS		128
+#define NTIMERS 1024
+#define NFDS 128
 
 /*
  * a service context
  */
 typedef struct _servcxt {
-    fd_set readfds;
-    fd_set writefds;
-    fd_set exceptfds;
-    timerid timer_id;
-    struct timespec gbl_timer;
-    fdcb exceptor;
-    int ntimers;
-    struct timer timers[NTIMERS];
-    int ninputs;
-    struct source inputs[NFDS];
-    int noutputs;
-    struct source outputs[NFDS];
-    volatile sig_atomic_t keep_running;
+  fd_set readfds;
+  fd_set writefds;
+  fd_set exceptfds;
+  timerid timer_id;
+  struct timespec gbl_timer;
+  fdcb exceptor;
+  int ntimers;
+  struct timer timers[NTIMERS];
+  int ninputs;
+  struct source inputs[NFDS];
+  int noutputs;
+  struct source outputs[NFDS];
+  volatile sig_atomic_t keep_running;
 } servcxt;
 
 typedef struct _servcxt *service_context;
@@ -100,11 +100,19 @@ typedef struct _servcxt *service_context;
 /*
  * service context APIs
  */
-timerid srv_add_timeout_with_jitter(service_context context, microseconds usec, timercb proc, void *data, microseconds jitter_usecs);
+timerid srv_add_timeout_with_jitter(
+    service_context context,
+    microseconds usec,
+    timercb proc,
+    void *data,
+    microseconds jitter_usecs);
 
-static inline timerid srv_add_timeout(service_context context, microseconds usec, timercb proc, void *data)
-{
-        return srv_add_timeout_with_jitter(context, usec, proc, data, 0);
+static inline timerid srv_add_timeout(
+    service_context context,
+    microseconds usec,
+    timercb proc,
+    void *data) {
+  return srv_add_timeout_with_jitter(context, usec, proc, data, 0);
 }
 
 int srv_rem_timeout(service_context, timerid);
@@ -127,6 +135,6 @@ service_context srv_create_context(void);
 
 void srv_cancel_main_loop(service_context);
 
-struct evl_ops* get_evl_ops();
+struct evl_ops *get_evl_ops();
 
-#endif	/* _SAE_SERVICE_H_ */
+#endif /* _SAE_SERVICE_H_ */

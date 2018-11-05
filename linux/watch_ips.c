@@ -67,7 +67,10 @@ static bool open_socket(int af) {
 
   sock = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
   if (sock == -1) {
-    sae_debug(SAE_DEBUG_ERR, "rekey: error creating the netlink socket for the address monitoring thread: %s\n",
+    sae_debug(
+        SAE_DEBUG_ERR,
+        "rekey: error creating the netlink socket for the address monitoring "
+        "thread: %s\n",
         strerror(errno));
     return false;
   }
@@ -77,9 +80,12 @@ static bool open_socket(int af) {
   addr.nl_family = AF_NETLINK;
   addr.nl_groups = (af == AF_INET) ? RTMGRP_IPV4_IFADDR : RTMGRP_IPV6_IFADDR;
 
-  bool r = !bind(sock, (struct sockaddr *) &addr, sizeof(addr));
+  bool r = !bind(sock, (struct sockaddr *)&addr, sizeof(addr));
   if (!r) {
-    sae_debug(SAE_DEBUG_ERR, "rekey: error binding the netlink socket for the address monitoring thread: %s\n",
+    sae_debug(
+        SAE_DEBUG_ERR,
+        "rekey: error binding the netlink socket for the address monitoring "
+        "thread: %s\n",
         strerror(errno));
     close(sock);
     sock = -1;
@@ -113,21 +119,29 @@ static void *monitor_interface_addresses(void *arg) {
         goto out;
       }
 
-      int idx = !cfg ? 0 : if_nametoindex(cfg->conf->bridge[0] ? cfg->conf->bridge : cfg->conf->interface);
+      int idx = !cfg ? 0 : if_nametoindex(
+                               cfg->conf->bridge[0] ? cfg->conf->bridge
+                                                    : cfg->conf->interface);
       bool changed = false;
 
-      struct nlmsghdr *nlh = (struct nlmsghdr *) buffer;
-      while (!changed && NLMSG_OK(nlh, len) && (nlh->nlmsg_type != NLMSG_DONE)) {
-        if ((nlh->nlmsg_type == RTM_NEWADDR) || (nlh->nlmsg_type == RTM_DELADDR)) {
-          struct ifaddrmsg *ifa = (struct ifaddrmsg *) NLMSG_DATA(nlh);
+      struct nlmsghdr *nlh = (struct nlmsghdr *)buffer;
+      while (!changed && NLMSG_OK(nlh, len) &&
+             (nlh->nlmsg_type != NLMSG_DONE)) {
+        if ((nlh->nlmsg_type == RTM_NEWADDR) ||
+            (nlh->nlmsg_type == RTM_DELADDR)) {
+          struct ifaddrmsg *ifa = (struct ifaddrmsg *)NLMSG_DATA(nlh);
           struct rtattr *rth = IFA_RTA(ifa);
           int rtl = IFA_PAYLOAD(nlh);
 
           while (!changed && rtl && RTA_OK(rth, rtl)) {
-            if ((rth->rta_type == IFA_LOCAL) && (!cfg || (ifa->ifa_family == cfg->conf->rekey_multicast_group_family))
-                && (!idx || (idx == ifa->ifa_index))) {
+            if ((rth->rta_type == IFA_LOCAL) &&
+                (!cfg || (ifa->ifa_family ==
+                          cfg->conf->rekey_multicast_group_family)) &&
+                (!idx || (idx == ifa->ifa_index))) {
               char name[IF_NAMESIZE];
-              sae_debug(SAE_DEBUG_REKEY, "rekey: an IP address changed on interface '%s'\n",
+              sae_debug(
+                  SAE_DEBUG_REKEY,
+                  "rekey: an IP address changed on interface '%s'\n",
                   if_indextoname(ifa->ifa_index, name));
               changed = true;
             }
@@ -151,11 +165,15 @@ static void *monitor_interface_addresses(void *arg) {
     }
 
     if (len == -1) {
-      sae_debug(SAE_DEBUG_ERR, "rekey: read error in the address monitoring thread: %s\n", strerror(errno));
+      sae_debug(
+          SAE_DEBUG_ERR,
+          "rekey: read error in the address monitoring thread: %s\n",
+          strerror(errno));
     }
   }
 
-  out: return NULL;
+out:
+  return NULL;
 }
 
 /*
@@ -179,13 +197,17 @@ void watch_ips_init(struct mesh_node *config) {
   }
 
   if (pthread_create(&thread, NULL, monitor_interface_addresses, NULL)) {
-    sae_debug(SAE_DEBUG_ERR, "rekey: error creating the address monitoring thread: %s\n", strerror(errno));
+    sae_debug(
+        SAE_DEBUG_ERR,
+        "rekey: error creating the address monitoring thread: %s\n",
+        strerror(errno));
     goto err;
   }
 
   return;
 
-  err: thread = 0;
+err:
+  thread = 0;
   close_socket();
   run = false;
   cfg = NULL;
@@ -197,9 +219,9 @@ void watch_ips_close() {
   }
 
   run = false;
-  (void) pthread_cancel(thread);
+  (void)pthread_cancel(thread);
 
-  (void) pthread_join(thread, NULL);
+  (void)pthread_join(thread, NULL);
   thread = 0;
 
   close_socket();

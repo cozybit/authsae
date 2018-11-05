@@ -53,133 +53,131 @@ unsigned int sae_debug_mask;
  *      given an attribute/value pair in the form of attr=value
  *      return a pointer to the value
  */
-int
-parse_buffer (char *buf, char **val)
-{
-    char *ptr;
+int parse_buffer(char *buf, char **val) {
+  char *ptr;
 
-    *val = NULL;
-    if (buf[0] == '#') {
-        return 0;
-    }
-    ptr = buf;
-    while (*ptr != '\n') {
-        ptr++;
-    }
-    if (ptr == buf) {
-        return 0;
-    }
-    *ptr = '\0';
-    ptr = strstr(buf, "=");
-    if (ptr == NULL) {
-        return -1;
-    }
-    *ptr = '\0';
-    do {
-        ptr++;
-    } while (*ptr == ' ');
-    *val = ptr;
+  *val = NULL;
+  if (buf[0] == '#') {
+    return 0;
+  }
+  ptr = buf;
+  while (*ptr != '\n') {
+    ptr++;
+  }
+  if (ptr == buf) {
+    return 0;
+  }
+  *ptr = '\0';
+  ptr = strstr(buf, "=");
+  if (ptr == NULL) {
+    return -1;
+  }
+  *ptr = '\0';
+  do {
+    ptr++;
+  } while (*ptr == ' ');
+  *val = ptr;
 
-    return 1;
+  return 1;
 }
 
-void sae_debug (int level, const char *fmt, ...)
-{
-    va_list argptr;
+void sae_debug(int level, const char *fmt, ...) {
+  va_list argptr;
 
-    if (sae_debug_mask & level) {
-        va_start(argptr, fmt);
-        vfprintf(stdout, fmt, argptr);
-        va_end(argptr);
-    }
+  if (sae_debug_mask & level) {
+    va_start(argptr, fmt);
+    vfprintf(stdout, fmt, argptr);
+    va_end(argptr);
+  }
 }
 
-void sae_hexdump(int level, const char *label, const unsigned char *start, int len)
-{
-    const unsigned char *pos;
-    int i;
+void sae_hexdump(
+    int level,
+    const char *label,
+    const unsigned char *start,
+    int len) {
+  const unsigned char *pos;
+  int i;
 
-    if (sae_debug_mask & level) {
-        fprintf(stdout, "----------\n");
-        fprintf(stdout, "%s hexdump", label);
-        pos = start;
-        for (i=0; i<len; i++) {
-            if (!(i%16))
-                fprintf(stdout, "\n%08x  ", i);
-            fprintf(stdout, "%02x ", (unsigned char) *pos++);
-        }
-        fprintf(stdout, "\n----------\n\n");
-        fflush(stdout);
+  if (sae_debug_mask & level) {
+    fprintf(stdout, "----------\n");
+    fprintf(stdout, "%s hexdump", label);
+    pos = start;
+    for (i = 0; i < len; i++) {
+      if (!(i % 16))
+        fprintf(stdout, "\n%08x  ", i);
+      fprintf(stdout, "%02x ", (unsigned char)*pos++);
     }
-    return;
+    fprintf(stdout, "\n----------\n\n");
+    fflush(stdout);
+  }
+  return;
 }
 
+void parse_ies(unsigned char *start, int len, struct info_elems *elems) {
+  int left = len;
+  unsigned char *pos = start;
 
-void parse_ies(unsigned char *start, int len, struct info_elems *elems)
-{
-    int left = len;
-    unsigned char *pos = start;
+  memset(elems, 0, sizeof(*elems));
 
-    memset(elems, 0, sizeof(*elems));
+  while (left >= 2) {
+    unsigned char id, elen;
 
-    while (left >= 2) {
-        unsigned char id, elen;
+    id = *pos++;
+    elen = *pos++;
+    left -= 2;
 
-        id = *pos++;
-        elen = *pos++;
-        left -= 2;
+    // fprintf(stderr, "parse_ies id=%d elen=%d\n", id, elen);
 
-        //fprintf(stderr, "parse_ies id=%d elen=%d\n", id, elen);
+    if (elen > left)
+      break;
 
-        if (elen > left)
-            break;
-
-        switch (id) {
-            case IEEE80211_EID_SUPPORTED_RATES:
-                elems->sup_rates = pos;
-                elems->sup_rates_len = elen;
-                break;
-            case IEEE80211_EID_EXTENDED_SUP_RATES:
-                elems->ext_rates = pos;
-                elems->ext_rates_len = elen;
-                break;
-            case IEEE80211_EID_RSN:
-                elems->rsn = pos;
-                elems->rsn_len = elen;
-                break;
-	    case IEEE80211_EID_HT_CAPABILITY:
-		elems->ht_cap = pos;
-		elems->ht_cap_len = elen;
-		break;
-	    case IEEE80211_EID_HT_OPERATION:
-		elems->ht_info = pos;
-		elems->ht_info_len = elen;
-		break;
-            case IEEE80211_EID_MESH_ID:
-                elems->mesh_id = pos;
-                elems->mesh_id_len = elen;
-                break;
-            case IEEE80211_EID_MESH_PEERING:
-                elems->mesh_peering = pos;
-                elems->mesh_peering_len = elen;
-                break;
-            case IEEE80211_EID_MESH_CONFIG:
-                elems->mesh_config = pos;
-                elems->mesh_config_len = elen;
-                break;
-            case IEEE80211_EID_AMPE:
-                elems->ampe = (struct ampe_ie *) pos;
-                elems->ampe_len = elen;
-		break;
-            case IEEE80211_EID_MIC:
-                elems->mic = pos;
-                elems->mic_len = elen;
-                /*  After the MIC there IEs there's the AMPE encrypted IE.  Stop here */
-                return;
-            default:
-                break;
-        }
-        left -= elen;
-        pos += elen;
+    switch (id) {
+      case IEEE80211_EID_SUPPORTED_RATES:
+        elems->sup_rates = pos;
+        elems->sup_rates_len = elen;
+        break;
+      case IEEE80211_EID_EXTENDED_SUP_RATES:
+        elems->ext_rates = pos;
+        elems->ext_rates_len = elen;
+        break;
+      case IEEE80211_EID_RSN:
+        elems->rsn = pos;
+        elems->rsn_len = elen;
+        break;
+      case IEEE80211_EID_HT_CAPABILITY:
+        elems->ht_cap = pos;
+        elems->ht_cap_len = elen;
+        break;
+      case IEEE80211_EID_HT_OPERATION:
+        elems->ht_info = pos;
+        elems->ht_info_len = elen;
+        break;
+      case IEEE80211_EID_MESH_ID:
+        elems->mesh_id = pos;
+        elems->mesh_id_len = elen;
+        break;
+      case IEEE80211_EID_MESH_PEERING:
+        elems->mesh_peering = pos;
+        elems->mesh_peering_len = elen;
+        break;
+      case IEEE80211_EID_MESH_CONFIG:
+        elems->mesh_config = pos;
+        elems->mesh_config_len = elen;
+        break;
+      case IEEE80211_EID_AMPE:
+        elems->ampe = (struct ampe_ie *)pos;
+        elems->ampe_len = elen;
+        break;
+      case IEEE80211_EID_MIC:
+        elems->mic = pos;
+        elems->mic_len = elen;
+        /*  After the MIC there IEs there's the AMPE encrypted IE.  Stop here */
+        return;
+      default:
+        break;
     }
+    left -= elen;
+    pos += elen;
+  }
 }

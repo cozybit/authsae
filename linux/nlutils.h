@@ -32,19 +32,21 @@
 /* leave hw/kernel info here for now, maybe move to common.h? */
 
 struct netlink_config_s {
-	struct nl_sock *nl_sock;
-	struct nl_cache *nl_cache;
-	struct nl_sock *nl_sock_event;
-	struct nl_cache *nl_cache_event;
-	struct nl_cb *nl_cb;
-	struct genl_family *nl80211;
-	int supress_error;
-	int ifindex;
+  struct nl_sock *nl_sock;
+  struct nl_cache *nl_cache;
+  struct nl_sock *nl_sock_event;
+  struct nl_cache *nl_cache_event;
+  struct nl_cb *nl_cb;
+  struct genl_family *nl80211;
+  int supress_error;
+  int ifindex;
 };
 
 int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);
 int send_nlmsg(struct nl_sock *nl_sock, struct nl_msg *msg);
-int send_nlmsg_suppress_error(struct nl_sock *nl_sock,
-        struct nl_msg *msg, int expect_err);
+int send_nlmsg_suppress_error(
+    struct nl_sock *nl_sock,
+    struct nl_msg *msg,
+    int expect_err);
 
 #endif /* _SAE_NLUTILS_H_ */

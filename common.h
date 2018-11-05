@@ -39,33 +39,36 @@
 #ifndef _SAE_COMMON_H_
 #define _SAE_COMMON_H_
 
-#define MESHD_STA       0
-#define MESHD_ADHOC     1
-#define MESHD_HOSTAP    2
-#define MESHD_MONITOR   3
-#define MESHD_IBSS      4
-#define MESHD_11a       1
-#define MESHD_11b       2
-#define MESHD_11g       3
+#define MESHD_STA 0
+#define MESHD_ADHOC 1
+#define MESHD_HOSTAP 2
+#define MESHD_MONITOR 3
+#define MESHD_IBSS 4
+#define MESHD_11a 1
+#define MESHD_11b 2
+#define MESHD_11g 3
 #define MESHD_MAX_SSID_LEN 32
 int parse_buffer(char *, char **);
 
-#define SAE_DEBUG_ERR           0x01
-#define SAE_DEBUG_PROTOCOL_MSG  0x02
+#define SAE_DEBUG_ERR 0x01
+#define SAE_DEBUG_PROTOCOL_MSG 0x02
 #define SAE_DEBUG_STATE_MACHINE 0x04
-#define SAE_DEBUG_CRYPTO        0x08
-#define SAE_DEBUG_CRYPTO_VERB   0x10
-#define AMPE_DEBUG_CANDIDATES   0x20
-#define MESHD_DEBUG             0x40
-#define AMPE_DEBUG_FSM          0x80
-#define AMPE_DEBUG_KEYS        0x100
-#define AMPE_DEBUG_ERR         0x200
-#define SAE_DEBUG_REKEY        0x400
+#define SAE_DEBUG_CRYPTO 0x08
+#define SAE_DEBUG_CRYPTO_VERB 0x10
+#define AMPE_DEBUG_CANDIDATES 0x20
+#define MESHD_DEBUG 0x40
+#define AMPE_DEBUG_FSM 0x80
+#define AMPE_DEBUG_KEYS 0x100
+#define AMPE_DEBUG_ERR 0x200
+#define SAE_DEBUG_REKEY 0x400
 extern unsigned int sae_debug_mask;
-void sae_debug (int level, const char *fmt, ...)
+void sae_debug(int level, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
-void sae_hexdump(int level, const char *label, const unsigned char *start, int
-        len);
+void sae_hexdump(
+    int level,
+    const char *label,
+    const unsigned char *start,
+    int len);
 
 #ifndef le16
 #define le16 unsigned short
@@ -82,4 +85,4 @@ typedef int config_int_t;
 typedef long int config_int_t;
 #endif
 
-#endif  /* _SAE_COMMON_H_ */
+#endif /* _SAE_COMMON_H_ */

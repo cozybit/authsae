@@ -45,21 +45,22 @@
 #include "ampe.h"
 #include "peers.h"
 
-#define REKEY_ENABLE_DEF                   (false)
-#define REKEY_MULTICAST_GROUP_FAMILY_DEF   (AF_INET)
-#define REKEY_MULTICAST_GROUP_ADDRESS_DEF  (htonl(0xE00000C8)) /* 224.0.0.200 */
-#define REKEY_PING_PORT_DEF                (4875)
-#define REKEY_PONG_PORT_DEF                (4876)
-#define REKEY_PING_COUNT_MAX_DEF           (32)
-#define REKEY_PING_TIMEOUT_MSECS_DEF       (500)
-#define REKEY_PING_JITTER_MSECS_DEF        (100)
-#define REKEY_REAUTH_COUNT_MAX_DEF         (8)
-#define REKEY_OK_PING_COUNT_MAX_DEF        (16)
+#define REKEY_ENABLE_DEF (false)
+#define REKEY_MULTICAST_GROUP_FAMILY_DEF (AF_INET)
+#define REKEY_MULTICAST_GROUP_ADDRESS_DEF (htonl(0xE00000C8)) /* 224.0.0.200 \
+                                                                 */
+#define REKEY_PING_PORT_DEF (4875)
+#define REKEY_PONG_PORT_DEF (4876)
+#define REKEY_PING_COUNT_MAX_DEF (32)
+#define REKEY_PING_TIMEOUT_MSECS_DEF (500)
+#define REKEY_PING_JITTER_MSECS_DEF (100)
+#define REKEY_REAUTH_COUNT_MAX_DEF (8)
+#define REKEY_OK_PING_COUNT_MAX_DEF (16)
 
-void rekey_init(struct mesh_node *mesh, struct evl_ops* evl);
+void rekey_init(struct mesh_node *mesh, struct evl_ops *evl);
 void rekey_close(void);
 
 void rekey_verify_peer(struct candidate *peer);
 void rekey_reopen_sockets(void);
 
-#endif  /* _SAE_REKEY_H_ */
+#endif /* _SAE_REKEY_H_ */

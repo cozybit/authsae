@@ -1494,33 +1494,33 @@ static int meshd_parse_libconfig(
 #define CONFIG_LOOKUP(name, config_val, dflt)                         \
   if (CONFIG_FALSE ==                                                 \
       config_setting_lookup_int(                                      \
-          meshd_section, #name, (config_int_t *)&config->config_val)) \
+          meshd_section, name, (config_int_t *)&config->config_val))  \
     config->config_val = dflt;
 
-  CONFIG_LOOKUP(channel, channel, -1);
-  CONFIG_LOOKUP(mcast-rate, mcast_rate, -1);
-  CONFIG_LOOKUP(beacon-interval, beacon_interval, -1);
+  CONFIG_LOOKUP("channel", channel, -1);
+  CONFIG_LOOKUP("mcast-rate", mcast_rate, -1);
+  CONFIG_LOOKUP("beacon-interval", beacon_interval, -1);
 
-  CONFIG_LOOKUP(is-secure, is_secure, 1);
+  CONFIG_LOOKUP("is-secure", is_secure, 1);
 
   config_setting_lookup_int(meshd_section, "pmf", (config_int_t *)&config->pmf);
 
   /* Get mesh parameter */
-  CONFIG_LOOKUP(path-refresh-time, path_refresh_time, -1);
-  CONFIG_LOOKUP(min-discovery-timeout, min_discovery_timeout, -1);
-  CONFIG_LOOKUP(gate-announcements, gate_announcements, -1);
-  CONFIG_LOOKUP(hwmp-active-path-timeout, hwmp_active_path_timeout, -1);
+  CONFIG_LOOKUP("path-refresh-time", path_refresh_time, -1);
+  CONFIG_LOOKUP("min-discovery-timeout", min_discovery_timeout, -1);
+  CONFIG_LOOKUP("gate-announcements", gate_announcements, -1);
+  CONFIG_LOOKUP("hwmp-active-path-timeout", hwmp_active_path_timeout, -1);
   CONFIG_LOOKUP(
-      hwmp-net-diameter-traversal-time,
+      "hwmp-net-diameter-traversal-time",
       hwmp_net_diameter_traversal_time,
       -1);
-  CONFIG_LOOKUP(hwmp-rootmode, hwmp_rootmode, -1);
-  CONFIG_LOOKUP(hwmp-rann-interval, hwmp_rann_interval, -1);
+  CONFIG_LOOKUP("hwmp-rootmode", hwmp_rootmode, -1);
+  CONFIG_LOOKUP("hwmp-rann-interval", hwmp_rann_interval, -1);
   CONFIG_LOOKUP(
-      hwmp-active-path-to-root-timeout,
+      "hwmp-active-path-to-root-timeout",
       hwmp_active_path_to_root_timeout,
       -1);
-  CONFIG_LOOKUP(hwmp-root-interval, hwmp_root_interval, -1);
+  CONFIG_LOOKUP("hwmp-root-interval", hwmp_root_interval, -1);
 
   config->band = MESHD_11b;
 
@@ -1553,7 +1553,7 @@ static int meshd_parse_libconfig(
     }
   }
 
-  CONFIG_LOOKUP(rekey_enable, rekey_enable, REKEY_ENABLE_DEF);
+  CONFIG_LOOKUP("rekey_enable", rekey_enable, REKEY_ENABLE_DEF);
   config->rekey_enable = (config->rekey_enable != 0);
 
   if (config_setting_lookup_string(
@@ -1591,14 +1591,14 @@ static int meshd_parse_libconfig(
     return -1;
   }
 
-  CONFIG_LOOKUP(rekey_ping_port, rekey_ping_port, REKEY_PING_PORT_DEF);
+  CONFIG_LOOKUP("rekey_ping_port", rekey_ping_port, REKEY_PING_PORT_DEF);
   if ((config->rekey_ping_port <= 0) || (config->rekey_ping_port >= 65536)) {
     fprintf(stderr, "Invalid rekey ping port %d\n", config->rekey_ping_port);
     return -1;
   }
   config->rekey_ping_port = htons(config->rekey_ping_port);
 
-  CONFIG_LOOKUP(rekey_pong_port, rekey_pong_port, REKEY_PONG_PORT_DEF);
+  CONFIG_LOOKUP("rekey_pong_port", rekey_pong_port, REKEY_PONG_PORT_DEF);
   if ((config->rekey_pong_port <= 0) || (config->rekey_pong_port >= 65536)) {
     fprintf(stderr, "Invalid rekey pong port %d\n", config->rekey_pong_port);
     return -1;
@@ -1606,7 +1606,7 @@ static int meshd_parse_libconfig(
   config->rekey_pong_port = htons(config->rekey_pong_port);
 
   CONFIG_LOOKUP(
-      rekey_ping_count_max, rekey_ping_count_max, REKEY_PING_COUNT_MAX_DEF);
+      "rekey_ping_count_max", rekey_ping_count_max, REKEY_PING_COUNT_MAX_DEF);
   if (config->rekey_ping_count_max <= 0) {
     fprintf(
         stderr,
@@ -1616,7 +1616,7 @@ static int meshd_parse_libconfig(
   }
 
   CONFIG_LOOKUP(
-      rekey_ping_timeout, rekey_ping_timeout, REKEY_PING_TIMEOUT_MSECS_DEF);
+      "rekey_ping_timeout", rekey_ping_timeout, REKEY_PING_TIMEOUT_MSECS_DEF);
   if (config->rekey_ping_timeout <= 0) {
     fprintf(
         stderr, "Invalid rekey ping timeout %d\n", config->rekey_ping_timeout);
@@ -1624,7 +1624,7 @@ static int meshd_parse_libconfig(
   }
 
   CONFIG_LOOKUP(
-      rekey_ping_jitter, rekey_ping_jitter, REKEY_PING_JITTER_MSECS_DEF);
+      "rekey_ping_jitter", rekey_ping_jitter, REKEY_PING_JITTER_MSECS_DEF);
   if (config->rekey_ping_jitter <= 0) {
     fprintf(
         stderr, "Invalid rekey ping jitter %d\n", config->rekey_ping_jitter);
@@ -1632,7 +1632,7 @@ static int meshd_parse_libconfig(
   }
 
   CONFIG_LOOKUP(
-      rekey_reauth_count_max,
+      "rekey_reauth_count_max",
       rekey_reauth_count_max,
       REKEY_REAUTH_COUNT_MAX_DEF);
   if (config->rekey_reauth_count_max <= 0) {
@@ -1644,7 +1644,7 @@ static int meshd_parse_libconfig(
   }
 
   CONFIG_LOOKUP(
-      rekey_ok_ping_count_max,
+      "rekey_ok_ping_count_max",
       rekey_ok_ping_count_max,
       REKEY_OK_PING_COUNT_MAX_DEF);
   if (config->rekey_ok_ping_count_max <= 0) {
@@ -1661,10 +1661,10 @@ static int meshd_parse_libconfig(
 }
 
 /* given the channel, find the freq in megahertz.  Borrowed from iw:
- * Copyright (c) 2007, 2008	Johannes Berg
- * Copyright (c) 2007		Andy Lutomirski
- * Copyright (c) 2007		Mike Kershaw
- * Copyright (c) 2008-2009		Luis R. Rodriguez
+ * Copyright (c) 2007, 2008 Johannes Berg
+ * Copyright (c) 2007       Andy Lutomirski
+ * Copyright (c) 2007       Mike Kershaw
+ * Copyright (c) 2008-2009      Luis R. Rodriguez
  */
 static int channel_to_freq(int chan) {
   if (chan < 14)

@@ -1079,7 +1079,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
   struct candidate *cand;
 
-  assert(peer_mac && me);
+  assert(peer_mac);
 
   if ((cand = find_peer(peer_mac, 0)) == NULL) {
     sae_debug(

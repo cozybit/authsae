@@ -58,11 +58,6 @@
 #define MESH_CONFIG_SP_NEIGHBOR_OFFSET 1
 #define MESH_CONFIG_AUTH_SAE 1
 
-/* try repeering if stuck in listen this long */
-#define PEER_TIMEOUT_MS 3000
-/* try to peer this many times before deleting the STA */
-#define MAX_ESTAB_ATTEMPTS 3
-
 #ifndef BIT
 #define BIT(x) (1UL << (x))
 #endif
@@ -100,8 +95,6 @@ static const char *mplstates[] = {[PLINK_LISTEN] = "LISTEN",
                                   [PLINK_ESTAB] = "ESTAB",
                                   [PLINK_HOLDING] = "HOLDING",
                                   [PLINK_BLOCKED] = "BLOCKED"};
-
-static void plink_timer(void *data);
 
 static int plink_frame_tx(
     struct candidate *cand,
@@ -257,20 +250,11 @@ static void peer_ampe_init(
 static inline void fsm_restart(struct candidate *cand) {
   sae_debug(
       AMPE_DEBUG_FSM,
-      "Attempting re-peer with " MACSTR "\n",
+      "Deleting peer " MACSTR " to restart FSM\n",
       MAC2STR(cand->peer_mac));
-  if (cand->estab_attempts > MAX_ESTAB_ATTEMPTS) {
-    sae_debug(
-        AMPE_DEBUG_FSM, "Giving up on " MACSTR "\n", MAC2STR(cand->peer_mac));
-    if (cb->delete_peer)
-      cb->delete_peer(cand->peer_mac);
-    return;
-  }
 
-  peer_ampe_init(&ampe_conf, cand, cand->cookie);
-  cb->evl->rem_timeout(cand->t2);
-  cand->t2 = cb->evl->add_timeout(SRV_MSEC(PEER_TIMEOUT_MS), plink_timer, cand);
-  cand->estab_attempts++;
+  if (cb->delete_peer)
+    cb->delete_peer(cand->peer_mac);
 }
 
 static void plink_timer(void *data) {
@@ -291,9 +275,6 @@ static void plink_timer(void *data) {
   reason = 0;
 
   switch (cand->link_state) {
-    case PLINK_LISTEN:
-      start_peer_link(cand->peer_mac, NULL, cand->cookie);
-      break;
     case PLINK_OPN_RCVD:
     case PLINK_OPN_SNT:
       /* retry timer */
@@ -960,7 +941,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
               cand->sup_rates_len,
               cand->cookie);
           set_link_state(cand, PLINK_ESTAB);
-          cand->estab_attempts = 0;
           changed |= mesh_set_ht_op_mode(cand->conf->mesh);
           sae_debug(
               AMPE_DEBUG_FSM,
@@ -1006,7 +986,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
               cand->sup_rates_len,
               cand->cookie);
           set_link_state(cand, PLINK_ESTAB);
-          cand->estab_attempts = 0;
           changed |= mesh_set_ht_op_mode(cand->conf->mesh);
           // TODO: update the number of available peer "slots" in mesh config
           // mesh_plink_inc_estab_count(sdata);

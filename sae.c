@@ -1429,10 +1429,12 @@ static void retransmit_peer(void *data) {
   switch (peer->state) {
     case SAE_COMMITTED:
       commit_to_peer(peer, NULL, 0);
+      cb->evl->rem_timeout(peer->t0);
       peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
       break;
     case SAE_CONFIRMED:
       confirm_to_peer(peer);
+      cb->evl->rem_timeout(peer->t0);
       peer->t0 = cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
       break;
     default:
@@ -1541,6 +1543,7 @@ void do_reauth(struct candidate *peer) {
         delete_peer(&newpeer);
       } else {
         commit_to_peer(newpeer, NULL, 0);
+        cb->evl->rem_timeout(newpeer->t0);
         newpeer->t0 =
             cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, newpeer);
         newpeer->state = SAE_COMMITTED;
@@ -1550,6 +1553,7 @@ void do_reauth(struct candidate *peer) {
      * make a hard deletion of this guy in case the reauth fails and we
      * don't end up deleting this instance
      */
+    cb->evl->rem_timeout(peer->t2);
     peer->t2 = cb->evl->add_timeout(SRV_SEC(5), destroy_peer, peer);
 
   } else {
@@ -1643,6 +1647,7 @@ static enum result process_authentication_frame(
            */
           confirm_to_peer(peer);
           peer->sync = 0;
+          cb->evl->rem_timeout(peer->t0);
           peer->t0 =
               cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
           peer->state = SAE_CONFIRMED;
@@ -1679,6 +1684,7 @@ static enum result process_authentication_frame(
                 frame->authenticate.u.var8,
                 (len - (IEEE802_11_HDR_LEN + sizeof(frame->authenticate))));
             peer->sync = 0;
+            cb->evl->rem_timeout(peer->t0);
             peer->t0 =
                 cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
             break;
@@ -1720,6 +1726,7 @@ static enum result process_authentication_frame(
                   "ignore...\n",
                   grp);
             }
+            cb->evl->rem_timeout(peer->t0);
             peer->t0 =
                 cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
             break;
@@ -1728,6 +1735,7 @@ static enum result process_authentication_frame(
            * silently drop any other failure
            */
           if (status != 0) {
+            cb->evl->rem_timeout(peer->t0);
             peer->t0 =
                 cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
             break;
@@ -1758,6 +1766,7 @@ static enum result process_authentication_frame(
                   grp);
               peer->sync++;
               reject_to_peer(peer, frame);
+              cb->evl->rem_timeout(peer->t0);
               peer->t0 =
                   cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
               break;
@@ -1777,6 +1786,7 @@ static enum result process_authentication_frame(
                * the numerically greater MAC address retransmits
                */
               commit_to_peer(peer, NULL, 0);
+              cb->evl->rem_timeout(peer->t0);
               peer->t0 =
                   cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
               break;
@@ -1812,6 +1822,7 @@ static enum result process_authentication_frame(
             }
           }
           confirm_to_peer(peer);
+          cb->evl->rem_timeout(peer->t0);
           peer->t0 =
               cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
           peer->state = SAE_CONFIRMED;
@@ -1825,6 +1836,7 @@ static enum result process_authentication_frame(
           }
           peer->sync++;
           commit_to_peer(peer, NULL, 0);
+          cb->evl->rem_timeout(peer->t0);
           peer->t0 =
               cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
           break;
@@ -1842,6 +1854,7 @@ static enum result process_authentication_frame(
         /*
          * silently discard, but since we cancelled the timer above, reset it
          */
+        cb->evl->rem_timeout(peer->t0);
         peer->t0 =
             cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
         break;
@@ -1859,6 +1872,7 @@ static enum result process_authentication_frame(
             commit_to_peer(peer, NULL, 0);
             confirm_to_peer(peer);
           }
+          cb->evl->rem_timeout(peer->t0);
           peer->t0 =
               cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
           break;
@@ -2197,6 +2211,7 @@ int process_mgmt_frame(
           delete_peer(&peer);
         } else {
           commit_to_peer(peer, NULL, 0);
+          cb->evl->rem_timeout(peer->t0);
           peer->t0 =
               cb->evl->add_timeout(SRV_SEC(retrans), retransmit_peer, peer);
           peer->state = SAE_COMMITTED;

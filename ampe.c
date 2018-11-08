@@ -268,6 +268,7 @@ static inline void fsm_restart(struct candidate *cand) {
   }
 
   peer_ampe_init(&ampe_conf, cand, cand->cookie);
+  cb->evl->rem_timeout(cand->t2);
   cand->t2 = cb->evl->add_timeout(SRV_MSEC(PEER_TIMEOUT_MS), plink_timer, cand);
   cand->estab_attempts++;
 }
@@ -320,6 +321,7 @@ static void plink_timer(void *data) {
         }
         cand->timeout += rand % cand->timeout;
         ++cand->retries;
+        cb->evl->rem_timeout(cand->t2);
         cand->t2 =
             cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
         plink_frame_tx(cand, PLINK_OPEN, 0);
@@ -332,6 +334,7 @@ static void plink_timer(void *data) {
       if (!reason)
         reason = htole16(MESH_CONFIRM_TIMEOUT);
       set_link_state(cand, PLINK_HOLDING);
+      cb->evl->rem_timeout(cand->t2);
       cand->t2 = cb->evl->add_timeout(
           SRV_MSEC(cand->conf->holding_timeout_ms), plink_timer, cand);
       plink_frame_tx(cand, PLINK_CLOSE, reason);
@@ -872,6 +875,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           break;
         case OPN_ACPT:
           cand->timeout = aconf->retry_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           set_link_state(cand, PLINK_OPN_RCVD);
@@ -895,6 +899,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           cand->reason = reason;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           plink_frame_tx(cand, PLINK_CLOSE, reason);
@@ -907,6 +912,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case CNF_ACPT:
           set_link_state(cand, PLINK_CNF_RCVD);
           cand->timeout = aconf->confirm_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           break;
@@ -927,6 +933,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           cand->reason = reason;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           plink_frame_tx(cand, PLINK_CLOSE, reason);
@@ -978,6 +985,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           cand->reason = reason;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           plink_frame_tx(cand, PLINK_CLOSE, reason);
@@ -1022,6 +1030,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           cand->reason = reason;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
+          cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           changed |= mesh_set_ht_op_mode(cand->conf->mesh);
@@ -1091,6 +1100,7 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
 
   peer_ampe_init(&ampe_conf, cand, cookie);
   set_link_state(cand, PLINK_OPN_SNT);
+  cb->evl->rem_timeout(cand->t2);
   cand->t2 = cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
 
   sae_debug(

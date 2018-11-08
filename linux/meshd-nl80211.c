@@ -1425,7 +1425,7 @@ void fin(
     if (meshd_conf.is_secure) {
       sae_hexdump(AMPE_DEBUG_KEYS, "pmk", buf, len % 80);
     }
-    start_peer_link(peer, (unsigned char *)mesh.mymacaddr, cookie);
+    ampe_open_peer_link(peer, cookie);
   } else if (reason) {
     peer_deleted(peer);
   }

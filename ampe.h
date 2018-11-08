@@ -148,6 +148,9 @@ int process_ampe_frame(
     int len,
     unsigned char *me,
     void *cookie);
+int ampe_open_peer_link(unsigned char *peer_mac, void *cookie);
+
+/* deprecated */
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie);
 
 #endif /* _SAE_AMPE_H_ */

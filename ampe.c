@@ -1056,15 +1056,14 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
 #define PLINK_GET_PLID(p) (p + 4)
 
 /**
- * start_peer_link - attempt to establish a peer link
+ * ampe_open_peer_link - attempt to establish a peer link
  * @peer:      MAC address of the candidate peer
- * @me:        The MAC address of the local interface
  * @cookie:    Opaque cookie that will be returned to the caller along with
  *             frames to be transmitted.
  *
  * Returns 0 or a negative error.
  */
-int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
+int ampe_open_peer_link(unsigned char *peer_mac, void *cookie) {
   struct candidate *cand;
 
   assert(peer_mac);
@@ -1089,6 +1088,10 @@ int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
       MAC2STR(peer_mac));
 
   return plink_frame_tx(cand, PLINK_OPEN, 0);
+}
+
+int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
+  return ampe_open_peer_link(peer_mac, cookie);
 }
 
 static uint32_t get_basic_rates(struct info_elems *elems) {

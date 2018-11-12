@@ -391,6 +391,7 @@ handle_del_peer(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg) {
   if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
     return -1;
 
+  ampe_close_peer_link(nla_data(tb[NL80211_ATTR_MAC]));
   delete_peer_by_addr(nla_data(tb[NL80211_ATTR_MAC]));
 
   return 0;

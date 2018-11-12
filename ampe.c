@@ -253,6 +253,8 @@ static inline void fsm_restart(struct candidate *cand) {
       "Deleting peer " MACSTR " to restart FSM\n",
       MAC2STR(cand->peer_mac));
 
+  ampe_close_peer_link(cand->peer_mac);
+
   if (cb->delete_peer)
     cb->delete_peer(cand->peer_mac);
 }
@@ -1092,6 +1094,26 @@ int ampe_open_peer_link(unsigned char *peer_mac, void *cookie) {
 
 int start_peer_link(unsigned char *peer_mac, unsigned char *me, void *cookie) {
   return ampe_open_peer_link(peer_mac, cookie);
+}
+
+int ampe_close_peer_link(unsigned char *peer_mac) {
+  struct candidate *cand;
+
+  assert(peer_mac);
+
+  if ((cand = find_peer(peer_mac, 0)) == NULL) {
+    sae_debug(
+        AMPE_DEBUG_FSM,
+        "Mesh plink: Attempt to close link with non-existent peer\n");
+    return -EPERM;
+  }
+
+  sae_debug(
+      AMPE_DEBUG_FSM,
+      "Mesh plink: closing link with " MACSTR "\n",
+      MAC2STR(peer_mac));
+
+  return plink_frame_tx(cand, PLINK_CLOSE, MESH_LINK_CANCELLED);
 }
 
 static uint32_t get_basic_rates(struct info_elems *elems) {

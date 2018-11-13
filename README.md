@@ -1,5 +1,4 @@
-Simultaneous Authentication of Equals (SAE)
---------------------------------------------
+# Simultaneous Authentication of Equals (SAE)
 
   SAE provides secure password-based authentication for 802.11.
 This reference implementation is written with an OS-specific
@@ -20,7 +19,7 @@ supports communication over the loopback interface.
   A monitor application, mon, can be used to sniff interfaces for
 SAE traffic and provide pithy output.
 
-RESTRICTIONS
+## RESTRICTIONS
 
   Currently, the only OS with wireless support is freebsd. The
 linux module only supports communication over loopback. Extending
@@ -34,22 +33,41 @@ and 26 from the IANA registry of RFC 2409's "Diffie-Hellman groups".
 
   meshd currently only supports Atheros radios.
 
-REQUIREMENTS
+## REQUIREMENTS
 
   libcrypto from OpenSSL, version 0.9.8 or later. Basically, all
 you need is EC support that has the pre-defined groups.
 
-BUILDING
+  On Linux, the following dependencies are required (relative to a base Ubuntu
+18.04.1 LTS image):
+```
+sudo apt install gcc make cmake pkg-config libssl-dev libconfig-dev libnl-3-dev libnl-genl-3-dev
+```
+
+## BUILDING
+
+```
+make all
+```
 
   The file freebsd_6.4_RC1_diffs contains patches for a few
 kernel files in freebsd 6.4_RC1 (other versions should be
 straightforward to patch as the diffs are minor) to allow for the
 sending of 802.11 authentication frames via a BPF. Rebuild the
-OS with these patchs.
+OS with these patches.
 
   Edit the Makefile to point $(LIBS) to OpenSSL and make.
 
-HOW TO CONFIGURE
+## TESTING
+
+```
+tests/run_tests.sh
+```
+
+  Note that `tests/test003.sh` requires a kernel patch for certain versions -
+see the comment in the file for details.
+
+## HOW TO CONFIGURE
 
   Configuration of sae and meshd are done with sae.conf and meshd.conf,
 respectively, in the config directory. These files contain attribute and
@@ -116,7 +134,7 @@ Lines beginning with '#' are treated as comments and ignored.
 	hwmp-active-path-to-root-timeout: set mesh parameter mesh_hwmp_active_path_to_root_timeout
 	hwmp-root-interval; set mesh parameter mesh_hwmp_root_interval
 	
-HOW TO USE
+## HOW TO USE
 
 meshd MUST be run as root. After it's built just run it. If a beacon
 advertising the configured ssid is received meshd will attempt SAE
@@ -131,12 +149,7 @@ meshd. A mediaopt of STA will not result in beacons being sent out
 the radio. It is possible to configure two mesh points to not see each
 other or to ignore each other.
 
-KNOWN ISSUES
+## KNOWN ISSUES
 
 This implementation is based version 8.01 of IEEE 802.11s. The specification
 is pretty stable but it may change before final ratification.
-
-
-
-
-

@@ -4,6 +4,8 @@ load_hwsim() {
     local nradios=$1
     sudo modprobe -r mac80211-hwsim &> /dev/null
     sudo modprobe mac80211-hwsim radios=$nradios
+    # remove any leftover interfaces
+    for i in /sys/devices/virtual/mac80211_hwsim/*/net/*; do sudo iw dev $(basename $i) del; done
 }
 
 get_hwsim_radios() {

@@ -63,6 +63,7 @@ start_mesh_iw() {
         # basic-rates must match that in set_sup_basic_rates()
         sudo iw dev $iface mesh join byteme freq 2412 NOHT basic-rates 1,2,5.5,11,6,12,24
 
+        let i=$((i+1))
         IW_IFACES+=($iface)
     done
 }

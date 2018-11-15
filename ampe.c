@@ -253,8 +253,6 @@ static inline void fsm_restart(struct candidate *cand) {
       "Deleting peer " MACSTR " to restart FSM\n",
       MAC2STR(cand->peer_mac));
 
-  ampe_close_peer_link(cand->peer_mac);
-
   if (cb->delete_peer)
     cb->delete_peer(cand->peer_mac);
 }
@@ -1006,6 +1004,9 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
 
     case PLINK_ESTAB:
       switch (event) {
+        case OPN_RJCT:
+        case CNF_RJCT:
+          reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         case CLS_ACPT:
           reason = htole16(MESH_CLOSE_RCVD);
           cand->reason = reason;

@@ -1248,10 +1248,18 @@ int process_ampe_frame(
     /*
      * In open mesh, there's no auth stage, so we create the station
      * when the first mgmt frame or beacon is received.  Do that now
-     * if we haven't already.
+     * if we haven't already and this is a plink open frame.
      */
     cand = find_peer(mgmt->sa, 0);
     if (!cand) {
+      if (ftype != PLINK_OPEN) {
+        sae_debug(
+            AMPE_DEBUG_FSM,
+            "Mesh plink: ignoring non-open frame from neighbor " MACSTR "\n",
+            MAC2STR(mgmt->sa));
+        return 0;
+      }
+
       cand = create_candidate(mgmt->sa, me, 0, cookie);
       if (!cand) {
         sae_debug(

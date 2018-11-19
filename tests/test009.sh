@@ -28,13 +28,13 @@ done
 start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 wait_for_plinks $nradios
 
-grep -E -q "changing ht protection mode to: [^0]" /tmp/authsae*.log && \
+grep -E -q "changing ht protection mode to: [^0]" $LOGDIR/$TESTNAME/authsae*.log && \
    err_exit "set protection for NON-HT STAs"
 
-grep -q "new unauthed HT sta" /tmp/authsae*.log && \
+grep -q "new unauthed HT sta" $LOGDIR/$TESTNAME/authsae*.log && \
    err_exit "incorrectly created HT STAs"
 
-grep -q "new unauthed VHT sta" /tmp/authsae*.log || \
+grep -q "new unauthed VHT sta" $LOGDIR/$TESTNAME/authsae*.log || \
    err_exit "did not create VHT STAs"
 
 echo PASS

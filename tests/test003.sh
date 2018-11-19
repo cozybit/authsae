@@ -31,6 +31,6 @@ wait_for_plinks $nradios
 # make sure there is no 'nlerror 29' -- this can happen on kernels
 # >= 4.8 and <= TBD.  If this fails it indicates HT oper switch is
 # broken in the kernel.
-grep "nlerror, cmd 29" /tmp/authsae*.log && err_exit "set meshconf failed"
+grep "nlerror, cmd 29" $LOGDIR/$TESTNAME/authsae*.log && err_exit "set meshconf failed"
 
 echo PASS

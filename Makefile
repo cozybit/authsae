@@ -6,3 +6,6 @@ install:
 
 clean:
 	rm -rf build
+
+test:
+	cd tests && ./run_tests.sh

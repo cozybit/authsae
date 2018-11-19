@@ -2,10 +2,14 @@
 #
 # Run all the tests
 #
-
 # Make sure we're running as root
 if [ $UID -ne 0 ]; then
     exec sudo "$0" "$@"
+fi
+
+TESTS="$@"
+if [ -z "$TESTS" ]; then
+    TESTS=$(realpath $(dirname $0)/test*.sh)
 fi
 
 # We require all calls to exit to use `err_exit`
@@ -14,7 +18,7 @@ grep -v "^#" $(realpath $(dirname $0)/test*.sh) | grep "exit" | grep -v "err_exi
 FAILED=0
 
 # Run the tests
-for t in $(realpath $(dirname $0)/test*.sh); do
+for t in $TESTS; do
     desc=$(sed -n 's/^# *//; 3p' $t)
     echo -n "$(basename $t) $desc..."
     $t || FAILED=1

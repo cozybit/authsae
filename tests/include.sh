@@ -101,11 +101,15 @@ start_meshd() {
     IFACES=()
     LOGS=()
 
+    LOGDIR=${LOGDIR:-/tmp}
+    TESTNAME=$(basename $0)
+
     sudo rfkill unblock all
     for radio in ${radios[@]}; do
         conf=${CONFIGS[$i]}
         iface="smesh$i"
-        log=/tmp/authsae-$i.log
+        log=$LOGDIR/$TESTNAME/authsae-$i.log
+        mkdir -p $(dirname $log)
 
         if [ $(pgrep -f "meshd-nl80211 -i ${iface}" | wc -l) -eq 0 ]; then
             sudo iw phy $radio interface add $iface type mesh

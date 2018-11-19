@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# Init for authsae VM.
+#
+# This gets execed by the VM's init once the parent directory is
+# mounted under /local.
+#
+dmesg -n 1
+cd /local/tests
+echo "--- begin tests ---"
+export LOGDIR=/local/tests/vm/testout/logs
+./run_tests.sh
+echo "--- end tests ---"
+poweroff -f

@@ -809,6 +809,9 @@ static void derive_mtk(struct candidate *cand) {
   unsigned char context[84];
   unsigned char *p;
 
+  if (!ampe_conf.mesh->conf->is_secure)
+    return;
+
   p = context;
   if (memcmp(cand->my_nonce, cand->peer_nonce, 32) < 0) {
     memcpy(p, cand->my_nonce, 32);

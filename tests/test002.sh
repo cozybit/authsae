@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test exchange with IGTKs
+# exchanges igtk when pmf=1
 #
 
 . `dirname $0`/include.sh

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test peering with unencrypted mesh, with one station using the kernel MPM
+# user mpm interoperates with kernel mpm
 #
 . `dirname $0`/include.sh
 

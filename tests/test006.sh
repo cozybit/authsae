@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test closing of a connection when one side deletes its peer
+# both ends close peer link when one side deletes its peer
 #
 . `dirname $0`/include.sh
 

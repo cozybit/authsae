@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Minimal test established a peer link between two meshd instances over hwsim
+# establishes an encrypted peer link
 #
 
 . `dirname $0`/include.sh

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test mixed HT/non-HT network
+# mixed HT/non-HT neighbors can peer
 #
 
 . `dirname $0`/include.sh

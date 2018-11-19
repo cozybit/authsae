@@ -87,14 +87,38 @@ unsigned char mgtk_tx[KEY_LEN_AES_CCMP];
 /* global configuration data */
 static struct ampe_config ampe_conf;
 
+enum plink_event {
+  PLINK_UNDEFINED,
+  OPN_ACPT,
+  OPN_RJCT,
+  OPN_IGNR,
+  CNF_ACPT,
+  CNF_RJCT,
+  CNF_IGNR,
+  CLS_ACPT,
+  CLS_IGNR
+};
+
 /*  For debugging use */
-static const char *mplstates[] = {[PLINK_LISTEN] = "LISTEN",
-                                  [PLINK_OPN_SNT] = "OPN-SNT",
-                                  [PLINK_OPN_RCVD] = "OPN-RCVD",
-                                  [PLINK_CNF_RCVD] = "CNF_RCVD",
-                                  [PLINK_ESTAB] = "ESTAB",
-                                  [PLINK_HOLDING] = "HOLDING",
-                                  [PLINK_BLOCKED] = "BLOCKED"};
+static const char *mpl_states[] = {[PLINK_LISTEN] = "LISTEN",
+                                   [PLINK_OPN_SNT] = "OPN-SNT",
+                                   [PLINK_OPN_RCVD] = "OPN-RCVD",
+                                   [PLINK_CNF_RCVD] = "CNF_RCVD",
+                                   [PLINK_ESTAB] = "ESTAB",
+                                   [PLINK_HOLDING] = "HOLDING",
+                                   [PLINK_BLOCKED] = "BLOCKED"};
+
+static const char *mpl_events[] = {
+        [PLINK_UNDEFINED] = "PLINK_UNDEFINED",
+        [OPN_ACPT] = "OPN_ACPT",
+        [OPN_RJCT] = "OPN_RJCT",
+        [OPN_IGNR] = "OPN_IGNR",
+        [CNF_ACPT] = "CNF_ACPT",
+        [CNF_RJCT] = "CNF_RJCT",
+        [CNF_IGNR] = "CNF_IGNR",
+        [CLS_ACPT] = "CLS_ACPT",
+        [CLS_IGNR] = "CLS_IGNR",
+};
 
 static int plink_frame_tx(
     struct candidate *cand,
@@ -107,18 +131,6 @@ static inline void set_link_state(
   cand->link_state = state;
   cb->set_plink_state(cand->peer_mac, state, cand->cookie);
 }
-
-enum plink_event {
-  PLINK_UNDEFINED,
-  OPN_ACPT,
-  OPN_RJCT,
-  OPN_IGNR,
-  CNF_ACPT,
-  CNF_RJCT,
-  CNF_IGNR,
-  CLS_ACPT,
-  CLS_IGNR
-};
 
 static int plink_free_count() {
   sae_debug(AMPE_DEBUG_FSM, "TODO: return available peer link slots\n");
@@ -269,8 +281,8 @@ static void plink_timer(void *data) {
       AMPE_DEBUG_FSM,
       "Mesh plink timer for " MACSTR " fired on state %s\n",
       MAC2STR(cand->peer_mac),
-      mplstates[(cand->link_state > PLINK_BLOCKED) ? PLINK_UNDEFINED
-                                                   : cand->link_state]);
+      mpl_states[(cand->link_state > PLINK_BLOCKED) ? PLINK_UNDEFINED
+                                                    : cand->link_state]);
 
   reason = 0;
 
@@ -1360,12 +1372,12 @@ int process_ampe_frame(
 
   sae_debug(
       AMPE_DEBUG_FSM,
-      "Mesh plink (peer, state, llid, plid, event): " MACSTR " %s %d %d %d\n",
+      "Mesh plink peer=" MACSTR " state=%s llid=%d plid=%d event=%s\n",
       MAC2STR(mgmt->sa),
-      mplstates[cand->link_state],
+      mpl_states[cand->link_state],
       le16toh(cand->my_lid),
       le16toh(cand->peer_lid),
-      event);
+      mpl_events[event]);
 
   fsm_step(cand, event);
 

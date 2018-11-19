@@ -1,4 +1,4 @@
-/* vim: et ts=4 sw=4
+/*
  * Copyright (c) cozybit Inc., 2011
  *
  *  Copyright holder grants permission for redistribution and use in source

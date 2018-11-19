@@ -1,0 +1,20 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: debian:stretch
+    steps:
+      - checkout
+      - run:
+          name: install deps
+          command: apt-get update && apt-get install -y gawk gcc make cmake sudo pkg-config libssl-dev libconfig-dev libnl-3-dev libnl-genl-3-dev kmod iw git curl xz-utils qemu-system-x86
+      - run:
+          name: build
+          command: make
+      - run:
+          name: test
+          command: cd tests/vm && ./vm_run.sh
+      - store_artifacts:
+          path: tests/vm/testout
+      - store_test_results:
+          path: tests/vm/testout

@@ -52,8 +52,8 @@
 
 #include "ampe.h"
 #include "common.h"
+#include "nl.h"
 #include "nl80211-copy.h"
-#include "nlutils.h"
 #include "peers.h"
 #include "rekey.h"
 #include "sae.h"
@@ -88,7 +88,10 @@
  *  when AMPE completes, through the estab_peer_link() callback.
  */
 
-static struct netlink_config_s nlcfg;
+static struct meshd_ctx {
+  struct netlink_ctx *nlcfg;
+} meshd_ctx;
+
 service_context srvctx;
 
 /* Mesh group temporal key */
@@ -270,7 +273,7 @@ static void srv_handler_wrapper(int fd, void *data) {
 }
 
 static int tx_frame(
-    struct netlink_config_s *nlcfg,
+    struct netlink_ctx *nlcfg,
     struct mesh_node *mesh,
     unsigned char *frame,
     int len) {
@@ -287,8 +290,7 @@ static int tx_frame(
   if (!frame || !len)
     return -EINVAL;
 
-  pret = genlmsg_put(
-      msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -297,7 +299,7 @@ static int tx_frame(
   NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
   NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(MESHD_DEBUG, "tx frame (seq num=%d)\n", nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
   msg = NULL;
@@ -313,12 +315,12 @@ nla_put_failure:
 }
 
 int meshd_write_mgmt(char *buf, int framelen, void *cookie) {
-  tx_frame(&nlcfg, &mesh, (unsigned char *)buf, framelen);
+  tx_frame(meshd_ctx.nlcfg, &mesh, (unsigned char *)buf, framelen);
   return framelen;
 }
 
 static int set_mesh_conf(
-    struct netlink_config_s *nlcfg,
+    struct netlink_ctx *nlcfg,
     struct mesh_node *mesh,
     uint32_t changed) {
   struct nl_msg *msg;
@@ -331,8 +333,7 @@ static int set_mesh_conf(
   if (!msg)
     return -ENOMEM;
 
-  pret = genlmsg_put(
-      msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -348,7 +349,7 @@ static int set_mesh_conf(
 
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG, "set meshconf (seq num=%d)\n", nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
@@ -364,7 +365,7 @@ nla_put_failure:
 }
 
 int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed) {
-  return set_mesh_conf(&nlcfg, mesh, changed);
+  return set_mesh_conf(meshd_ctx.nlcfg, mesh, changed);
 }
 
 static void delete_peer_by_addr(unsigned char *addr) {
@@ -373,8 +374,7 @@ static void delete_peer_by_addr(unsigned char *addr) {
     delete_peer(&peer);
 }
 
-static int
-handle_del_peer(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg) {
+static int handle_del_peer(struct netlink_ctx *nlcfg, struct nl_msg *msg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
 
@@ -397,7 +397,10 @@ handle_del_peer(struct netlink_config_s *nlcfg, struct nl_msg *msg, void *arg) {
   return 0;
 }
 
-static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg) {
+static int handle_wiphy(
+    struct mesh_node *mesh,
+    struct nl_msg *msg,
+    struct netlink_ctx *nlcfg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct nlattr *tb_band[NL80211_BAND_ATTR_MAX + 1];
   struct nlattr *nl_band, *nl_rate;
@@ -475,7 +478,7 @@ static int handle_wiphy(struct mesh_node *mesh, struct nl_msg *msg, void *arg) {
 }
 
 static int add_unauthenticated_sta(
-    struct netlink_config_s *nlcfg,
+    struct netlink_ctx *nlcfg,
     unsigned char *peer,
     struct info_elems *elems) {
   struct nl_msg *msg;
@@ -492,8 +495,7 @@ static int add_unauthenticated_sta(
   if (!msg)
     return -ENOMEM;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -530,7 +532,7 @@ static int add_unauthenticated_sta(
   if (elems->ht_cap)
     NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY, elems->ht_cap_len, elems->ht_cap);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG,
       "new unauthed sta (seq num=%d)\n",
@@ -549,7 +551,9 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-static int new_candidate_handler(struct nl_msg *msg, void *arg) {
+static int new_candidate_handler(
+    struct nl_msg *msg,
+    struct netlink_ctx *nlcfg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
   unsigned char *ie;
@@ -593,7 +597,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg) {
   memcpy(bcn.sa, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
 
   if (process_mgmt_frame(
-          &bcn, sizeof(bcn), mesh.mymacaddr, &nlcfg, !meshd_conf.is_secure) !=
+          &bcn, sizeof(bcn), mesh.mymacaddr, nlcfg, !meshd_conf.is_secure) !=
       0) {
     fprintf(stderr, "libsae: process_mgmt_frame failed\n");
     return NL_SKIP;
@@ -605,7 +609,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg) {
   if ((peer = find_peer(bcn.sa, 0))) {
     peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *)elems.ht_info);
     if (!peer->in_kernel &&
-        add_unauthenticated_sta(&nlcfg, bcn.sa, &elems) == 0) {
+        add_unauthenticated_sta(nlcfg, bcn.sa, &elems) == 0) {
       peer->in_kernel = true;
     }
   }
@@ -613,7 +617,7 @@ static int new_candidate_handler(struct nl_msg *msg, void *arg) {
   return NL_SKIP;
 }
 
-static int register_for_plink_frames(struct netlink_config_s *nlcfg) {
+static int register_for_plink_frames(struct netlink_ctx *nlcfg) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
   int i;
@@ -632,8 +636,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg) {
     if (!msg)
       return -ENOMEM;
 
-    pret = genlmsg_put(
-        msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+    pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
     if (pret == NULL)
       goto nla_put_failure;
 
@@ -645,7 +648,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg) {
         sizeof(action_codes[i]),
         action_codes[i]);
 
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
+    ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
     nlmsg_free(msg);
     msg = NULL;
     if (ret < 0)
@@ -665,7 +668,7 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-static int register_for_auth_frames(struct netlink_config_s *nlcfg) {
+static int register_for_auth_frames(struct netlink_ctx *nlcfg) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_REGISTER_FRAME;
 #define IEEE80211_FTYPE_MGMT 0x0000
@@ -679,8 +682,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg) {
   if (!msg)
     return -ENOMEM;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
@@ -688,7 +690,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg) {
   NLA_PUT_U16(msg, NL80211_ATTR_FRAME_TYPE, frame_type);
   NLA_PUT(msg, NL80211_ATTR_FRAME_MATCH, sizeof(auth_algo), auth_algo);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -707,7 +709,7 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-static int get_wiphy(struct netlink_config_s *nlcfg) {
+static int get_wiphy(struct netlink_ctx *nlcfg) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_GET_WIPHY;
   int ret;
@@ -719,15 +721,14 @@ static int get_wiphy(struct netlink_config_s *nlcfg) {
   if (!msg)
     return -ENOMEM;
 
-  pret = genlmsg_put(
-      msg, 0, 0, nlcfg->nl80211_id, 0, NLM_F_REQUEST, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, NLM_F_REQUEST, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
 
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -740,7 +741,7 @@ nla_put_failure:
 }
 
 static int install_key(
-    struct netlink_config_s *nlcfg,
+    struct netlink_ctx *nlcfg,
     unsigned char *peer,
     unsigned int cipher,
     unsigned int keytype,
@@ -762,8 +763,7 @@ static int install_key(
   if (!key)
     goto nla_put_failure;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -784,7 +784,7 @@ static int install_key(
   if (peer)
     NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -803,8 +803,7 @@ static int install_key(
 
   cmd = NL80211_CMD_SET_KEY;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -816,7 +815,7 @@ static int install_key(
 
   NLA_PUT_U8(msg, NL80211_ATTR_KEY_IDX, keyidx);
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -849,15 +848,20 @@ static void usage(void) {
       "\n");
 }
 
-static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh);
+static int init(struct netlink_ctx *nlcfg, struct mesh_node *mesh);
 
 static int event_handler(struct nl_msg *msg, void *arg) {
+  struct meshd_ctx *meshd_ctx = arg;
+  struct netlink_ctx *nlcfg = meshd_ctx->nlcfg;
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct ieee80211_mgmt_frame *frame;
   int frame_len;
   unsigned short frame_control;
   struct timeval now;
+
+  if (!nlcfg)
+    return NL_SKIP;
 
   gettimeofday(&now, NULL);
 
@@ -870,20 +874,20 @@ static int event_handler(struct nl_msg *msg, void *arg) {
 
   /* Ignore events for other interfaces */
   if (tb[NL80211_ATTR_IFINDEX] &&
-      nlcfg.ifindex != *(uint32_t *)nla_data(tb[NL80211_ATTR_IFINDEX]))
+      nlcfg->ifindex != nla_get_u32(tb[NL80211_ATTR_IFINDEX]))
     return NL_SKIP;
 
   switch (gnlh->cmd) {
     /* test */
     case NL80211_CMD_NEW_WIPHY:
       assert(tb[NL80211_ATTR_SUPPORT_MESH_AUTH]);
-      if (handle_wiphy(&mesh, msg, arg))
+      if (handle_wiphy(&mesh, msg, nlcfg))
         sae_debug(MESHD_DEBUG, "error getting wiphy info! \n");
       /* wiphy handled, we are now ready start the mesh */
-      init(&nlcfg, &mesh);
+      init(nlcfg, &mesh);
       break;
     case NL80211_CMD_DEL_STATION:
-      handle_del_peer(&nlcfg, msg, arg);
+      handle_del_peer(nlcfg, msg);
       break;
     case NL80211_CMD_FRAME:
       if (tb[NL80211_ATTR_FRAME] && nla_len(tb[NL80211_ATTR_FRAME])) {
@@ -906,7 +910,7 @@ static int event_handler(struct nl_msg *msg, void *arg) {
                   frame,
                   frame_len,
                   mesh.mymacaddr,
-                  &nlcfg,
+                  nlcfg,
                   !meshd_conf.is_secure))
             fprintf(stderr, "libsae: process_mgmt_frame failed\n");
         } else
@@ -930,7 +934,7 @@ static int event_handler(struct nl_msg *msg, void *arg) {
           "NL80211_CMD_NEW_PEER_CANDIDATE(%lld.%ld)\n",
           (long long)now.tv_sec,
           (long)now.tv_usec);
-      new_candidate_handler(msg, arg);
+      new_candidate_handler(msg, nlcfg);
       break;
     case NL80211_CMD_FRAME_TX_STATUS:
       sae_debug(
@@ -949,8 +953,25 @@ static int event_handler(struct nl_msg *msg, void *arg) {
   return NL_SKIP;
 }
 
+static int
+error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
+  struct genlmsghdr *gnlh = nlmsg_data(&err->msg);
+
+  /* ignore leave mesh errors since we do those gratuitously before join */
+  if (gnlh->cmd == NL80211_CMD_LEAVE_MESH)
+    return NL_SKIP;
+
+  fprintf(
+      stderr,
+      "nlerror, cmd %d, seq %d: %s\n",
+      gnlh->cmd,
+      err->msg.nlmsg_seq,
+      strerror(abs(err->error)));
+  return NL_SKIP;
+}
+
 static int set_authenticated_flag(
-    struct netlink_config_s *nlcfg,
+    struct netlink_ctx *nlcfg,
     unsigned char *peer) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_SET_STATION;
@@ -966,8 +987,7 @@ static int set_authenticated_flag(
   if (!msg)
     return -ENOMEM;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -983,7 +1003,7 @@ static int set_authenticated_flag(
 
   NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(flags), &flags);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG, "set auth flag (seq num=%d)\n", nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
@@ -1005,12 +1025,14 @@ nla_put_failure:
 }
 
 int set_plink_state(unsigned char *peer, int state, void *cookie) {
+  struct netlink_ctx *nlcfg;
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_SET_STATION;
   int ret;
   char *pret;
 
-  assert(cookie == &nlcfg);
+  assert(cookie == meshd_ctx.nlcfg);
+  nlcfg = cookie;
 
   if (!peer)
     return -EINVAL;
@@ -1020,17 +1042,16 @@ int set_plink_state(unsigned char *peer, int state, void *cookie) {
   if (!msg)
     return -ENOMEM;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg.nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
 
-  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
+  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
   NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
   NLA_PUT_U8(msg, NL80211_ATTR_STA_PLINK_STATE, state);
 
-  ret = send_nlmsg(nlcfg.nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG, "set plink state (seq num=%d)\n", nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
@@ -1047,7 +1068,7 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-static int leave_mesh(struct netlink_config_s *nlcfg) {
+static int leave_mesh(struct netlink_ctx *nlcfg) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_LEAVE_MESH;
   int ret;
@@ -1057,16 +1078,13 @@ static int leave_mesh(struct netlink_config_s *nlcfg) {
   if (!msg)
     return -ENOMEM;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
 
-  /*  Suppress netlink error in case we are not connected to mesh */
-  nlcfg->supress_error = -ENOTCONN;
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -1081,7 +1099,7 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-static int join_mesh(struct netlink_config_s *nlcfg, struct mesh_node *mesh) {
+static int join_mesh(struct netlink_ctx *nlcfg, struct mesh_node *mesh) {
   struct nl_msg *msg;
   struct meshd_config *mconf = mesh->conf;
   uint8_t cmd = NL80211_CMD_JOIN_MESH;
@@ -1102,8 +1120,7 @@ static int join_mesh(struct netlink_config_s *nlcfg, struct mesh_node *mesh) {
   sae_debug(
       MESHD_DEBUG, "meshd: Starting mesh with mesh id = %s\n", mconf->meshid);
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
@@ -1217,7 +1234,7 @@ static int join_mesh(struct netlink_config_s *nlcfg, struct mesh_node *mesh) {
       mesh->freq,
       mesh->channel_type);
 
-  ret = send_nlmsg(nlcfg->nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   if (ret < 0)
@@ -1245,11 +1262,13 @@ void estab_peer_link(
     unsigned char *rates,
     unsigned short rates_len,
     void *cookie) {
+  struct netlink_ctx *nlcfg;
   struct meshd_config *mconf;
   struct candidate *cand;
   int ret;
 
-  assert(cookie == &nlcfg);
+  assert(cookie == meshd_ctx.nlcfg);
+  nlcfg = cookie;
 
   if (!peer)
     return;
@@ -1282,26 +1301,26 @@ void estab_peer_link(
     elems.ht_info = (unsigned char *)&cand->ht_info;
     elems.ht_info_len = sizeof(cand->ht_info);
 
-    ret = add_unauthenticated_sta(&nlcfg, peer, &elems);
+    ret = add_unauthenticated_sta(nlcfg, peer, &elems);
     if (ret)
       return;
 
     cand->in_kernel = true;
   }
 
-  set_authenticated_flag(&nlcfg, peer);
+  set_authenticated_flag(nlcfg, peer);
 
   if (mconf->is_secure) {
     /* key to encrypt/decrypt unicast data AND mgmt traffic to/from this peer */
-    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
+    install_key(nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_PAIRWISE, 0, mtk);
 
     /* key to decrypt multicast data traffic from this peer */
-    install_key(&nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
+    install_key(nlcfg, peer, CIPHER_CCMP, NL80211_KEYTYPE_GROUP, 1, peer_mgtk);
 
     /* to check integrity of multicast mgmt frames from this peer */
     if (peer_igtk) {
       install_key(
-          &nlcfg,
+          nlcfg,
           peer,
           CIPHER_AES_CMAC,
           NL80211_KEYTYPE_GROUP,
@@ -1340,6 +1359,7 @@ void peer_created(unsigned char *peer) {
 
 void peer_deleted(unsigned char *peer) {
   struct nl_msg *msg;
+  struct netlink_ctx *nlcfg = meshd_ctx.nlcfg;
   uint8_t cmd = NL80211_CMD_DEL_STATION;
   int ret;
   char *pret;
@@ -1352,16 +1372,15 @@ void peer_deleted(unsigned char *peer) {
   if (!msg)
     return;
 
-  pret =
-      genlmsg_put(msg, 0, 0, nlcfg.nl80211_id, 0, 0, cmd, 0);
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
 
-  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg.ifindex);
+  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
   NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
 
-  ret = send_nlmsg(nlcfg.nl_sock, msg);
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
   msg = NULL;
   sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n", MAC2STR(peer));
@@ -1667,7 +1686,7 @@ static struct sae_cb *get_sae_cbs() {
   return &cb;
 }
 
-static int init(struct netlink_config_s *nlcfg, struct mesh_node *mesh) {
+static int init(struct netlink_ctx *nlcfg, struct mesh_node *mesh) {
   int exitcode = 0;
 
   leave_mesh(nlcfg);
@@ -1784,14 +1803,13 @@ int main(int argc, char *argv[]) {
   char *conffile = NULL;
   struct sae_config sae_conf;
   char *ifname = NULL;
+  struct netlink_ctx *nlcfg;
 
   sae_debug_mask = SAE_DEBUG_ERR;
   signal(SIGTERM, term_handle);
   signal(SIGINT, term_handle);
   signal(SIGSEGV, segv_handle);
   signal(SIGHUP, hup_handle);
-
-  memset(&nlcfg, 0, sizeof(nlcfg));
 
   for (;;) {
     c = getopt(argc, argv, "hc:o:Bi:s:");
@@ -1876,7 +1894,6 @@ int main(int argc, char *argv[]) {
     }
     strcpy(meshd_conf.interface, ifname);
   }
-  nlcfg.ifindex = if_nametoindex(meshd_conf.interface);
 
   /* default to channel 1 */
   if (meshd_conf.channel <= 0)
@@ -1934,10 +1951,13 @@ int main(int argc, char *argv[]) {
     dup2(fileno(stdout), fileno(stderr));
   }
 
-  if (netlink_init(&nlcfg, event_handler)) {
+  nlcfg = netlink_setup(event_handler, error_handler, &meshd_ctx);
+  if (!nlcfg) {
     exitcode = -ESOCKTNOSUPPORT;
     goto out;
   }
+  nlcfg->ifindex = if_nametoindex(meshd_conf.interface);
+  meshd_ctx.nlcfg = nlcfg;
 
   if ((srvctx = srv_create_context()) == NULL) {
     fprintf(stderr, "%s: cannot create service context!\n", argv[0]);
@@ -1949,17 +1969,16 @@ int main(int argc, char *argv[]) {
   watch_ips_init(&mesh);
 
   /* Add netlink sockets to our event loop */
-  nlsock = nlcfg.nl_sock;
-  srv_add_input(srvctx, nl_socket_get_fd(nlsock), nlsock, srv_handler_wrapper);
-  nlsock = nlcfg.nl_sock_event;
+  nlsock = nlcfg->cmd_sock;
   srv_add_input(srvctx, nl_socket_get_fd(nlsock), nlsock, srv_handler_wrapper);
 
-  get_wiphy(&nlcfg);
+  get_wiphy(nlcfg);
 
   srv_main_loop(srvctx);
-  leave_mesh(&nlcfg);
+  leave_mesh(nlcfg);
 out:
   watch_ips_close();
   rekey_close();
+  netlink_destroy(nlcfg);
   return exitcode;
 }

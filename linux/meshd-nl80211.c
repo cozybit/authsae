@@ -1047,41 +1047,6 @@ nla_put_failure:
   return -ENOBUFS;
 }
 
-#if 0
-static int set_frequency(struct netlink_config_s *nlcfg, int freq)
-{
-    struct nl_msg *msg;
-    uint8_t cmd = NL80211_CMD_SET_CHANNEL;
-    int ret;
-    char *pret;
-
-    msg = nlmsg_alloc();
-    if (!msg)
-        return -ENOMEM;
-
-    if (!freq)
-        return -EINVAL;
-
-    pret = genlmsg_put(msg, 0, 0,
-            genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
-    if (pret == NULL)
-        goto nla_put_failure;
-
-    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, freq);
-    NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-
-    ret = send_nlmsg(nlcfg->nl_sock, msg);
-    if (ret < 0)
-        fprintf(stderr,"Set channel failed: %d (%s)\n", ret, strerror(-ret));
-    else
-        ret = 0;
-
-    return ret;
-nla_put_failure:
-    return -ENOBUFS;
-}
-#endif
-
 static int leave_mesh(struct netlink_config_s *nlcfg) {
   struct nl_msg *msg;
   uint8_t cmd = NL80211_CMD_LEAVE_MESH;

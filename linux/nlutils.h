@@ -33,13 +33,11 @@
 
 struct netlink_config_s {
   struct nl_sock *nl_sock;
-  struct nl_cache *nl_cache;
   struct nl_sock *nl_sock_event;
-  struct nl_cache *nl_cache_event;
   struct nl_cb *nl_cb;
-  struct genl_family *nl80211;
   int supress_error;
   int ifindex;
+  int nl80211_id;
 };
 
 int netlink_init(struct netlink_config_s *nlcfg, void *event_handler);

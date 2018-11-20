@@ -288,7 +288,7 @@ static int tx_frame(
     return -EINVAL;
 
   pret = genlmsg_put(
-      msg, 0, NL_AUTO_SEQ, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -332,7 +332,7 @@ static int set_mesh_conf(
     return -ENOMEM;
 
   pret = genlmsg_put(
-      msg, 0, NL_AUTO_SEQ, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      msg, 0, NL_AUTO_SEQ, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -493,7 +493,7 @@ static int add_unauthenticated_sta(
     return -ENOMEM;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -633,7 +633,7 @@ static int register_for_plink_frames(struct netlink_config_s *nlcfg) {
       return -ENOMEM;
 
     pret = genlmsg_put(
-        msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+        msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
     if (pret == NULL)
       goto nla_put_failure;
 
@@ -680,7 +680,7 @@ static int register_for_auth_frames(struct netlink_config_s *nlcfg) {
     return -ENOMEM;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
@@ -720,7 +720,7 @@ static int get_wiphy(struct netlink_config_s *nlcfg) {
     return -ENOMEM;
 
   pret = genlmsg_put(
-      msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, NLM_F_REQUEST, cmd, 0);
+      msg, 0, 0, nlcfg->nl80211_id, 0, NLM_F_REQUEST, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -763,7 +763,7 @@ static int install_key(
     goto nla_put_failure;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -804,7 +804,7 @@ static int install_key(
   cmd = NL80211_CMD_SET_KEY;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -967,7 +967,7 @@ static int set_authenticated_flag(
     return -ENOMEM;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -1021,7 +1021,7 @@ int set_plink_state(unsigned char *peer, int state, void *cookie) {
     return -ENOMEM;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg.nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;
@@ -1093,7 +1093,7 @@ static int leave_mesh(struct netlink_config_s *nlcfg) {
     return -ENOMEM;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
@@ -1138,7 +1138,7 @@ static int join_mesh(struct netlink_config_s *nlcfg, struct mesh_node *mesh) {
       MESHD_DEBUG, "meshd: Starting mesh with mesh id = %s\n", mconf->meshid);
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg->nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
   if (pret == NULL)
     goto nla_put_failure;
 
@@ -1388,7 +1388,7 @@ void peer_deleted(unsigned char *peer) {
     return;
 
   pret =
-      genlmsg_put(msg, 0, 0, genl_family_get_id(nlcfg.nl80211), 0, 0, cmd, 0);
+      genlmsg_put(msg, 0, 0, nlcfg.nl80211_id, 0, 0, cmd, 0);
 
   if (pret == NULL)
     goto nla_put_failure;

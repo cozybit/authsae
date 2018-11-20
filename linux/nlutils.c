@@ -240,23 +240,7 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler) {
         ret,
         errno);
 
-  /* Allocate caches for each socket */
-  if (genl_ctrl_alloc_cache(nlcfg->nl_sock, &nlcfg->nl_cache) < 0) {
-    printf("Failed to allocate generic netlink cache");
-    goto err3;
-  }
-
-  if (genl_ctrl_alloc_cache(nlcfg->nl_sock_event, &nlcfg->nl_cache_event) < 0) {
-    printf("Failed to allocate events cache");
-    goto err3b;
-  }
-
-  /* Find nl80211 family in the generic netlink cache */
-  nlcfg->nl80211 = genl_ctrl_search_by_name(nlcfg->nl_cache, "nl80211");
-  if (nlcfg->nl80211 == NULL) {
-    printf("'nl80211' generic netlink not found");
-    goto err4;
-  }
+  nlcfg->nl80211_id = genl_ctrl_resolve(nlcfg->nl_sock, "nl80211");
 
   /* Register events socket for multicast mlme events */
   ret = nl_get_multicast_id(nlcfg->nl_sock, "nl80211", "mlme");
@@ -301,9 +285,6 @@ int netlink_init(struct netlink_config_s *nlcfg, void *event_handler) {
   return 0;
 
 err4:
-  nl_cache_free(nlcfg->nl_cache_event);
-err3b:
-  nl_cache_free(nlcfg->nl_cache);
 err3:
   nl_socket_free(nlcfg->nl_sock_event);
 err2:

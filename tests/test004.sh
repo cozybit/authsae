@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test peering with unencrypted mesh
+# establishes peer link without encryption
 #
 . `dirname $0`/include.sh
 

@@ -1151,6 +1151,27 @@ static uint32_t get_basic_rates(struct info_elems *elems) {
   return basic_rates;
 }
 
+static bool matches_local(struct mesh_node *mesh, struct info_elems *elems) {
+  if (!elems->mesh_id || !elems->mesh_config)
+    return false;
+
+  if (elems->mesh_config_len < 5)
+    return false;
+
+  if (elems->mesh_id_len != mesh->conf->meshid_len ||
+      memcmp(elems->mesh_id, mesh->conf->meshid, mesh->conf->meshid_len))
+    return false;
+
+  return (
+      elems->mesh_config[0] == MESH_CONFIG_PP_HWMP &&
+              elems->mesh_config[1] == MESH_CONFIG_PM_ALM &&
+              elems->mesh_config[2] == MESH_CONFIG_CC_NONE &&
+              elems->mesh_config[3] == MESH_CONFIG_SP_NEIGHBOR_OFFSET &&
+              elems->mesh_config[4] == (mesh->conf->is_secure)
+          ? MESH_CONFIG_AUTH_SAE
+          : 0);
+}
+
 /**
  * process_ampe_frame - process an ampe frame
  * @frame:     The full frame
@@ -1319,23 +1340,13 @@ int process_ampe_frame(
 
   /* Now we will figure out the appropriate event... */
   event = PLINK_UNDEFINED;
-  //	if (ftype != PLINK_CLOSE && (!mesh_matches_local(&elems, sdata))) {
-  if (ftype != PLINK_CLOSE) {
-    switch (ftype) {
-      case PLINK_OPEN:
-        event = OPN_RJCT;
-        break;
-      case PLINK_CONFIRM:
-        event = CNF_RJCT;
-        break;
-      case PLINK_CLOSE:
-        break;
-    }
-  }
 
   switch (ftype) {
     case PLINK_OPEN:
-      if (!plink_free_count() || (cand->peer_lid && cand->peer_lid != plid))
+      if (!matches_local(ampe_conf.mesh, &elems))
+        event = OPN_RJCT;
+      else if (
+          !plink_free_count() || (cand->peer_lid && cand->peer_lid != plid))
         event = OPN_IGNR;
       else {
         cand->peer_lid = plid;
@@ -1343,7 +1354,10 @@ int process_ampe_frame(
       }
       break;
     case PLINK_CONFIRM:
-      if (!plink_free_count() ||
+      if (!matches_local(ampe_conf.mesh, &elems))
+        event = CNF_RJCT;
+      else if (
+          !plink_free_count() ||
           (cand->my_lid != llid || cand->peer_lid != plid))
         event = CNF_IGNR;
       else

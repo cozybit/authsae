@@ -113,10 +113,8 @@ wait_for_plinks() {
         iface=${IFACES[$i]}
         for j in $(seq $TRIES); do
             sudo iw dev $iface station dump | grep -q ESTAB && break
-            echo -n .
             sleep 1
         done
         [ $j -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
     done
-    echo
 }

@@ -71,7 +71,7 @@ struct candidate {
   siv_ctx sivctx;
   void *cookie;
   struct ampe_config *conf;
-  unsigned int ch_type; /* nl80211_channel_type */
+  enum channel_width ch_width;
   unsigned short association_id;
 
   timerid rekey_ping_timer;

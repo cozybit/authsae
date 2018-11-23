@@ -39,6 +39,7 @@
 #include "peers.h"
 #include "rekey.h"
 #include "sae.h"
+#include "chan.h"
 
 /* Peer link cancel reasons */
 #define MESH_LINK_CANCELLED 52
@@ -191,18 +192,18 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
   unsigned int ht_opmode;
   bool no_ht = false, ht20 = false;
 
-  if (mesh->conf->channel_type == CHAN_NO_HT)
+  if (mesh->conf->channel_width == CHAN_WIDTH_20_NOHT)
     return 0;
 
   for_each_peer(peer) {
     if (peer->link_state != PLINK_ESTAB)
       continue;
 
-    switch (peer->ch_type) {
-      case CHAN_NO_HT:
+    switch (peer->ch_width) {
+      case CHAN_WIDTH_20_NOHT:
         no_ht = true;
         goto out;
-      case CHAN_HT20:
+      case CHAN_WIDTH_20:
         ht20 = true;
         break;
       default:
@@ -213,7 +214,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
 out:
   if (no_ht)
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
-  else if (ht20 && mesh->conf->channel_type > CHAN_HT20)
+  else if (ht20 && mesh->conf->channel_width > CHAN_WIDTH_20)
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_20MHZ;
   else
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONE;
@@ -645,8 +646,9 @@ static int plink_frame_tx(
       sta_fixed_ies_len + 2 + mesh->conf->meshid_len + /* mesh id */
       2 + 7 + /* mesh config */
       2 + 8 + sizeof(cand->pmkid) + /* mesh peering management */
-      2 + sizeof(struct ht_cap_ie) + 2 + sizeof(struct ht_op_ie) + 2 +
-      120 + /* AMPE, without Key Replay counter, 16 byte keys */
+      2 + sizeof(struct ht_cap_ie) + /* HT capability */
+      2 + sizeof(struct ht_op_ie) + /* HT operation */
+      2 + 120 + /* AMPE, without Key Replay counter, 16 byte keys */
       2 + MIC_IE_BODY_SIZE; /* MIC */
 
   buf = calloc(1, alloc_len);
@@ -751,7 +753,8 @@ static int plink_frame_tx(
   }
 
   if (action != PLINK_CLOSE &&
-      mesh->conf->channel_type != CHAN_NO_HT && sband->ht_cap.ht_supported) {
+      mesh->conf->channel_width != CHAN_WIDTH_20_NOHT &&
+      sband->ht_cap.ht_supported) {
     /* HT IEs */
     *ies++ = IEEE80211_EID_HT_CAPABILITY;
     *ies++ = sizeof(struct ht_cap_ie);
@@ -766,21 +769,22 @@ static int plink_frame_tx(
     *ies++ = IEEE80211_EID_HT_OPERATION;
     *ies++ = sizeof(struct ht_op_ie);
     ht_op = (struct ht_op_ie *)ies;
-    ht_op->primary_chan = mesh->conf->channel;
-    switch (mesh->conf->channel_type) {
-      case CHAN_HT40MINUS:
-        ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
+    ht_op->primary_chan =
+        ieee80211_frequency_to_channel(mesh->conf->control_freq);
+    switch (mesh->conf->channel_width) {
+      case CHAN_WIDTH_40:
+        if (mesh->conf->center_freq1 < mesh->conf->control_freq)
+          ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
+        else
+          ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
         break;
-      case CHAN_HT40PLUS:
-        ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
-        break;
-      case CHAN_HT20:
+      case CHAN_WIDTH_20:
       default:
         ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
         break;
     }
     if ((sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) &&
-        mesh->conf->channel_type > CHAN_HT20)
+        mesh->conf->channel_width > CHAN_WIDTH_20)
       ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 
     ht_op->operation_mode = htole16(mesh->conf->ht_prot_mode);

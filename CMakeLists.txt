@@ -66,6 +66,7 @@ LIST(APPEND libsae_sources
 	sae.c
 	rekey.c
 	ampe.c
+	chan.c
 	crypto/aes_siv.c
 )
 

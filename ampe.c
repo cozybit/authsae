@@ -750,7 +750,8 @@ static int plink_frame_tx(
     ies += sizeof(cand->pmkid);
   }
 
-  if (mesh->conf->channel_type != CHAN_NO_HT && sband->ht_cap.ht_supported) {
+  if (action != PLINK_CLOSE &&
+      mesh->conf->channel_type != CHAN_NO_HT && sband->ht_cap.ht_supported) {
     /* HT IEs */
     *ies++ = IEEE80211_EID_HT_CAPABILITY;
     *ies++ = sizeof(struct ht_cap_ie);

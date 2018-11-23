@@ -65,6 +65,8 @@
 #define MESH_CAPA_ACCEPT_PEERINGS BIT(0)
 #define MESH_CAPA_FORWARDING BIT(3)
 
+#define MIC_IE_BODY_SIZE AES_BLOCK_SIZE
+
 static const unsigned char akm_suite_selector[4] = {0x0,
                                                     0xf,
                                                     0xac,
@@ -377,8 +379,6 @@ static int protect_frame(
 
   assert(mic_start && cand && mgmt && len);
 
-#define MIC_IE_BODY_SIZE AES_BLOCK_SIZE
-
   ampe_ie_len = sizeof(struct ampe_ie);
 
   if (ftype != PLINK_CLOSE) {
@@ -618,7 +618,6 @@ static int check_frame_protection(
   }
   free(clear_ampe_ie);
   return -1;
-#undef MIC_IE_BODY_SIZE
 }
 
 static int plink_frame_tx(
@@ -637,13 +636,20 @@ static int plink_frame_tx(
   unsigned char *ies;
   unsigned char *pos;
   u16 peering_proto = htole16(0x0001); /* AMPE */
+  size_t alloc_len;
 
   assert(cand);
 
-#define LARGE_FRAME 1500;
-  len = LARGE_FRAME;
-  buf = calloc(1, len);
-#undef LARGE_FRAME
+  alloc_len = sizeof(struct ieee80211_mgmt_frame) + 2 + /* capability info */
+      2 + /* aid */
+      sta_fixed_ies_len + 2 + mesh->conf->meshid_len + /* mesh id */
+      2 + 7 + /* mesh config */
+      2 + 8 + sizeof(cand->pmkid) + /* mesh peering management */
+      2 + sizeof(struct ht_cap_ie) + 2 + sizeof(struct ht_op_ie) + 2 +
+      120 + /* AMPE, without Key Replay counter, 16 byte keys */
+      2 + MIC_IE_BODY_SIZE; /* MIC */
+
+  buf = calloc(1, alloc_len);
   if (!buf)
     return -1;
 
@@ -784,6 +790,7 @@ static int plink_frame_tx(
 
   if (mesh->conf->is_secure) {
     /* IE: Add MIC and encrypted AMPE */
+    len = alloc_len;
     ret = protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len);
     if (ret) {
       sae_debug(SAE_DEBUG_ERR, "Failed to protect frame\n");

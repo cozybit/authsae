@@ -35,11 +35,11 @@
 #include <openssl/rand.h>
 #include <string.h>
 
+#include "chan.h"
 #include "peer_lists.h"
 #include "peers.h"
 #include "rekey.h"
 #include "sae.h"
-#include "chan.h"
 
 /* Peer link cancel reasons */
 #define MESH_LINK_CANCELLED 52
@@ -631,6 +631,7 @@ static int plink_frame_tx(
   struct ieee80211_supported_band *sband = &mesh->bands[mesh->band];
   struct ht_cap_ie *ht_cap;
   struct ht_op_ie *ht_op;
+  struct vht_op_ie *vht_op;
   unsigned char ie_len;
   int len;
   int ret;
@@ -646,8 +647,10 @@ static int plink_frame_tx(
       sta_fixed_ies_len + 2 + mesh->conf->meshid_len + /* mesh id */
       2 + 7 + /* mesh config */
       2 + 8 + sizeof(cand->pmkid) + /* mesh peering management */
-      2 + sizeof(struct ht_cap_ie) + /* HT capability */
+      2 + sizeof(struct ht_cap_ie) + /* HT capabilities */
       2 + sizeof(struct ht_op_ie) + /* HT operation */
+      2 + 12 + /* VHT capabilities */
+      2 + 5 + /* VHT operation */
       2 + 120 + /* AMPE, without Key Replay counter, 16 byte keys */
       2 + MIC_IE_BODY_SIZE; /* MIC */
 
@@ -791,6 +794,43 @@ static int plink_frame_tx(
     memset(ht_op->basic_set, 0, 16);
     ht_op->basic_set[0] = 0xff; /* mandatory HT phy rates */
     ies += sizeof(*ht_op);
+  }
+
+  if (action != PLINK_CLOSE &&
+      mesh->conf->channel_width != CHAN_WIDTH_20_NOHT &&
+      sband->vht_cap.vht_supported) {
+    *ies++ = IEEE80211_EID_VHT_CAPABILITY;
+    *ies++ = sizeof(sband->vht_cap.cap) + sizeof(sband->vht_cap.mcs);
+    memcpy(ies, &sband->vht_cap.cap, sizeof(sband->vht_cap.cap));
+    ies += sizeof(sband->vht_cap.cap);
+    memcpy(ies, &sband->vht_cap.mcs, sizeof(sband->vht_cap.mcs));
+    ies += sizeof(sband->vht_cap.mcs);
+
+    *ies++ = IEEE80211_EID_VHT_OPERATION;
+    *ies++ = 5;
+    vht_op = (struct vht_op_ie *)ies;
+    switch (mesh->conf->channel_width) {
+      case CHAN_WIDTH_80:
+      case CHAN_WIDTH_80P80:
+      case CHAN_WIDTH_160:
+        vht_op->width = 1;
+        break;
+      default:
+        vht_op->width = 0;
+    }
+    vht_op->center_chan1 =
+        ieee80211_frequency_to_channel(mesh->conf->center_freq1);
+    vht_op->center_chan2 =
+        ieee80211_frequency_to_channel(mesh->conf->center_freq2);
+
+    /* TODO allow configuring this for mixed capability STAs;
+     * see 802.11-2016 11.40.7
+     */
+    memcpy(
+        &vht_op->basic_set,
+        &sband->vht_cap.mcs.rx_mcs_mask,
+        sizeof(vht_op->basic_set));
+    ies += sizeof(*vht_op);
   }
 
   if (mesh->conf->is_secure) {

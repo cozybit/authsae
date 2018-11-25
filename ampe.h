@@ -21,8 +21,7 @@ enum plink_state {
 };
 
 /* must match NL80211 equivalents for linux */
-enum channel_width
-{
+enum channel_width {
   CHAN_WIDTH_20_NOHT,
   CHAN_WIDTH_20,
   CHAN_WIDTH_40,
@@ -47,10 +46,17 @@ struct local_ht_caps {
   struct mcs_info mcs;
 };
 
+struct local_vht_caps {
+  uint32_t cap;
+  struct vht_mcs_info mcs;
+  bool vht_supported;
+};
+
 struct ieee80211_supported_band {
   uint16_t *rates;
   int n_bitrates;
   struct local_ht_caps ht_cap;
+  struct local_vht_caps vht_cap;
 };
 
 typedef union {

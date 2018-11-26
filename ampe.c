@@ -637,7 +637,7 @@ static int plink_frame_tx(
   int ret;
   unsigned char *ies;
   unsigned char *pos;
-  u16 peering_proto = htole16(0x0001); /* AMPE */
+  u16 peering_proto;
   size_t alloc_len;
 
   assert(cand);
@@ -737,7 +737,14 @@ static int plink_frame_tx(
 
   *ies++ = IEEE80211_EID_MESH_PEERING;
   *ies++ = ie_len;
+
+  if (mesh->conf->is_secure) {
+    peering_proto = htole16(1);
+  } else {
+    peering_proto = 0;
+  }
   memcpy(ies, &peering_proto, 2);
+
   ies += 2;
   memcpy(ies, &cand->my_lid, 2);
   ies += 2;

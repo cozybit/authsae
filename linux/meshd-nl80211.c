@@ -1803,7 +1803,7 @@ int main(int argc, char *argv[]) {
   char *conffile = NULL;
   struct sae_config sae_conf;
   char *ifname = NULL;
-  struct netlink_ctx *nlcfg;
+  struct netlink_ctx *nlcfg = NULL;
 
   sae_debug_mask = SAE_DEBUG_ERR;
   signal(SIGTERM, term_handle);

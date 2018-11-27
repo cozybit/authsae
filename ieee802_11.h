@@ -192,6 +192,8 @@ enum ieee_ie_ids {
   IEEE80211_EID_MESH_PEERING = 117,
   IEEE80211_EID_AMPE = 139,
   IEEE80211_EID_MIC = 140,
+  IEEE80211_EID_VHT_CAPABILITY = 191,
+  IEEE80211_EID_VHT_OPERATION = 192,
 };
 
 enum ieee_categories {
@@ -219,6 +221,13 @@ struct mcs_info {
   uint8_t reserved[3];
 } __attribute__((packed));
 
+struct vht_mcs_info {
+  uint16_t rx_mcs_mask;
+  uint16_t rx_highest;
+  uint16_t tx_mcs_mask;
+  uint16_t tx_highest;
+} __attribute__((packed));
+
 struct ht_cap_ie {
   uint16_t cap_info; /* le */
   uint8_t ampdu_params_info;
@@ -237,6 +246,13 @@ struct ht_op_ie {
   uint16_t operation_mode; /* le */
   uint16_t stbc_param; /* le */
   uint8_t basic_set[16];
+} __attribute__((packed));
+
+struct vht_op_ie {
+  uint8_t width;
+  uint8_t center_chan1;
+  uint8_t center_chan2;
+  uint16_t basic_set;
 } __attribute__((packed));
 
 struct info_elems {

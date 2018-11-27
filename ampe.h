@@ -20,8 +20,15 @@ enum plink_state {
   PLINK_BLOCKED
 };
 
-/* For Linux these values need to match NL80211_CHAN_XXX equivs */
-enum ht_channel_type { CHAN_NO_HT, CHAN_HT20, CHAN_HT40MINUS, CHAN_HT40PLUS };
+/* must match NL80211 equivalents for linux */
+enum channel_width {
+  CHAN_WIDTH_20_NOHT,
+  CHAN_WIDTH_20,
+  CHAN_WIDTH_40,
+  CHAN_WIDTH_80,
+  CHAN_WIDTH_80P80,
+  CHAN_WIDTH_160,
+};
 
 enum ieee80211_band {
   IEEE80211_BAND_2GHZ,
@@ -39,10 +46,17 @@ struct local_ht_caps {
   struct mcs_info mcs;
 };
 
+struct local_vht_caps {
+  uint32_t cap;
+  struct vht_mcs_info mcs;
+  bool vht_supported;
+};
+
 struct ieee80211_supported_band {
   uint16_t *rates;
   int n_bitrates;
   struct local_ht_caps ht_cap;
+  struct local_vht_caps vht_cap;
 };
 
 typedef union {
@@ -57,11 +71,13 @@ struct meshd_config {
   int meshid_len;
   int passive;
   int mediaopt;
-  int channel;
   int band;
   int debug;
   int is_secure;
-  enum ht_channel_type channel_type; /* HT mode */
+  int control_freq;
+  int center_freq1;
+  int center_freq2;
+  enum channel_width channel_width;
 /* ready to be copied into rate IEs. Includes BSSBasicRateSet */
 #define MAX_SUPP_RATES 32
   unsigned char rates[MAX_SUPP_RATES];
@@ -95,8 +111,10 @@ struct meshd_config {
 /* the single global interface and mesh node info we're handling.
  * BSS configuration stuff would also go here. Shared with AMPE. */
 struct mesh_node {
-  int freq;
-  enum ht_channel_type channel_type; /* HT mode */
+  int control_freq;
+  int center_freq1;
+  int center_freq2;
+  enum channel_width channel_width;
   uint8_t mymacaddr[ETH_ALEN];
   struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
   /* current band */

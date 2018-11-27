@@ -51,6 +51,7 @@
 #endif /* defined(__linux__) && !defined(__ANDROID__) */
 
 #include "ampe.h"
+#include "chan.h"
 #include "common.h"
 #include "nl.h"
 #include "nl80211-copy.h"
@@ -88,9 +89,7 @@
  *  when AMPE completes, through the estab_peer_link() callback.
  */
 
-static struct meshd_ctx {
-  struct netlink_ctx *nlcfg;
-} meshd_ctx;
+static struct meshd_ctx { struct netlink_ctx *nlcfg; } meshd_ctx;
 
 service_context srvctx;
 
@@ -111,6 +110,15 @@ const char rsn_ie[0x16] = {
     0x1,  0x0, /* authentication suite count */
     0x0,  0x0F, 0xAC, 0x8, /* SAE for authentication */
     0x0,  0x0, /* Capabilities */
+};
+
+const char *channel_widths[] = {
+        [CHAN_WIDTH_20_NOHT] = "20-NOHT",
+        [CHAN_WIDTH_20] = "20",
+        [CHAN_WIDTH_40] = "40",
+        [CHAN_WIDTH_80] = "80",
+        [CHAN_WIDTH_80P80] = "80+80",
+        [CHAN_WIDTH_160] = "160",
 };
 
 /* Undo libnl's error code translation.  See nl_syserr2nlerr */
@@ -217,28 +225,26 @@ set_sup_basic_rates(struct meshd_config *mconf, u16 *rates, int rates_len) {
   }
 }
 
-static enum ht_channel_type ht_op_to_channel_type(struct ht_op_ie *ht_op) {
-  enum nl80211_channel_type channel_type;
+static enum channel_width ht_op_to_channel_width(struct ht_op_ie *ht_op) {
+  enum nl80211_chan_width channel_width;
 
   if (!ht_op)
-    return CHAN_NO_HT;
+    return NL80211_CHAN_WIDTH_20_NOHT;
 
   switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
     case IEEE80211_HT_PARAM_CHA_SEC_NONE:
-      channel_type = CHAN_HT20;
+      channel_width = NL80211_CHAN_WIDTH_20;
       break;
     case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
-      channel_type = CHAN_HT40PLUS;
-      break;
     case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
-      channel_type = CHAN_HT40MINUS;
+      channel_width = NL80211_CHAN_WIDTH_40;
       break;
     default:
-      channel_type = CHAN_NO_HT;
+      channel_width = NL80211_CHAN_WIDTH_20_NOHT;
       break;
   }
 
-  return channel_type;
+  return channel_width;
 }
 
 static int get_mac_addr(const char *ifname, uint8_t *macaddr) {
@@ -296,7 +302,7 @@ static int tx_frame(
     goto nla_put_failure;
 
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-  NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
+  NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->control_freq);
   NLA_PUT(msg, NL80211_ATTR_FRAME, len, frame);
 
   ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
@@ -450,6 +456,18 @@ static int handle_wiphy(
           nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_FACTOR]);
       lband->ht_cap.ampdu_density =
           nla_get_u8(tb_band[NL80211_BAND_ATTR_HT_AMPDU_DENSITY]);
+    }
+
+    if (tb_band[NL80211_BAND_ATTR_VHT_MCS_SET]) {
+      assert(
+          sizeof(lband->vht_cap.mcs) ==
+          nla_len(tb_band[NL80211_BAND_ATTR_VHT_MCS_SET]));
+      memcpy(
+          &lband->vht_cap.mcs,
+          nla_data(tb_band[NL80211_BAND_ATTR_VHT_MCS_SET]),
+          nla_len(tb_band[NL80211_BAND_ATTR_VHT_MCS_SET]));
+      lband->vht_cap.cap = nla_get_u32(tb_band[NL80211_BAND_ATTR_VHT_CAPA]);
+      lband->vht_cap.vht_supported = true;
     }
 
     n_rates = 0;
@@ -607,7 +625,7 @@ static int new_candidate_handler(
    * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
    */
   if ((peer = find_peer(bcn.sa, 0))) {
-    peer->ch_type = ht_op_to_channel_type((struct ht_op_ie *)elems.ht_info);
+    peer->ch_width = ht_op_to_channel_width((struct ht_op_ie *)elems.ht_info);
     if (!peer->in_kernel &&
         add_unauthenticated_sta(nlcfg, bcn.sa, &elems) == 0) {
       peer->in_kernel = true;
@@ -956,6 +974,11 @@ static int event_handler(struct nl_msg *msg, void *arg) {
 static int
 error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
   struct genlmsghdr *gnlh = nlmsg_data(&err->msg);
+  struct nlmsghdr *nlh = (struct nlmsghdr *)err - 1;
+  int len = nlh->nlmsg_len;
+  struct nlattr *attrs;
+  struct nlattr *tb[NLMSGERR_ATTR_MAX + 1];
+  int ack_len = sizeof(*nlh) + sizeof(int) + sizeof(*nlh);
 
   /* ignore leave mesh errors since we do those gratuitously before join */
   if (gnlh->cmd == NL80211_CMD_LEAVE_MESH)
@@ -967,6 +990,31 @@ error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
       gnlh->cmd,
       err->msg.nlmsg_seq,
       strerror(abs(err->error)));
+
+  /* get extended error info if available */
+  if (!(nlh->nlmsg_flags & NLM_F_ACK_TLVS))
+    return NL_SKIP;
+
+  if (!(nlh->nlmsg_flags & NLM_F_CAPPED))
+    ack_len += err->msg.nlmsg_len - sizeof(*nlh);
+
+  if (len <= ack_len)
+    return NL_SKIP;
+
+  attrs = (void *)((unsigned char *)nlh + ack_len);
+  len -= ack_len;
+
+  nla_parse(tb, NLMSGERR_ATTR_MAX, attrs, len, NULL);
+  if (tb[NLMSGERR_ATTR_MSG]) {
+    len = strnlen(
+        (char *)nla_data(tb[NLMSGERR_ATTR_MSG]),
+        nla_len(tb[NLMSGERR_ATTR_MSG]));
+    fprintf(
+        stderr,
+        "kernel reports: %*s\n",
+        len,
+        (char *)nla_data(tb[NLMSGERR_ATTR_MSG]));
+  }
   return NL_SKIP;
 }
 
@@ -1214,9 +1262,10 @@ static int join_mesh(struct netlink_ctx *nlcfg, struct mesh_node *mesh) {
 
   nla_nest_end(msg, container);
 
-  NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->freq);
-  if (mesh->channel_type != CHAN_NO_HT)
-    NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_CHANNEL_TYPE, mesh->channel_type);
+  NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, mesh->control_freq);
+  NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, mesh->channel_width);
+  NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, mesh->center_freq1);
+  NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ2, mesh->center_freq2);
 
   NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
   NLA_PUT(msg, NL80211_ATTR_MESH_ID, mconf->meshid_len, mconf->meshid);
@@ -1229,10 +1278,12 @@ static int join_mesh(struct netlink_ctx *nlcfg, struct mesh_node *mesh) {
 
   sae_debug(
       MESHD_DEBUG,
-      "joining mesh %s on freq %d, mode %d\n",
+      "joining mesh %s on freq=%d, center freqs=[%d, %d], width=%s\n",
       mconf->meshid,
-      mesh->freq,
-      mesh->channel_type);
+      mesh->control_freq,
+      mesh->center_freq1,
+      mesh->center_freq2,
+      channel_widths[mesh->channel_width]);
 
   ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   nlmsg_free(msg);
@@ -1458,6 +1509,7 @@ static int meshd_parse_libconfig(
     struct config_setting_t *meshd_section,
     struct meshd_config *config) {
   char *str;
+  config_int_t channel = -1;
 
   memset(config, 0, sizeof(struct meshd_config));
 
@@ -1480,13 +1532,12 @@ static int meshd_parse_libconfig(
     config->meshid_len = strlen(config->meshid);
   }
 
-#define CONFIG_LOOKUP(name, config_val, dflt)                         \
-  if (CONFIG_FALSE ==                                                 \
-      config_setting_lookup_int(                                      \
-          meshd_section, name, (config_int_t *)&config->config_val))  \
+#define CONFIG_LOOKUP(name, config_val, dflt)                        \
+  if (CONFIG_FALSE ==                                                \
+      config_setting_lookup_int(                                     \
+          meshd_section, name, (config_int_t *)&config->config_val)) \
     config->config_val = dflt;
 
-  CONFIG_LOOKUP("channel", channel, -1);
   CONFIG_LOOKUP("mcast-rate", mcast_rate, -1);
   CONFIG_LOOKUP("beacon-interval", beacon_interval, -1);
 
@@ -1500,15 +1551,11 @@ static int meshd_parse_libconfig(
   CONFIG_LOOKUP("gate-announcements", gate_announcements, -1);
   CONFIG_LOOKUP("hwmp-active-path-timeout", hwmp_active_path_timeout, -1);
   CONFIG_LOOKUP(
-      "hwmp-net-diameter-traversal-time",
-      hwmp_net_diameter_traversal_time,
-      -1);
+      "hwmp-net-diameter-traversal-time", hwmp_net_diameter_traversal_time, -1);
   CONFIG_LOOKUP("hwmp-rootmode", hwmp_rootmode, -1);
   CONFIG_LOOKUP("hwmp-rann-interval", hwmp_rann_interval, -1);
   CONFIG_LOOKUP(
-      "hwmp-active-path-to-root-timeout",
-      hwmp_active_path_to_root_timeout,
-      -1);
+      "hwmp-active-path-to-root-timeout", hwmp_active_path_to_root_timeout, -1);
   CONFIG_LOOKUP("hwmp-root-interval", hwmp_root_interval, -1);
 
   config->band = MESHD_11b;
@@ -1526,19 +1573,53 @@ static int meshd_parse_libconfig(
     }
   }
 
-  config->channel_type = NL80211_CHAN_NO_HT;
+  /*
+   * specify either channel and htmode, or freq, channel_width, center_freq1,
+   * center_freq2.  Latter take precedence.
+   */
+  config_setting_lookup_int(meshd_section, "channel", &channel);
+  config->control_freq = ieee80211_channel_to_frequency(
+      channel,
+      config->band == MESHD_11a ? IEEE80211_BAND_5GHZ : IEEE80211_BAND_2GHZ);
+  config->center_freq1 = config->control_freq;
+  config->center_freq2 = 0;
+
+  CONFIG_LOOKUP("freq", control_freq, config->control_freq);
+  CONFIG_LOOKUP("center_freq1", center_freq1, config->center_freq1);
+  CONFIG_LOOKUP("center_freq2", center_freq2, config->center_freq2);
+
+  config->channel_width = NL80211_CHAN_WIDTH_20_NOHT;
   if (config_setting_lookup_string(
           meshd_section, "htmode", (const char **)&str)) {
     if (strncmp(str, "none", 4) == 0) {
-      config->channel_type = NL80211_CHAN_NO_HT;
+      config->channel_width = NL80211_CHAN_WIDTH_20_NOHT;
     } else if (strncmp(str, "HT20", 4) == 0) {
-      config->channel_type = NL80211_CHAN_HT20;
+      config->channel_width = NL80211_CHAN_WIDTH_20;
     } else if (strncmp(str, "HT40+", 5) == 0) {
-      config->channel_type = NL80211_CHAN_HT40PLUS;
+      config->channel_width = NL80211_CHAN_WIDTH_40;
+      config->center_freq1 = config->control_freq + 10;
     } else if (strncmp(str, "HT40-", 5) == 0) {
-      config->channel_type = NL80211_CHAN_HT40MINUS;
+      config->channel_width = NL80211_CHAN_WIDTH_40;
+      config->center_freq1 = config->control_freq - 10;
     } else {
       sae_debug(MESHD_DEBUG, "unknown HT mode \"%s\", disabling\n", str);
+    }
+  }
+
+  if (config_setting_lookup_string(
+          meshd_section, "channel_width", (const char **)&str)) {
+    if (strcmp(str, "20-NOHT") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_20_NOHT;
+    } else if (strcmp(str, "20") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_20;
+    } else if (strcmp(str, "40") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_40;
+    } else if (strcmp(str, "80") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_80;
+    } else if (strcmp(str, "80+80") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_80P80;
+    } else if (strcmp(str, "160") == 0) {
+      config->channel_width = NL80211_CHAN_WIDTH_160;
     }
   }
 
@@ -1647,23 +1728,6 @@ static int meshd_parse_libconfig(
 #undef CONFIG_LOOKUP
 
   return 0;
-}
-
-/* given the channel, find the freq in megahertz.  Borrowed from iw:
- * Copyright (c) 2007, 2008 Johannes Berg
- * Copyright (c) 2007       Andy Lutomirski
- * Copyright (c) 2007       Mike Kershaw
- * Copyright (c) 2008-2009      Luis R. Rodriguez
- */
-static int channel_to_freq(int chan) {
-  if (chan < 14)
-    return 2407 + chan * 5;
-
-  if (chan == 14)
-    return 2484;
-
-  /* FIXME: dot11ChannelStartingFactor (802.11-2007 17.3.8.3.2) */
-  return (chan + 1000) * 5;
 }
 
 static struct ampe_cb *get_ampe_cbs() {
@@ -1896,17 +1960,17 @@ int main(int argc, char *argv[]) {
   }
 
   /* default to channel 1 */
-  if (meshd_conf.channel <= 0)
-    meshd_conf.channel = 1;
+  if (meshd_conf.control_freq <= 0)
+    meshd_conf.control_freq = 2412;
 
   /* default to mcast-rate of 12 Mbps */
   if (meshd_conf.mcast_rate <= 0)
     meshd_conf.mcast_rate = 12;
 
-  mesh.freq = channel_to_freq(meshd_conf.channel);
-  if (mesh.freq == -1)
-    return -1;
-  mesh.channel_type = meshd_conf.channel_type;
+  mesh.channel_width = meshd_conf.channel_width;
+  mesh.control_freq = meshd_conf.control_freq;
+  mesh.center_freq1 = meshd_conf.center_freq1;
+  mesh.center_freq2 = meshd_conf.center_freq2;
   mesh.band =
       meshd_conf.band == MESHD_11a ? IEEE80211_BAND_5GHZ : IEEE80211_BAND_2GHZ;
 

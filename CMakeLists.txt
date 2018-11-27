@@ -62,11 +62,12 @@ LIST(APPEND libsae_libs
 
 LIST(APPEND libsae_sources
 	aid.c
-	common.c
-	sae.c
-	rekey.c
 	ampe.c
+	chan.c
+	common.c
 	crypto/aes_siv.c
+	rekey.c
+	sae.c
 )
 
 ADD_LIBRARY(sae STATIC ${libsae_sources})
@@ -77,8 +78,8 @@ install(FILES
   aid.h
   ampe.h
   common.h
-  ieee802_11.h
   evl_ops.h
+  ieee802_11.h
   peers.h
   rekey.h
   sae.h

@@ -35,6 +35,7 @@
 #include <openssl/rand.h>
 #include <string.h>
 
+#include "chan.h"
 #include "peer_lists.h"
 #include "peers.h"
 #include "rekey.h"
@@ -64,6 +65,8 @@
 
 #define MESH_CAPA_ACCEPT_PEERINGS BIT(0)
 #define MESH_CAPA_FORWARDING BIT(3)
+
+#define MIC_IE_BODY_SIZE AES_BLOCK_SIZE
 
 static const unsigned char akm_suite_selector[4] = {0x0,
                                                     0xf,
@@ -189,18 +192,18 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
   unsigned int ht_opmode;
   bool no_ht = false, ht20 = false;
 
-  if (mesh->conf->channel_type == CHAN_NO_HT)
+  if (mesh->conf->channel_width == CHAN_WIDTH_20_NOHT)
     return 0;
 
   for_each_peer(peer) {
     if (peer->link_state != PLINK_ESTAB)
       continue;
 
-    switch (peer->ch_type) {
-      case CHAN_NO_HT:
+    switch (peer->ch_width) {
+      case CHAN_WIDTH_20_NOHT:
         no_ht = true;
         goto out;
-      case CHAN_HT20:
+      case CHAN_WIDTH_20:
         ht20 = true;
         break;
       default:
@@ -211,7 +214,7 @@ static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
 out:
   if (no_ht)
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
-  else if (ht20 && mesh->conf->channel_type > CHAN_HT20)
+  else if (ht20 && mesh->conf->channel_width > CHAN_WIDTH_20)
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_20MHZ;
   else
     ht_opmode = IEEE80211_HT_OP_MODE_PROTECTION_NONE;
@@ -376,8 +379,6 @@ static int protect_frame(
   le16 igtk_keyid;
 
   assert(mic_start && cand && mgmt && len);
-
-#define MIC_IE_BODY_SIZE AES_BLOCK_SIZE
 
   ampe_ie_len = sizeof(struct ampe_ie);
 
@@ -618,7 +619,6 @@ static int check_frame_protection(
   }
   free(clear_ampe_ie);
   return -1;
-#undef MIC_IE_BODY_SIZE
 }
 
 static int plink_frame_tx(
@@ -631,19 +631,30 @@ static int plink_frame_tx(
   struct ieee80211_supported_band *sband = &mesh->bands[mesh->band];
   struct ht_cap_ie *ht_cap;
   struct ht_op_ie *ht_op;
+  struct vht_op_ie *vht_op;
   unsigned char ie_len;
   int len;
   int ret;
   unsigned char *ies;
   unsigned char *pos;
-  u16 peering_proto = htole16(0x0001); /* AMPE */
+  u16 peering_proto;
+  size_t alloc_len;
 
   assert(cand);
 
-#define LARGE_FRAME 1500;
-  len = LARGE_FRAME;
-  buf = calloc(1, len);
-#undef LARGE_FRAME
+  alloc_len = sizeof(struct ieee80211_mgmt_frame) + 2 + /* capability info */
+      2 + /* aid */
+      sta_fixed_ies_len + 2 + mesh->conf->meshid_len + /* mesh id */
+      2 + 7 + /* mesh config */
+      2 + 8 + sizeof(cand->pmkid) + /* mesh peering management */
+      2 + sizeof(struct ht_cap_ie) + /* HT capabilities */
+      2 + sizeof(struct ht_op_ie) + /* HT operation */
+      2 + 12 + /* VHT capabilities */
+      2 + 5 + /* VHT operation */
+      2 + 120 + /* AMPE, without Key Replay counter, 16 byte keys */
+      2 + MIC_IE_BODY_SIZE; /* MIC */
+
+  buf = calloc(1, alloc_len);
   if (!buf)
     return -1;
 
@@ -726,7 +737,14 @@ static int plink_frame_tx(
 
   *ies++ = IEEE80211_EID_MESH_PEERING;
   *ies++ = ie_len;
+
+  if (mesh->conf->is_secure) {
+    peering_proto = htole16(1);
+  } else {
+    peering_proto = 0;
+  }
   memcpy(ies, &peering_proto, 2);
+
   ies += 2;
   memcpy(ies, &cand->my_lid, 2);
   ies += 2;
@@ -744,7 +762,9 @@ static int plink_frame_tx(
     ies += sizeof(cand->pmkid);
   }
 
-  if (mesh->conf->channel_type != CHAN_NO_HT && sband->ht_cap.ht_supported) {
+  if (action != PLINK_CLOSE &&
+      mesh->conf->channel_width != CHAN_WIDTH_20_NOHT &&
+      sband->ht_cap.ht_supported) {
     /* HT IEs */
     *ies++ = IEEE80211_EID_HT_CAPABILITY;
     *ies++ = sizeof(struct ht_cap_ie);
@@ -759,21 +779,22 @@ static int plink_frame_tx(
     *ies++ = IEEE80211_EID_HT_OPERATION;
     *ies++ = sizeof(struct ht_op_ie);
     ht_op = (struct ht_op_ie *)ies;
-    ht_op->primary_chan = mesh->conf->channel;
-    switch (mesh->conf->channel_type) {
-      case CHAN_HT40MINUS:
-        ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
+    ht_op->primary_chan =
+        ieee80211_frequency_to_channel(mesh->conf->control_freq);
+    switch (mesh->conf->channel_width) {
+      case CHAN_WIDTH_40:
+        if (mesh->conf->center_freq1 < mesh->conf->control_freq)
+          ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
+        else
+          ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
         break;
-      case CHAN_HT40PLUS:
-        ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
-        break;
-      case CHAN_HT20:
+      case CHAN_WIDTH_20:
       default:
         ht_op->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
         break;
     }
     if ((sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) &&
-        mesh->conf->channel_type > CHAN_HT20)
+        mesh->conf->channel_width > CHAN_WIDTH_20)
       ht_op->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 
     ht_op->operation_mode = htole16(mesh->conf->ht_prot_mode);
@@ -782,8 +803,46 @@ static int plink_frame_tx(
     ies += sizeof(*ht_op);
   }
 
+  if (action != PLINK_CLOSE &&
+      mesh->conf->channel_width != CHAN_WIDTH_20_NOHT &&
+      sband->vht_cap.vht_supported) {
+    *ies++ = IEEE80211_EID_VHT_CAPABILITY;
+    *ies++ = sizeof(sband->vht_cap.cap) + sizeof(sband->vht_cap.mcs);
+    memcpy(ies, &sband->vht_cap.cap, sizeof(sband->vht_cap.cap));
+    ies += sizeof(sband->vht_cap.cap);
+    memcpy(ies, &sband->vht_cap.mcs, sizeof(sband->vht_cap.mcs));
+    ies += sizeof(sband->vht_cap.mcs);
+
+    *ies++ = IEEE80211_EID_VHT_OPERATION;
+    *ies++ = 5;
+    vht_op = (struct vht_op_ie *)ies;
+    switch (mesh->conf->channel_width) {
+      case CHAN_WIDTH_80:
+      case CHAN_WIDTH_80P80:
+      case CHAN_WIDTH_160:
+        vht_op->width = 1;
+        break;
+      default:
+        vht_op->width = 0;
+    }
+    vht_op->center_chan1 =
+        ieee80211_frequency_to_channel(mesh->conf->center_freq1);
+    vht_op->center_chan2 =
+        ieee80211_frequency_to_channel(mesh->conf->center_freq2);
+
+    /* TODO allow configuring this for mixed capability STAs;
+     * see 802.11-2016 11.40.7
+     */
+    memcpy(
+        &vht_op->basic_set,
+        &sband->vht_cap.mcs.rx_mcs_mask,
+        sizeof(vht_op->basic_set));
+    ies += sizeof(*vht_op);
+  }
+
   if (mesh->conf->is_secure) {
     /* IE: Add MIC and encrypted AMPE */
+    len = alloc_len;
     ret = protect_frame(cand, (struct ieee80211_mgmt_frame *)buf, ies, &len);
     if (ret) {
       sae_debug(SAE_DEBUG_ERR, "Failed to protect frame\n");

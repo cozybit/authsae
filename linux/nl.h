@@ -26,6 +26,10 @@ enum nlmsgerr_attrs {
 #ifndef NLM_F_ACK_TLVS
 #define NLM_F_ACK_TLVS 0x200
 #endif
+#ifndef SOL_NETLINK
+#define SOL_NETLINK 270
+#endif
+
 
 struct netlink_ctx {
   struct nl_sock *cmd_sock;

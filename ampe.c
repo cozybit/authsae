@@ -715,7 +715,7 @@ static int plink_frame_tx(
       ie_len += 2;
       break;
     case PLINK_CLOSE:
-      if (&cand->peer_lid) {
+      if (cand->peer_lid) {
         ie_len += 2;
       }
       ie_len += 2; /* reason code */

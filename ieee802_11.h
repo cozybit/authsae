@@ -280,6 +280,12 @@ struct info_elems {
   unsigned char *ht_info;
   unsigned char ht_info_len;
 
+  unsigned char *vht_cap;
+  unsigned char vht_cap_len;
+
+  unsigned char *vht_info;
+  unsigned char vht_info_len;
+
   struct ampe_ie *ampe;
   unsigned char ampe_len;
 

@@ -550,6 +550,9 @@ static int add_unauthenticated_sta(
   if (elems->ht_cap)
     NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY, elems->ht_cap_len, elems->ht_cap);
 
+  if (elems->vht_cap)
+    NLA_PUT(msg, NL80211_ATTR_VHT_CAPABILITY, elems->vht_cap_len, elems->vht_cap);
+
   ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG,

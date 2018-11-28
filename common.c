@@ -153,6 +153,14 @@ void parse_ies(unsigned char *start, int len, struct info_elems *elems) {
         elems->ht_info = pos;
         elems->ht_info_len = elen;
         break;
+      case IEEE80211_EID_VHT_CAPABILITY:
+        elems->vht_cap = pos;
+        elems->vht_cap_len = elen;
+        break;
+      case IEEE80211_EID_VHT_OPERATION:
+        elems->vht_info = pos;
+        elems->vht_info_len = elen;
+        break;
       case IEEE80211_EID_MESH_ID:
         elems->mesh_id = pos;
         elems->mesh_id_len = elen;

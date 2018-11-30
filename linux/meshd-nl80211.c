@@ -1335,17 +1335,17 @@ void estab_peer_link(
     elems.sup_rates = cand->sup_rates;
     elems.sup_rates_len = cand->sup_rates_len;
 
-    elems.ht_cap = (unsigned char *)&cand->ht_cap;
-    elems.ht_cap_len = sizeof(cand->ht_cap);
+    elems.ht_cap = (unsigned char *)cand->ht_cap;
+    elems.ht_cap_len = sizeof(*cand->ht_cap);
 
-    elems.ht_info = (unsigned char *)&cand->ht_info;
-    elems.ht_info_len = sizeof(cand->ht_info);
+    elems.ht_info = (unsigned char *)cand->ht_info;
+    elems.ht_info_len = sizeof(*cand->ht_info);
 
-    elems.vht_cap = (unsigned char *)&cand->vht_cap;
-    elems.vht_cap_len = sizeof(cand->vht_cap);
+    elems.vht_cap = (unsigned char *)cand->vht_cap;
+    elems.vht_cap_len = sizeof(*cand->vht_cap);
 
-    elems.vht_info = (unsigned char *)&cand->vht_info;
-    elems.vht_info_len = sizeof(cand->vht_info);
+    elems.vht_info = (unsigned char *)cand->vht_info;
+    elems.vht_info_len = sizeof(*cand->vht_info);
 
     ret = add_unauthenticated_sta(nlcfg, peer, &elems);
     if (ret)

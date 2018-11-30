@@ -80,11 +80,11 @@ struct candidate {
   unsigned int rekey_ok;
   unsigned int rekey_ok_ping_rx;
 
-  struct ht_cap_ie ht_cap;
-  struct ht_op_ie ht_info;
+  struct ht_cap_ie *ht_cap;
+  struct ht_op_ie *ht_info;
 
-  struct vht_cap_ie vht_cap;
-  struct vht_op_ie vht_info;
+  struct vht_cap_ie *vht_cap;
+  struct vht_op_ie *vht_info;
 
   bool in_kernel;
 };

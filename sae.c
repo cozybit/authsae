@@ -270,6 +270,10 @@ void delete_peer(struct candidate **delme) {
       BN_free(peer->my_scalar);
       EC_POINT_free(peer->my_element);
       aid_free(peer->association_id);
+      free(peer->ht_cap);
+      free(peer->ht_info);
+      free(peer->vht_cap);
+      free(peer->vht_info);
       free(*delme);
       *delme = NULL;
       return;

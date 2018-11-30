@@ -613,8 +613,9 @@ static int new_candidate_handler(
    * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
    */
   if ((peer = find_peer(bcn.sa, 0))) {
-    peer->ch_width = ht_op_to_channel_width(
-        (struct ht_op_ie *)elems.ht_info, (struct vht_op_ie *)elems.vht_info);
+
+    ampe_set_peer_ies(peer, &elems);
+
     if (!peer->in_kernel &&
         add_unauthenticated_sta(nlcfg, bcn.sa, &elems) == 0) {
       peer->in_kernel = true;

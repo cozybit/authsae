@@ -225,28 +225,6 @@ set_sup_basic_rates(struct meshd_config *mconf, u16 *rates, int rates_len) {
   }
 }
 
-static enum channel_width ht_op_to_channel_width(struct ht_op_ie *ht_op) {
-  enum nl80211_chan_width channel_width;
-
-  if (!ht_op)
-    return NL80211_CHAN_WIDTH_20_NOHT;
-
-  switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
-    case IEEE80211_HT_PARAM_CHA_SEC_NONE:
-      channel_width = NL80211_CHAN_WIDTH_20;
-      break;
-    case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
-    case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
-      channel_width = NL80211_CHAN_WIDTH_40;
-      break;
-    default:
-      channel_width = NL80211_CHAN_WIDTH_20_NOHT;
-      break;
-  }
-
-  return channel_width;
-}
-
 static int get_mac_addr(const char *ifname, uint8_t *macaddr) {
   int fd;
   struct ifreq ifr;
@@ -556,7 +534,9 @@ static int add_unauthenticated_sta(
   ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG,
-      "new unauthed sta (seq num=%d)\n",
+      "new unauthed %s sta (seq num=%d)\n",
+      ((elems->vht_cap) ? "VHT" :
+       (elems->ht_cap) ? "HT" : "NOHT"),
       nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
   msg = NULL;
@@ -582,6 +562,11 @@ static int new_candidate_handler(
   struct ieee80211_mgmt_frame bcn;
   struct info_elems elems;
   struct candidate *peer;
+
+  /* We don't do anything with beacons if auto_open_plinks = false */
+  if (!meshd_conf.auto_open_plinks) {
+    return NL_SKIP;
+  }
 
   /* check that all the required info exists: source address
    * (arrives as bssid), meshid, mesh config(TODO!) and RSN
@@ -628,7 +613,9 @@ static int new_candidate_handler(
    * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
    */
   if ((peer = find_peer(bcn.sa, 0))) {
-    peer->ch_width = ht_op_to_channel_width((struct ht_op_ie *)elems.ht_info);
+
+    ampe_set_peer_ies(peer, &elems);
+
     if (!peer->in_kernel &&
         add_unauthenticated_sta(nlcfg, bcn.sa, &elems) == 0) {
       peer->in_kernel = true;
@@ -1349,11 +1336,17 @@ void estab_peer_link(
     elems.sup_rates = cand->sup_rates;
     elems.sup_rates_len = cand->sup_rates_len;
 
-    elems.ht_cap = (unsigned char *)&cand->ht_cap;
-    elems.ht_cap_len = sizeof(cand->ht_cap);
+    elems.ht_cap = (unsigned char *)cand->ht_cap;
+    elems.ht_cap_len = sizeof(*cand->ht_cap);
 
-    elems.ht_info = (unsigned char *)&cand->ht_info;
-    elems.ht_info_len = sizeof(cand->ht_info);
+    elems.ht_info = (unsigned char *)cand->ht_info;
+    elems.ht_info_len = sizeof(*cand->ht_info);
+
+    elems.vht_cap = (unsigned char *)cand->vht_cap;
+    elems.vht_cap_len = sizeof(*cand->vht_cap);
+
+    elems.vht_info = (unsigned char *)cand->vht_info;
+    elems.vht_info_len = sizeof(*cand->vht_info);
 
     ret = add_unauthenticated_sta(nlcfg, peer, &elems);
     if (ret)
@@ -1727,6 +1720,8 @@ static int meshd_parse_libconfig(
         config->rekey_ok_ping_count_max);
     return -1;
   }
+
+  CONFIG_LOOKUP("auto_open_plinks", auto_open_plinks, 1);
 
 #undef CONFIG_LOOKUP
 

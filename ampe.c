@@ -135,6 +135,15 @@ static inline void set_link_state(
   cb->set_plink_state(cand->peer_mac, state, cand->cookie);
 }
 
+static void *memdup(const void *src, size_t size) {
+  void *dst = malloc(size);
+
+  if (dst)
+    memcpy(dst, src, size);
+
+  return dst;
+}
+
 static int plink_free_count() {
   sae_debug(AMPE_DEBUG_FSM, "TODO: return available peer link slots\n");
   return 99;
@@ -183,9 +192,12 @@ static void derive_aek(struct candidate *cand) {
   sae_hexdump(AMPE_DEBUG_KEYS, "aek: ", cand->aek, sizeof(cand->aek));
 }
 
-/* determine and set the correct ht operation mode for all established peers
- * according to 802.11mb 9.23.3. Return MESH_CONF_CHANGED_HT bit if a new
- * operation mode was selected */
+/*
+ * Determine and set the correct ht operation mode for all established peers
+ * according to 802.11-2016 10.26.3.5.
+ *
+ * Return MESH_CONF_CHANGED_HT bit if a new operation mode was selected.
+ */
 static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
   struct candidate *peer;
   uint32_t changed = 0;
@@ -1221,6 +1233,38 @@ static bool matches_local(struct mesh_node *mesh, struct info_elems *elems) {
           : 0);
 }
 
+void ampe_set_peer_ies(struct candidate *cand, struct info_elems *elems) {
+  if (elems->sup_rates) {
+    memcpy(cand->sup_rates, elems->sup_rates, elems->sup_rates_len);
+    cand->sup_rates_len = elems->sup_rates_len;
+    if (elems->ext_rates) {
+      memcpy(
+          cand->sup_rates + elems->sup_rates_len,
+          elems->ext_rates,
+          elems->ext_rates_len);
+      cand->sup_rates_len += elems->ext_rates_len;
+    }
+  }
+
+  if (elems->ht_cap) {
+    cand->ht_cap = memdup(elems->ht_cap, elems->ht_cap_len);
+  }
+
+  if (elems->ht_info) {
+    cand->ht_info = memdup(elems->ht_info, elems->ht_info_len);
+  }
+
+  if (elems->vht_cap) {
+    cand->vht_cap = memdup(elems->vht_cap, elems->vht_cap_len);
+  }
+
+  if (elems->vht_info) {
+    cand->vht_info = memdup(elems->vht_info, elems->vht_info_len);
+  }
+
+  cand->ch_width = ht_op_to_channel_width(cand->ht_info, cand->vht_info);
+}
+
 /**
  * process_ampe_frame - process an ampe frame
  * @frame:     The full frame
@@ -1359,25 +1403,7 @@ int process_ampe_frame(
   if (cand->my_lid == 0)
     peer_ampe_init(&ampe_conf, cand, cookie);
 
-  if (elems.sup_rates) {
-    memcpy(cand->sup_rates, elems.sup_rates, elems.sup_rates_len);
-    cand->sup_rates_len = elems.sup_rates_len;
-    if (elems.ext_rates) {
-      memcpy(
-          cand->sup_rates + elems.sup_rates_len,
-          elems.ext_rates,
-          elems.ext_rates_len);
-      cand->sup_rates_len += elems.ext_rates_len;
-    }
-  }
-
-  if (elems.ht_cap && elems.ht_cap_len <= sizeof(cand->ht_cap)) {
-    memcpy(&cand->ht_cap, elems.ht_cap, elems.ht_cap_len);
-  }
-
-  if (elems.ht_info && elems.ht_info_len <= sizeof(cand->ht_info)) {
-    memcpy(&cand->ht_info, elems.ht_info, elems.ht_info_len);
-  }
+  ampe_set_peer_ies(cand, &elems);
 
   check_frame_protection(cand, mgmt, len, &elems);
 

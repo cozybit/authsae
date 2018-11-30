@@ -248,6 +248,11 @@ struct ht_op_ie {
   uint8_t basic_set[16];
 } __attribute__((packed));
 
+struct vht_cap_ie {
+  uint32_t cap;
+  struct vht_mcs_info mcs;
+} __attribute__((packed));
+
 struct vht_op_ie {
   uint8_t width;
   uint8_t center_chan1;

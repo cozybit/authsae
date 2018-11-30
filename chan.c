@@ -19,6 +19,7 @@
  */
 
 #include "chan.h"
+#include <stdlib.h>
 
 int ieee80211_channel_to_frequency(int chan, enum ieee80211_band band) {
   /* see 802.11 17.3.8.3.2 and Annex J
@@ -57,4 +58,52 @@ int ieee80211_frequency_to_channel(int freq) {
     return (freq - 56160) / 2160;
   else
     return 0;
+}
+
+enum channel_width ht_op_to_channel_width(
+    struct ht_op_ie *ht_op,
+    struct vht_op_ie *vht_op) {
+  enum channel_width channel_width;
+
+  if (!ht_op)
+    return CHAN_WIDTH_20_NOHT;
+
+  /* Determine width from VHT operation element, 802.11-2016 tables 9-252,3 */
+  if (vht_op) {
+    switch (vht_op->width) {
+      case 3: /* deprecated */
+        return CHAN_WIDTH_80P80;
+
+      case 2: /* deprecated */
+        return CHAN_WIDTH_160;
+
+      case 1: /* 80-160; determine based on center freq settings */
+        if (!vht_op->center_chan2) {
+          return CHAN_WIDTH_80;
+        }
+        if (abs(vht_op->center_chan2 - vht_op->center_chan1) == 8) {
+          return CHAN_WIDTH_160;
+        }
+        return CHAN_WIDTH_80P80;
+
+      case 0: /* 20 or 40, handled below */
+      default:
+        break;
+    }
+  }
+
+  switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
+    case IEEE80211_HT_PARAM_CHA_SEC_NONE:
+      return CHAN_WIDTH_20;
+      break;
+    case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
+    case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
+      return CHAN_WIDTH_40;
+      break;
+    default:
+      channel_width = CHAN_WIDTH_20_NOHT;
+      break;
+  }
+
+  return channel_width;
 }

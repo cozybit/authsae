@@ -225,19 +225,45 @@ set_sup_basic_rates(struct meshd_config *mconf, u16 *rates, int rates_len) {
   }
 }
 
-static enum channel_width ht_op_to_channel_width(struct ht_op_ie *ht_op) {
+static enum channel_width ht_op_to_channel_width(
+    struct ht_op_ie *ht_op,
+    struct vht_op_ie *vht_op) {
   enum nl80211_chan_width channel_width;
 
   if (!ht_op)
     return NL80211_CHAN_WIDTH_20_NOHT;
 
+  /* Determine width from VHT operation element, 802.11-2016 tables 9-252,3 */
+  if (vht_op) {
+    switch (vht_op->width) {
+      case 3: /* deprecated */
+        return NL80211_CHAN_WIDTH_80P80;
+
+      case 2: /* deprecated */
+        return NL80211_CHAN_WIDTH_160;
+
+      case 1: /* 80-160; determine based on center freq settings */
+        if (!vht_op->center_chan2) {
+          return NL80211_CHAN_WIDTH_80;
+        }
+        if (abs(vht_op->center_chan2 - vht_op->center_chan1) == 8) {
+          return NL80211_CHAN_WIDTH_160;
+        }
+        return NL80211_CHAN_WIDTH_80P80;
+
+      case 0: /* 20 or 40, handled below */
+      default:
+        break;
+    }
+  }
+
   switch (ht_op->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
     case IEEE80211_HT_PARAM_CHA_SEC_NONE:
-      channel_width = NL80211_CHAN_WIDTH_20;
+      return NL80211_CHAN_WIDTH_20;
       break;
     case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
     case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
-      channel_width = NL80211_CHAN_WIDTH_40;
+      return NL80211_CHAN_WIDTH_40;
       break;
     default:
       channel_width = NL80211_CHAN_WIDTH_20_NOHT;
@@ -635,7 +661,8 @@ static int new_candidate_handler(
    * we received two NEW_PEER_CANDIDATE events for the same peer, this will fail
    */
   if ((peer = find_peer(bcn.sa, 0))) {
-    peer->ch_width = ht_op_to_channel_width((struct ht_op_ie *)elems.ht_info);
+    peer->ch_width = ht_op_to_channel_width(
+        (struct ht_op_ie *)elems.ht_info, (struct vht_op_ie *)elems.vht_info);
     if (!peer->in_kernel &&
         add_unauthenticated_sta(nlcfg, bcn.sa, &elems) == 0) {
       peer->in_kernel = true;

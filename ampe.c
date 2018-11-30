@@ -183,9 +183,12 @@ static void derive_aek(struct candidate *cand) {
   sae_hexdump(AMPE_DEBUG_KEYS, "aek: ", cand->aek, sizeof(cand->aek));
 }
 
-/* determine and set the correct ht operation mode for all established peers
- * according to 802.11mb 9.23.3. Return MESH_CONF_CHANGED_HT bit if a new
- * operation mode was selected */
+/*
+ * Determine and set the correct ht operation mode for all established peers
+ * according to 802.11-2016 10.26.3.5.
+ *
+ * Return MESH_CONF_CHANGED_HT bit if a new operation mode was selected.
+ */
 static uint32_t mesh_set_ht_op_mode(struct mesh_node *mesh) {
   struct candidate *peer;
   uint32_t changed = 0;

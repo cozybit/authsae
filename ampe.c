@@ -1379,6 +1379,14 @@ int process_ampe_frame(
     memcpy(&cand->ht_info, elems.ht_info, elems.ht_info_len);
   }
 
+  if (elems.vht_cap && elems.vht_cap_len <= sizeof(cand->vht_cap)) {
+    memcpy(&cand->vht_cap, elems.vht_cap, elems.vht_cap_len);
+  }
+
+  if (elems.vht_info && elems.vht_info_len <= sizeof(cand->vht_info)) {
+    memcpy(&cand->vht_info, elems.vht_info, elems.vht_info_len);
+  }
+
   check_frame_protection(cand, mgmt, len, &elems);
 
   cand->cookie = cookie;

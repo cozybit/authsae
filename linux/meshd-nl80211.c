@@ -556,7 +556,9 @@ static int add_unauthenticated_sta(
   ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
   sae_debug(
       MESHD_DEBUG,
-      "new unauthed sta (seq num=%d)\n",
+      "new unauthed %s sta (seq num=%d)\n",
+      ((elems->vht_cap) ? "VHT" :
+       (elems->ht_cap) ? "HT" : "NOHT"),
       nlmsg_hdr(msg)->nlmsg_seq);
   nlmsg_free(msg);
   msg = NULL;

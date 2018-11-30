@@ -585,6 +585,11 @@ static int new_candidate_handler(
   struct info_elems elems;
   struct candidate *peer;
 
+  /* We don't do anything with beacons if auto_open_plinks = false */
+  if (!meshd_conf.auto_open_plinks) {
+    return NL_SKIP;
+  }
+
   /* check that all the required info exists: source address
    * (arrives as bssid), meshid, mesh config(TODO!) and RSN
    * */
@@ -1729,6 +1734,8 @@ static int meshd_parse_libconfig(
         config->rekey_ok_ping_count_max);
     return -1;
   }
+
+  CONFIG_LOOKUP("auto_open_plinks", auto_open_plinks, 1);
 
 #undef CONFIG_LOOKUP
 

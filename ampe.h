@@ -106,6 +106,8 @@ struct meshd_config {
   int rekey_ping_jitter; /* in msec */
   int rekey_reauth_count_max;
   int rekey_ok_ping_count_max;
+
+  int auto_open_plinks;
 };
 
 /* the single global interface and mesh node info we're handling.

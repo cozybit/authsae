@@ -94,12 +94,11 @@ enum plink_event {
   PLINK_UNDEFINED,
   OPN_ACPT,
   OPN_RJCT,
-  OPN_IGNR,
   CNF_ACPT,
   CNF_RJCT,
-  CNF_IGNR,
   CLS_ACPT,
-  CLS_IGNR
+  CLS_IGNR,
+  REQ_RJCT
 };
 
 /*  For debugging use */
@@ -115,12 +114,11 @@ static const char *mpl_events[] = {
         [PLINK_UNDEFINED] = "PLINK_UNDEFINED",
         [OPN_ACPT] = "OPN_ACPT",
         [OPN_RJCT] = "OPN_RJCT",
-        [OPN_IGNR] = "OPN_IGNR",
         [CNF_ACPT] = "CNF_ACPT",
         [CNF_RJCT] = "CNF_RJCT",
-        [CNF_IGNR] = "CNF_IGNR",
         [CLS_ACPT] = "CLS_ACPT",
         [CLS_IGNR] = "CLS_IGNR",
+        [REQ_RJCT] = "REQ_RJCT",
 };
 
 static int plink_frame_tx(
@@ -948,6 +946,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
       switch (event) {
         case OPN_RJCT:
         case CNF_RJCT:
+        case REQ_RJCT:
           reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         /* no break */
         case CLS_ACPT:
@@ -982,6 +981,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
       switch (event) {
         case OPN_RJCT:
         case CNF_RJCT:
+        case REQ_RJCT:
           reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         /* no break */
         case CLS_ACPT:
@@ -1033,6 +1033,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
       switch (event) {
         case OPN_RJCT:
         case CNF_RJCT:
+        case REQ_RJCT:
           reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         /* no break */
         case CLS_ACPT:
@@ -1082,6 +1083,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
       switch (event) {
         case OPN_RJCT:
         case CNF_RJCT:
+        case REQ_RJCT:
           reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
         case CLS_ACPT:
           reason = htole16(MESH_CLOSE_RCVD);
@@ -1115,6 +1117,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case CNF_ACPT:
         case OPN_RJCT:
         case CNF_RJCT:
+        case REQ_RJCT:
           reason = cand->reason;
           plink_frame_tx(cand, PLINK_CLOSE, reason);
           break;
@@ -1422,7 +1425,7 @@ int process_ampe_frame(
         event = OPN_RJCT;
       else if (
           !plink_free_count() || (cand->peer_lid && cand->peer_lid != plid))
-        event = OPN_IGNR;
+        event = REQ_RJCT;
       else {
         cand->peer_lid = plid;
         event = OPN_ACPT;
@@ -1434,7 +1437,7 @@ int process_ampe_frame(
       else if (
           !plink_free_count() ||
           (cand->my_lid != llid || cand->peer_lid != plid))
-        event = CNF_IGNR;
+        event = REQ_RJCT;
       else
         event = CNF_ACPT;
       break;

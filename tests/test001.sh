@@ -7,18 +7,12 @@
 
 [ $(uname) = "Linux" ] || err_exit "This test only runs on Linux"
 
-cleanup() {
-    sudo killall meshd-nl80211
-    rm -fr "${TMP0}" "${TMP1}"
-    exit 0
-}
-
-trap cleanup SIGINT
+wait_for_clean_start
 
 nradios=2
 load_hwsim $nradios || err_exit "Failed to load mac80211-hwsim module."
 set_default_configs $nradios
-start_meshd $(get_hwsim_radios) || exit 2
+start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 
 wait_for_plinks $nradios
 
@@ -32,18 +26,17 @@ LOG1=${LOGS[1]}
 cat ${LOG0} | grep pmk -A 2 > ${TMP0}
 cat ${LOG1} | grep pmk -A 2 > ${TMP1}
 
-diff ${TMP0} ${TMP1} || { echo "FAIL: pmk mismatch"; cat ${TMP0} ${TMP1}; exit 1; }
+diff ${TMP0} ${TMP1} || { echo "pmk mismatch"; cat ${TMP0} ${TMP1}; err_exit "pmk mismatch"; }
 
 # mgtk exchange in both directions
 cat ${LOG0} | grep ^mgtk -A 1 | tail -1 > ${TMP0}
 cat ${LOG1} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP1}
 
-diff ${TMP0} ${TMP1} || { echo "FAIL: mgtk exchange failed"; cat ${TMP0} ${TMP1}; exit 1; }
+diff ${TMP0} ${TMP1} || { echo "mgtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "mgtk exchange failed"; }
 
 cat ${LOG0} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP0}
 cat ${LOG1} | grep ^mgtk -A 1 | tail -1 > ${TMP1}
 
-diff ${TMP0} ${TMP1} || { echo "FAIL: mgtk exchange failed"; cat ${TMP0} ${TMP1}; exit 1; }
+diff ${TMP0} ${TMP1} || { echo "mgtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "mgtk exchange failed"; }
 
 echo PASS
-cleanup

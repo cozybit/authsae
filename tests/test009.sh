@@ -2,17 +2,12 @@
 #
 # VHT80 mesh creates VHT STAs
 #
+
 . `dirname $0`/include.sh
 
 [ $(uname) = "Linux" ] || err_exit "This test only runs on Linux"
 
-cleanup() {
-    sudo killall meshd-nl80211
-    rm -fr "${TMP0}" "${TMP1}"
-    exit 0
-}
-
-trap cleanup SIGINT
+wait_for_clean_start
 
 cfg='channel_width="80"; freq=5745; center_freq1=5775; center_freq2=0;'
 
@@ -30,7 +25,7 @@ for conf in ${CONFIGS[@]}; do
     let ctr=$(($ctr+1))
 done
 
-start_meshd $(get_hwsim_radios) || exit 2
+start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 wait_for_plinks $nradios
 
 grep -E -q "changing ht protection mode to: [^0]" /tmp/authsae*.log && \

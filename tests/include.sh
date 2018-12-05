@@ -1,5 +1,29 @@
 #!/bin/bash
 
+cleanup() {
+    sudo killall meshd-nl80211 2> /dev/null
+    rm -fr "${TMP0}" "${TMP1}"
+}
+
+trap cleanup EXIT
+
+
+wait_for_clean_start() {
+    cleanup
+
+    # Wait for no running meshd
+    local TRIES=50
+
+    for i in $(seq $TRIES); do
+        if [ $(ps -ax | grep "meshd-nl80211" | grep -v "grep" | wc -l) -eq 0 ]; then 
+            break
+        fi
+        sleep 1
+    done
+
+    [ $i -eq ${TRIES} ] && err_exit "Couldn't shut down meshd-nl80211"
+}
+
 load_hwsim() {
     local nradios=$1
     sudo modprobe -r mac80211-hwsim &> /dev/null
@@ -83,15 +107,17 @@ start_meshd() {
         iface="smesh$i"
         log=/tmp/authsae-$i.log
 
-        sudo iw phy $radio interface add $iface type mesh
-        sudo ip link set $iface up
+        if [ $(pgrep -f "meshd-nl80211 -i ${iface}" | wc -l) -eq 0 ]; then
+            sudo iw phy $radio interface add $iface type mesh
+            sudo ip link set $iface up
 
-        MESHD=$(dirname $(realpath $0))/../build/linux/meshd-nl80211
-        [ -x "${MESHD}" ] || err_exit "${MESHD} not found."
+            MESHD=$(dirname $(realpath $0))/../build/linux/meshd-nl80211
+            [ -x "${MESHD}" ] || err_exit "${MESHD} not found."
 
-        let i=$((i+1))
-        sudo rm -f $log
-        sudo ${MESHD} -i $iface -c $conf -o $log -B 2>>$log
+            let i=$((i+1))
+            sudo rm -f $log
+            sudo ${MESHD} -i $iface -c $conf -o $log -B 2>>$log
+        fi
 
         IFACES+=($iface)
         LOGS+=($log)
@@ -99,9 +125,8 @@ start_meshd() {
     wait
 }
 
-
 err_exit() {
-    echo $1
+    echo "FAIL: $1"
     exit 1
 }
 
@@ -117,6 +142,6 @@ wait_for_plinks() {
             sudo iw dev $iface station dump | grep -q ESTAB && break
             sleep 1
         done
-        [ $j -eq ${TRIES} ] && err_exit "FAIL: $iface failed to establish a link"
+        [ $j -eq ${TRIES} ] && err_exit "${iface} failed to establish a link"
     done
 }

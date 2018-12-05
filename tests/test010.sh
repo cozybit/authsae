@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# both ends close peer link when one side deletes its peer
+# re-ESTABs if one side is restarted without closing
 #
 
 . `dirname $0`/include.sh
@@ -22,16 +22,16 @@ start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 
 wait_for_plinks $nradios
 
-# Delete the peer from radio 1 -> radio 2
-sudo iw dev smesh0 station del $(cat /sys/class/net/smesh1/address)
+# Kill the meshd running on radio 1 without sending a close
+pkill -9 -f "meshd-nl80211 -i smesh0"
 
-sleep 1
+# Remove the old interface
+ip link set smesh0 down
+iw smesh0 del
 
-# Make sure it is no longer in ESTAB on either peer
-for iface in smesh0 smesh1; do
-    if sudo iw dev $iface station dump | grep -q ESTAB; then
-        err_exit "Did not de-ESTAB after peer deletion"
-    fi
-done
+# Restart meshd there and make sure it works
+start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
+
+wait_for_plinks $nradios
 
 echo PASS

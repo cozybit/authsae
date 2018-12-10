@@ -27,11 +27,9 @@ sudo iw dev smesh0 station del $(cat /sys/class/net/smesh1/address)
 
 sleep 1
 
-# Make sure it is no longer in ESTAB on either peer
-for iface in smesh0 smesh1; do
-    if sudo iw dev $iface station dump | grep -q ESTAB; then
-        err_exit "Did not de-ESTAB after peer deletion"
-    fi
+# Make sure both peers sent close
+for i in $LOGDIR/$TESTNAME/authsae*log; do
+    grep -q "Sending plink action 3" $i || err_exit "no close frame in $i"
 done
 
 echo PASS

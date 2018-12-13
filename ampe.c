@@ -323,12 +323,12 @@ static void plink_timer(void *data) {
         plink_frame_tx(cand, PLINK_OPEN, 0);
         break;
       }
-      reason = htole16(MESH_MAX_RETRIES);
+      reason = MESH_MAX_RETRIES;
     /* no break / fall through on else */
     case PLINK_CNF_RCVD:
       /* confirm timer */
       if (!reason)
-        reason = htole16(MESH_CONFIRM_TIMEOUT);
+        reason = MESH_CONFIRM_TIMEOUT;
       set_link_state(cand, PLINK_HOLDING);
       cb->evl->rem_timeout(cand->t2);
       cand->t2 = cb->evl->add_timeout(
@@ -638,6 +638,7 @@ static int plink_frame_tx(
   unsigned char *ies;
   unsigned char *pos;
   u16 peering_proto;
+  u16 close_reason;
   size_t alloc_len;
 
   assert(cand);
@@ -732,7 +733,8 @@ static int plink_frame_tx(
     ies += 2;
   }
   if (action == PLINK_CLOSE) {
-    memcpy(ies, &cand->reason, 2);
+    close_reason = htole16(reason);
+    memcpy(ies, &close_reason, 2);
     ies += 2;
   }
 
@@ -927,12 +929,11 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case OPN_RJCT:
         case CNF_RJCT:
         case REQ_RJCT:
-          reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+          reason = MESH_CAPABILITY_POLICY_VIOLATION;
         /* no break */
         case CLS_ACPT:
           if (!reason)
-            reason = htole16(MESH_CLOSE_RCVD);
-          cand->reason = reason;
+            reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
@@ -962,12 +963,11 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case OPN_RJCT:
         case CNF_RJCT:
         case REQ_RJCT:
-          reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+          reason = MESH_CAPABILITY_POLICY_VIOLATION;
         /* no break */
         case CLS_ACPT:
           if (!reason)
-            reason = htole16(MESH_CLOSE_RCVD);
-          cand->reason = reason;
+            reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
@@ -1014,12 +1014,11 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case OPN_RJCT:
         case CNF_RJCT:
         case REQ_RJCT:
-          reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+          reason = MESH_CAPABILITY_POLICY_VIOLATION;
         /* no break */
         case CLS_ACPT:
           if (!reason)
-            reason = htole16(MESH_CLOSE_RCVD);
-          cand->reason = reason;
+            reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
@@ -1064,10 +1063,10 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case OPN_RJCT:
         case CNF_RJCT:
         case REQ_RJCT:
-          reason = htole16(MESH_CAPABILITY_POLICY_VIOLATION);
+          reason = MESH_CAPABILITY_POLICY_VIOLATION;
         case CLS_ACPT:
-          reason = htole16(MESH_CLOSE_RCVD);
-          cand->reason = reason;
+          if (!reason)
+            reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
@@ -1098,7 +1097,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
         case OPN_RJCT:
         case CNF_RJCT:
         case REQ_RJCT:
-          reason = cand->reason;
           plink_frame_tx(cand, PLINK_CLOSE, reason);
           break;
         default:

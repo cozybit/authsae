@@ -54,7 +54,6 @@ struct candidate {
   le16 peer_lid;
   unsigned char my_nonce[32];
   unsigned char peer_nonce[32];
-  unsigned short reason;
   unsigned short retries;
   unsigned int timeout;
   unsigned char aek[SHA256_DIGEST_LENGTH];

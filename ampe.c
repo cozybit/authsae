@@ -632,7 +632,7 @@ static int plink_frame_tx(
   struct ht_cap_ie *ht_cap;
   struct ht_op_ie *ht_op;
   struct vht_op_ie *vht_op;
-  unsigned char ie_len;
+  unsigned char *ie_len_ptr;
   int len;
   int ret;
   unsigned char *ies;
@@ -712,31 +712,10 @@ static int plink_frame_tx(
   *ies++ = 0; /* TODO formation info */
   *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
 
-  ie_len = 4;
-  if (mesh->conf->is_secure) {
-    ie_len += sizeof(cand->pmkid);
-  }
-
   /* IE: Mesh Peering Management element */
-  switch (action) {
-    case PLINK_OPEN:
-      break;
-    case PLINK_CONFIRM:
-      ie_len += 2;
-      break;
-    case PLINK_CLOSE:
-      if (cand->peer_lid) {
-        ie_len += 2;
-      }
-      ie_len += 2; /* reason code */
-      break;
-    default:
-      free(buf);
-      return -EINVAL;
-  }
-
   *ies++ = IEEE80211_EID_MESH_PEERING;
-  *ies++ = ie_len;
+  ie_len_ptr = ies;
+  ies++;
 
   if (mesh->conf->is_secure) {
     peering_proto = htole16(1);
@@ -744,8 +723,8 @@ static int plink_frame_tx(
     peering_proto = 0;
   }
   memcpy(ies, &peering_proto, 2);
-
   ies += 2;
+
   memcpy(ies, &cand->my_lid, 2);
   ies += 2;
   if (cand->peer_lid && (action != PLINK_OPEN)) {
@@ -761,6 +740,7 @@ static int plink_frame_tx(
     memcpy(ies, cand->pmkid, sizeof(cand->pmkid));
     ies += sizeof(cand->pmkid);
   }
+  *ie_len_ptr = ies - ie_len_ptr - 1;
 
   if (action != PLINK_CLOSE &&
       mesh->conf->channel_width != CHAN_WIDTH_20_NOHT &&

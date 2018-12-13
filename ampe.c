@@ -627,8 +627,8 @@ static int plink_frame_tx(
     unsigned short reason) {
   unsigned char *buf;
   struct ieee80211_mgmt_frame *mgmt;
-  struct mesh_node *mesh = cand->conf->mesh;
-  struct ieee80211_supported_band *sband = &mesh->bands[mesh->band];
+  struct mesh_node *mesh;
+  struct ieee80211_supported_band *sband;
   struct ht_cap_ie *ht_cap;
   struct ht_op_ie *ht_op;
   struct vht_op_ie *vht_op;
@@ -642,6 +642,10 @@ static int plink_frame_tx(
   size_t alloc_len;
 
   assert(cand);
+  assert(cand->conf);
+
+  mesh = cand->conf->mesh;
+  sband = &mesh->bands[mesh->band];
 
   alloc_len = sizeof(struct ieee80211_mgmt_frame) + 2 + /* capability info */
       2 + /* aid */
@@ -1163,6 +1167,19 @@ int ampe_close_peer_link(unsigned char *peer_mac) {
     sae_debug(
         AMPE_DEBUG_FSM,
         "Mesh plink: Attempt to close link with non-existent peer\n");
+    return -EPERM;
+  }
+
+  if (!cand->conf) {
+    /*
+     * This can happen if we get a delete event for a station but they
+     * haven't yet advanced to link establishment phase.  No need to send
+     * a close then.
+     */
+    sae_debug(
+        AMPE_DEBUG_FSM,
+        "Mesh plink: not sending close to uninitialized peer " MACSTR "\n",
+        MAC2STR(peer_mac));
     return -EPERM;
   }
 

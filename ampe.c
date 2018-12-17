@@ -142,9 +142,8 @@ static void *memdup(const void *src, size_t size) {
   return dst;
 }
 
-static int plink_free_count() {
-  sae_debug(AMPE_DEBUG_FSM, "TODO: return available peer link slots\n");
-  return 99;
+static int plink_free_count(struct mesh_node *mesh) {
+  return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
 }
 
 static inline unsigned char *
@@ -714,8 +713,11 @@ static int plink_frame_tx(
     *ies++ = 0;
   }
 
-  *ies++ = 0; /* TODO formation info */
-  *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
+  /* formation info */
+  *ies++ = MIN(mesh->num_estab, 63) << 1;
+
+  *ies++ = (plink_free_count(mesh) > 0 ? MESH_CAPA_ACCEPT_PEERINGS : 0) |
+      MESH_CAPA_FORWARDING;
 
   /* IE: Mesh Peering Management element */
   *ies++ = IEEE80211_EID_MESH_PEERING;
@@ -922,9 +924,8 @@ static uint32_t do_estab_peer_link(struct candidate *cand) {
   set_link_state(cand, PLINK_ESTAB);
   changed = mesh_set_ht_op_mode(cand->conf->mesh);
 
-  // TODO: update the number of available peer "slots" in mesh config
-  // mesh_plink_inc_estab_count(sdata);
-  // ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
+  cand->conf->mesh->num_estab++;
+
   sae_debug(
       AMPE_DEBUG_FSM,
       "Mesh plink with " MACSTR " ESTABLISHED\n",
@@ -1056,6 +1057,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           if (!reason)
             reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
+          cand->conf->mesh->num_estab--;
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
           cand->t2 =
@@ -1166,6 +1168,9 @@ int ampe_close_peer_link(unsigned char *peer_mac) {
       AMPE_DEBUG_FSM,
       "Mesh plink: closing link with " MACSTR "\n",
       MAC2STR(peer_mac));
+
+  if (cand->link_state == PLINK_ESTAB)
+    cand->conf->mesh->num_estab--;
 
   return plink_frame_tx(cand, PLINK_CLOSE, MESH_LINK_CANCELLED);
 }
@@ -1392,7 +1397,8 @@ int process_ampe_frame(
       if (!matches_local(ampe_conf.mesh, &elems))
         event = OPN_RJCT;
       else if (
-          !plink_free_count() || (cand->peer_lid && cand->peer_lid != plid))
+          !plink_free_count(ampe_conf.mesh) ||
+          (cand->peer_lid && cand->peer_lid != plid))
         event = REQ_RJCT;
       else {
         cand->peer_lid = plid;
@@ -1403,7 +1409,7 @@ int process_ampe_frame(
       if (!matches_local(ampe_conf.mesh, &elems))
         event = CNF_RJCT;
       else if (
-          !plink_free_count() ||
+          !plink_free_count(ampe_conf.mesh) ||
           (cand->my_lid != llid || cand->peer_lid != plid))
         event = REQ_RJCT;
       else

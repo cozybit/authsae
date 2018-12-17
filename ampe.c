@@ -1077,9 +1077,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           changed |= mesh_set_ht_op_mode(cand->conf->mesh);
-          // TODO: update the number of available peer "slots" in mesh config
-          // if (deactivated)
-          //	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
           plink_frame_tx(cand, PLINK_CLOSE, reason);
           break;
         case OPN_ACPT:
@@ -1092,8 +1089,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
     case PLINK_HOLDING:
       switch (event) {
         case CLS_ACPT:
-          // if (del_timer(&cand->plink_timer))
-          //	cand->ignore_plink_timer = 1;
           fsm_restart(cand);
           break;
         case OPN_ACPT:
@@ -1307,15 +1302,9 @@ int process_ampe_frame(
   if (len < 24 + 1 + 1 + 2 + 2)
     return 0;
 
-  // if (is_multicast_ether_addr(mgmt->da)) {
-  //	sae_debug(AMPE_DEBUG_FSM, "Mesh plink: ignore frame to multicast
-  // address");
-  //	return 0;
-  //}
-
   ies = start_of_ies(mgmt, len, &ies_len);
   parse_ies(ies, ies_len, &elems);
-  if (!elems.mesh_peering) { // || !elems.rsn) {
+  if (!elems.mesh_peering) {
     sae_debug(AMPE_DEBUG_FSM, "Mesh plink: missing necessary peer link ie\n");
     return 0;
   }

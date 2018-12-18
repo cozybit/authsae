@@ -142,9 +142,8 @@ static void *memdup(const void *src, size_t size) {
   return dst;
 }
 
-static int plink_free_count() {
-  sae_debug(AMPE_DEBUG_FSM, "TODO: return available peer link slots\n");
-  return 99;
+static int plink_free_count(struct mesh_node *mesh) {
+  return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
 }
 
 static inline unsigned char *
@@ -714,8 +713,11 @@ static int plink_frame_tx(
     *ies++ = 0;
   }
 
-  *ies++ = 0; /* TODO formation info */
-  *ies++ = MESH_CAPA_ACCEPT_PEERINGS | MESH_CAPA_FORWARDING;
+  /* formation info */
+  *ies++ = MIN(mesh->num_estab, 63) << 1;
+
+  *ies++ = (plink_free_count(mesh) > 0 ? MESH_CAPA_ACCEPT_PEERINGS : 0) |
+      MESH_CAPA_FORWARDING;
 
   /* IE: Mesh Peering Management element */
   *ies++ = IEEE80211_EID_MESH_PEERING;
@@ -903,6 +905,35 @@ static void derive_mtk(struct candidate *cand) {
   sae_hexdump(AMPE_DEBUG_KEYS, "mtk: ", cand->mtk, sizeof(cand->mtk));
 }
 
+static uint32_t do_estab_peer_link(struct candidate *cand) {
+  uint32_t changed;
+  derive_mtk(cand);
+  cb->estab_peer_link(
+      cand->peer_mac,
+      cand->mtk,
+      sizeof(cand->mtk),
+      cand->mgtk,
+      sizeof(cand->mgtk),
+      cand->mgtk_expiration,
+      (cand->has_igtk) ? cand->igtk : NULL,
+      (cand->has_igtk) ? sizeof(cand->igtk) : 0,
+      cand->igtk_keyid,
+      cand->sup_rates,
+      cand->sup_rates_len,
+      cand->cookie);
+  set_link_state(cand, PLINK_ESTAB);
+  changed = mesh_set_ht_op_mode(cand->conf->mesh);
+
+  cand->conf->mesh->num_estab++;
+
+  sae_debug(
+      AMPE_DEBUG_FSM,
+      "Mesh plink with " MACSTR " ESTABLISHED\n",
+      MAC2STR(cand->peer_mac));
+  rekey_verify_peer(cand);
+  return changed;
+}
+
 static void fsm_step(struct candidate *cand, enum plink_event event) {
   struct ampe_config *aconf = cand->conf;
   unsigned short reason = 0;
@@ -983,30 +1014,7 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           plink_frame_tx(cand, PLINK_CONFIRM, 0);
           break;
         case CNF_ACPT:
-          // del_timer(&cand->plink_timer);
-          // mesh_plink_inc_estab_count(sdata);
-          // ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
-          derive_mtk(cand);
-          cb->estab_peer_link(
-              cand->peer_mac,
-              cand->mtk,
-              sizeof(cand->mtk),
-              cand->mgtk,
-              sizeof(cand->mgtk),
-              cand->mgtk_expiration,
-              (cand->has_igtk) ? cand->igtk : NULL,
-              (cand->has_igtk) ? sizeof(cand->igtk) : 0,
-              cand->igtk_keyid,
-              cand->sup_rates,
-              cand->sup_rates_len,
-              cand->cookie);
-          set_link_state(cand, PLINK_ESTAB);
-          changed |= mesh_set_ht_op_mode(cand->conf->mesh);
-          sae_debug(
-              AMPE_DEBUG_FSM,
-              "mesh plink with " MACSTR " established\n",
-              MAC2STR(cand->peer_mac));
-          rekey_verify_peer(cand);
+          changed |= do_estab_peer_link(cand);
           break;
         default:
           break;
@@ -1031,31 +1039,8 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           plink_frame_tx(cand, PLINK_CLOSE, reason);
           break;
         case OPN_ACPT:
-          derive_mtk(cand);
-          cb->estab_peer_link(
-              cand->peer_mac,
-              cand->mtk,
-              sizeof(cand->mtk),
-              cand->mgtk,
-              sizeof(cand->mgtk),
-              cand->mgtk_expiration,
-              (cand->has_igtk) ? cand->igtk : NULL,
-              (cand->has_igtk) ? sizeof(cand->igtk) : 0,
-              cand->igtk_keyid,
-              cand->sup_rates,
-              cand->sup_rates_len,
-              cand->cookie);
-          set_link_state(cand, PLINK_ESTAB);
-          changed |= mesh_set_ht_op_mode(cand->conf->mesh);
-          // TODO: update the number of available peer "slots" in mesh config
-          // mesh_plink_inc_estab_count(sdata);
-          // ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
-          sae_debug(
-              AMPE_DEBUG_FSM,
-              "Mesh plink with " MACSTR " ESTABLISHED\n",
-              MAC2STR(cand->peer_mac));
+          changed |= do_estab_peer_link(cand);
           plink_frame_tx(cand, PLINK_CONFIRM, 0);
-          rekey_verify_peer(cand);
           break;
         default:
           break;
@@ -1072,14 +1057,12 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           if (!reason)
             reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
+          cand->conf->mesh->num_estab--;
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
           cand->t2 =
               cb->evl->add_timeout(SRV_MSEC(cand->timeout), plink_timer, cand);
           changed |= mesh_set_ht_op_mode(cand->conf->mesh);
-          // TODO: update the number of available peer "slots" in mesh config
-          // if (deactivated)
-          //	ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON);
           plink_frame_tx(cand, PLINK_CLOSE, reason);
           break;
         case OPN_ACPT:
@@ -1092,8 +1075,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
     case PLINK_HOLDING:
       switch (event) {
         case CLS_ACPT:
-          // if (del_timer(&cand->plink_timer))
-          //	cand->ignore_plink_timer = 1;
           fsm_restart(cand);
           break;
         case OPN_ACPT:
@@ -1187,6 +1168,9 @@ int ampe_close_peer_link(unsigned char *peer_mac) {
       AMPE_DEBUG_FSM,
       "Mesh plink: closing link with " MACSTR "\n",
       MAC2STR(peer_mac));
+
+  if (cand->link_state == PLINK_ESTAB)
+    cand->conf->mesh->num_estab--;
 
   return plink_frame_tx(cand, PLINK_CLOSE, MESH_LINK_CANCELLED);
 }
@@ -1307,15 +1291,9 @@ int process_ampe_frame(
   if (len < 24 + 1 + 1 + 2 + 2)
     return 0;
 
-  // if (is_multicast_ether_addr(mgmt->da)) {
-  //	sae_debug(AMPE_DEBUG_FSM, "Mesh plink: ignore frame to multicast
-  // address");
-  //	return 0;
-  //}
-
   ies = start_of_ies(mgmt, len, &ies_len);
   parse_ies(ies, ies_len, &elems);
-  if (!elems.mesh_peering) { // || !elems.rsn) {
+  if (!elems.mesh_peering) {
     sae_debug(AMPE_DEBUG_FSM, "Mesh plink: missing necessary peer link ie\n");
     return 0;
   }
@@ -1419,7 +1397,8 @@ int process_ampe_frame(
       if (!matches_local(ampe_conf.mesh, &elems))
         event = OPN_RJCT;
       else if (
-          !plink_free_count() || (cand->peer_lid && cand->peer_lid != plid))
+          !plink_free_count(ampe_conf.mesh) ||
+          (cand->peer_lid && cand->peer_lid != plid))
         event = REQ_RJCT;
       else {
         cand->peer_lid = plid;
@@ -1430,7 +1409,7 @@ int process_ampe_frame(
       if (!matches_local(ampe_conf.mesh, &elems))
         event = CNF_RJCT;
       else if (
-          !plink_free_count() ||
+          !plink_free_count(ampe_conf.mesh) ||
           (cand->my_lid != llid || cand->peer_lid != plid))
         event = REQ_RJCT;
       else

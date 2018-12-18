@@ -1232,6 +1232,13 @@ static int join_mesh(struct netlink_ctx *nlcfg, struct mesh_node *mesh) {
         msg, NL80211_MESHCONF_HWMP_ROOT_INTERVAL, mconf->hwmp_root_interval);
   }
 
+  if (mconf->max_plinks > 0) {
+    NLA_PUT_U32(
+        msg,
+        NL80211_MESHCONF_MAX_PEER_LINKS,
+        mconf->max_plinks);
+  }
+
   nla_nest_end(msg, container);
 
   container = nla_nest_start(msg, NL80211_ATTR_MESH_SETUP);
@@ -1553,6 +1560,7 @@ static int meshd_parse_libconfig(
   CONFIG_LOOKUP(
       "hwmp-active-path-to-root-timeout", hwmp_active_path_to_root_timeout, -1);
   CONFIG_LOOKUP("hwmp-root-interval", hwmp_root_interval, -1);
+  CONFIG_LOOKUP("max-plinks", max_plinks, 63);
 
   config->band = MESHD_11b;
 
@@ -1964,6 +1972,9 @@ int main(int argc, char *argv[]) {
   /* default to mcast-rate of 12 Mbps */
   if (meshd_conf.mcast_rate <= 0)
     meshd_conf.mcast_rate = 12;
+
+  if (meshd_conf.max_plinks <= 0)
+    meshd_conf.max_plinks = 63;
 
   mesh.channel_width = meshd_conf.channel_width;
   mesh.control_freq = meshd_conf.control_freq;

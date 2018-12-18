@@ -85,4 +85,11 @@ typedef int config_int_t;
 typedef long int config_int_t;
 #endif
 
+#ifndef MIN
+#define MIN(x,y) (((x) < (y)) ? (x) : (y))
+#endif
+#ifndef MAX
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#endif
+
 #endif /* _SAE_COMMON_H_ */

@@ -1194,25 +1194,67 @@ static uint32_t get_basic_rates(struct info_elems *elems) {
   return basic_rates;
 }
 
-static bool matches_local(struct mesh_node *mesh, struct info_elems *elems) {
-  if (!elems->mesh_id || !elems->mesh_config)
-    return false;
+static void log_reject(struct candidate *cand, const char *reason) {
+  sae_debug(
+      AMPE_DEBUG_FSM,
+      "Mesh plink: rejecting action frame from " MACSTR " due to %s\n",
+      MAC2STR(cand->peer_mac),
+      reason);
+}
 
-  if (elems->mesh_config_len < 5)
+static bool matches_local(
+    struct mesh_node *mesh,
+    struct candidate *cand,
+    struct info_elems *elems) {
+  char auth_algo = (mesh->conf->is_secure) ? MESH_CONFIG_AUTH_SAE : 0;
+
+  if (!elems->mesh_id) {
+    log_reject(cand, "missing mesh ID IE");
     return false;
+  }
+
+  if (!elems->mesh_config) {
+    log_reject(cand, "missing mesh config IE");
+    return false;
+  }
+
+  if (elems->mesh_config_len < 5) {
+    log_reject(cand, "invalid mesh config IE");
+    return false;
+  }
 
   if (elems->mesh_id_len != mesh->conf->meshid_len ||
-      memcmp(elems->mesh_id, mesh->conf->meshid, mesh->conf->meshid_len))
+      memcmp(elems->mesh_id, mesh->conf->meshid, mesh->conf->meshid_len)) {
+    log_reject(cand, "mesh ID does not match");
     return false;
+  }
 
-  return (
-      elems->mesh_config[0] == MESH_CONFIG_PP_HWMP &&
-              elems->mesh_config[1] == MESH_CONFIG_PM_ALM &&
-              elems->mesh_config[2] == MESH_CONFIG_CC_NONE &&
-              elems->mesh_config[3] == MESH_CONFIG_SP_NEIGHBOR_OFFSET &&
-              elems->mesh_config[4] == (mesh->conf->is_secure)
-          ? MESH_CONFIG_AUTH_SAE
-          : 0);
+  if (elems->mesh_config[0] != MESH_CONFIG_PP_HWMP) {
+    log_reject(cand, "mismatched path protocol");
+    return false;
+  }
+
+  if (elems->mesh_config[1] != MESH_CONFIG_PM_ALM) {
+    log_reject(cand, "mismatched link metric");
+    return false;
+  }
+
+  if (elems->mesh_config[2] != MESH_CONFIG_CC_NONE) {
+    log_reject(cand, "mismatched congestion control");
+    return false;
+  }
+
+  if (elems->mesh_config[3] != MESH_CONFIG_SP_NEIGHBOR_OFFSET) {
+    log_reject(cand, "mismatched sync protocol");
+    return false;
+  }
+
+  if (elems->mesh_config[4] != auth_algo) {
+    log_reject(cand, "mismatched auth algo");
+    return false;
+  }
+
+  return true;
 }
 
 void ampe_set_peer_ies(struct candidate *cand, struct info_elems *elems) {
@@ -1394,25 +1436,32 @@ int process_ampe_frame(
 
   switch (ftype) {
     case PLINK_OPEN:
-      if (!matches_local(ampe_conf.mesh, &elems))
+      if (!matches_local(ampe_conf.mesh, cand, &elems))
         event = OPN_RJCT;
-      else if (
-          !plink_free_count(ampe_conf.mesh) ||
-          (cand->peer_lid && cand->peer_lid != plid))
+      else if (!plink_free_count(ampe_conf.mesh)) {
+        log_reject(cand, "no free peer links");
         event = REQ_RJCT;
-      else {
+      } else if (cand->peer_lid && cand->peer_lid != plid) {
+        log_reject(cand, "invalid peer link id");
+        event = REQ_RJCT;
+      } else {
         cand->peer_lid = plid;
         event = OPN_ACPT;
       }
       break;
     case PLINK_CONFIRM:
-      if (!matches_local(ampe_conf.mesh, &elems))
+      if (!matches_local(ampe_conf.mesh, cand, &elems))
         event = CNF_RJCT;
-      else if (
-          !plink_free_count(ampe_conf.mesh) ||
-          (cand->my_lid != llid || cand->peer_lid != plid))
+      else if (!plink_free_count(ampe_conf.mesh)) {
+        log_reject(cand, "no free peer links");
         event = REQ_RJCT;
-      else
+      } else if (cand->my_lid != llid) {
+        log_reject(cand, "invalid local link id");
+        event = REQ_RJCT;
+      } else if (cand->peer_lid != plid) {
+        log_reject(cand, "invalid peer link id");
+        event = REQ_RJCT;
+      } else
         event = CNF_ACPT;
       break;
     case PLINK_CLOSE:

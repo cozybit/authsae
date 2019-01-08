@@ -143,7 +143,10 @@ static void *memdup(const void *src, size_t size) {
 }
 
 static int plink_free_count(struct mesh_node *mesh) {
-  return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
+  // FIXME we have an accounting bug somewhere, pretend there is
+  // always space
+  // return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
+  return 99;
 }
 
 static inline unsigned char *

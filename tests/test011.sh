@@ -26,12 +26,12 @@ at_limit=0
 for i in $(seq 0 $((nradios-1))); do
     iface=${IFACES[$i]}
     ct=$(sudo iw dev $iface station dump | grep ESTAB | wc -l)
-    [ $ct -le $max_peers ] || err_exit "$iface had $ct > $num_peers peers"
+    [ $ct -le $max_peers ] || err_exit "$iface had $ct > $max_peers peers"
     if [ $ct -eq $max_peers ]; then
       at_limit=1
     fi
 done
 
-[ $at_limit -eq 1 ] || err_exit "no interface at limit of $num_peers peers"
+[ $at_limit -eq 1 ] || err_exit "no interface at limit of $max_peers peers"
 
 echo PASS

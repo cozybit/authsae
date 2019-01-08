@@ -526,14 +526,14 @@ static int check_frame_protection(
       ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
     sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
     return -1;
-  }
 
-  /* if PMF, then we also need IGTKData */
-  if (mesh->conf->pmf) {
-    if (ampe_ie_len <
-        2 + sizeof(struct ampe_ie) + 16 + 8 + 4 + 2 + 6 + 16 /* IGTKData */) {
-      sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE missing IGTK\n");
-      return -1;
+    /* if PMF, then we also need IGTKData */
+    if (mesh->conf->pmf) {
+      if (ampe_ie_len <
+          2 + sizeof(struct ampe_ie) + 16 + 8 + 4 + 2 + 6 + 16 /* IGTKData */) {
+        sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE missing IGTK\n");
+        return -1;
+      }
     }
   }
 
@@ -597,6 +597,9 @@ static int check_frame_protection(
   }
 
   sae_hexdump(AMPE_DEBUG_KEYS, "AMPE IE: ", clear_ampe_ie, ampe_ie_len);
+
+  if (ftype == PLINK_CLOSE)
+    return 0;
 
   parse_ies(clear_ampe_ie, ampe_ie_len, &ies_parsed);
 

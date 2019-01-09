@@ -143,7 +143,10 @@ static void *memdup(const void *src, size_t size) {
 }
 
 static int plink_free_count(struct mesh_node *mesh) {
-  return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
+  // FIXME we have an accounting bug somewhere, pretend there is
+  // always space
+  // return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
+  return 99;
 }
 
 static inline unsigned char *
@@ -1521,7 +1524,7 @@ int ampe_initialize(struct mesh_node *mesh, struct ampe_cb *callbacks) {
 
   /* TODO: move these to a config file */
   ampe_conf.retry_timeout_ms = 1000;
-  ampe_conf.holding_timeout_ms = 1000;
+  ampe_conf.holding_timeout_ms = 10000;
   ampe_conf.confirm_timeout_ms = 1000;
   ampe_conf.max_retries = 10;
   ampe_conf.mesh = mesh;

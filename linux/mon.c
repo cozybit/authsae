@@ -219,7 +219,7 @@ static void add_interface(char *ptr) {
 
 int main(int argc, char **argv) {
   int c, ret;
-  char confdir[80], conffile[80], mesh_interface[10];
+  char confdir[80], conffile[100], mesh_interface[10];
   char str[80], *ptr;
   FILE *fp;
 

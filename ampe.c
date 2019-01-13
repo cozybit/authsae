@@ -1274,18 +1274,26 @@ void ampe_set_peer_ies(struct candidate *cand, struct info_elems *elems) {
   }
 
   if (elems->ht_cap) {
+    if (cand->ht_cap)
+        free(cand->ht_cap);
     cand->ht_cap = memdup(elems->ht_cap, elems->ht_cap_len);
   }
 
   if (elems->ht_info) {
+    if (cand->ht_info)
+        free(cand->ht_info);
     cand->ht_info = memdup(elems->ht_info, elems->ht_info_len);
   }
 
   if (elems->vht_cap) {
+    if (cand->vht_cap)
+        free(cand->vht_cap);
     cand->vht_cap = memdup(elems->vht_cap, elems->vht_cap_len);
   }
 
   if (elems->vht_info) {
+    if (cand->vht_info)
+        free(cand->vht_info);
     cand->vht_info = memdup(elems->vht_info, elems->vht_info_len);
   }
 

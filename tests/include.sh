@@ -134,6 +134,20 @@ err_exit() {
     exit 1
 }
 
+restart_meshd() {
+    local if=$1
+
+    # Kill the meshd running on radio 1 without sending a close
+    pkill -9 -f "meshd-nl80211 -i $if"
+
+    # Remove the old interface
+    ip link set $if down
+    iw $if del
+
+    # Restart meshd there and make sure it works
+    start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
+}
+
 wait_for_plinks() {
     local nradios=$1
 

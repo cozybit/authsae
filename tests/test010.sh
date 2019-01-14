@@ -22,16 +22,7 @@ start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 
 wait_for_plinks $nradios
 
-# Kill the meshd running on radio 1 without sending a close
-pkill -9 -f "meshd-nl80211 -i smesh0"
-
-# Remove the old interface
-ip link set smesh0 down
-iw smesh0 del
-
-# Restart meshd there and make sure it works
-start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
-
+restart_meshd smesh0
 wait_for_plinks $nradios
 
 echo PASS

@@ -142,11 +142,19 @@ static void *memdup(const void *src, size_t size) {
   return dst;
 }
 
+static int plink_estab_count() {
+  struct candidate *peer;
+  int count = 0;
+
+  for_each_peer(peer) {
+    if (peer->link_state == PLINK_ESTAB)
+      count++;
+  }
+  return count;
+}
+
 static int plink_free_count(struct mesh_node *mesh) {
-  // FIXME we have an accounting bug somewhere, pretend there is
-  // always space
-  // return MAX(mesh->conf->max_plinks - mesh->num_estab, 0);
-  return 99;
+  return MAX(mesh->conf->max_plinks - plink_estab_count(), 0);
 }
 
 static inline unsigned char *
@@ -642,6 +650,8 @@ static int plink_frame_tx(
   u16 peering_proto;
   u16 close_reason;
   size_t alloc_len;
+  int peer_count;
+  unsigned char mesh_capa;
 
   assert(cand);
   assert(cand->conf);
@@ -717,10 +727,13 @@ static int plink_frame_tx(
   }
 
   /* formation info */
-  *ies++ = MIN(mesh->num_estab, 63) << 1;
+  peer_count = plink_estab_count();
+  *ies++ = MIN(peer_count, 63) << 1;
 
-  *ies++ = (plink_free_count(mesh) > 0 ? MESH_CAPA_ACCEPT_PEERINGS : 0) |
-      MESH_CAPA_FORWARDING;
+  mesh_capa = MESH_CAPA_FORWARDING;
+  if (peer_count < mesh->conf->max_plinks)
+    mesh_capa |= MESH_CAPA_ACCEPT_PEERINGS;
+  *ies++ = mesh_capa;
 
   /* IE: Mesh Peering Management element */
   *ies++ = IEEE80211_EID_MESH_PEERING;
@@ -927,8 +940,6 @@ static uint32_t do_estab_peer_link(struct candidate *cand) {
   set_link_state(cand, PLINK_ESTAB);
   changed = mesh_set_ht_op_mode(cand->conf->mesh);
 
-  cand->conf->mesh->num_estab++;
-
   sae_debug(
       AMPE_DEBUG_FSM,
       "Mesh plink with " MACSTR " ESTABLISHED\n",
@@ -1060,7 +1071,6 @@ static void fsm_step(struct candidate *cand, enum plink_event event) {
           if (!reason)
             reason = MESH_CLOSE_RCVD;
           set_link_state(cand, PLINK_HOLDING);
-          cand->conf->mesh->num_estab--;
           cand->timeout = aconf->holding_timeout_ms;
           cb->evl->rem_timeout(cand->t2);
           cand->t2 =
@@ -1171,9 +1181,6 @@ int ampe_close_peer_link(unsigned char *peer_mac) {
       AMPE_DEBUG_FSM,
       "Mesh plink: closing link with " MACSTR "\n",
       MAC2STR(peer_mac));
-
-  if (cand->link_state == PLINK_ESTAB)
-    cand->conf->mesh->num_estab--;
 
   return plink_frame_tx(cand, PLINK_CLOSE, MESH_LINK_CANCELLED);
 }

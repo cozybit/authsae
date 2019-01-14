@@ -128,8 +128,6 @@ struct mesh_node {
   int igtk_keyid;
   uint8_t igtk_ipn[6];
   uint8_t igtk_tx[16];
-
-  int num_estab;
 };
 
 struct ampe_config {

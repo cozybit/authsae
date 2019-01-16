@@ -393,7 +393,7 @@ static int protect_frame(
 
   ampe_ie_len = sizeof(struct ampe_ie);
 
-  if (ftype != PLINK_CLOSE) {
+  if (ftype == PLINK_OPEN) {
     /* MGTK + RSC + Exp */
     ampe_ie_len += 16 + 8 + 4;
 
@@ -427,7 +427,7 @@ static int protect_frame(
   memcpy(ie, cand->peer_nonce, 32);
   ie += 32;
 
-  if (ftype != PLINK_CLOSE) {
+  if (ftype == PLINK_OPEN) {
     memcpy(ie, mgtk_tx, 16);
     ie += 16;
     memset(ie, 0, 8); /*  TODO: Populate Key RSC */

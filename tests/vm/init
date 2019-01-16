@@ -9,6 +9,7 @@ dmesg -n 1
 cd /local/tests
 echo "--- begin tests ---"
 export LOGDIR=/local/tests/vm/testout/logs
+export IN_VM=1
 ./run_tests.sh
 echo "--- end tests ---"
 poweroff -f

@@ -153,6 +153,9 @@ wait_for_plinks() {
 
     # Wait for peer link establishment
     TRIES=50
+    if [ "$IN_VM" -eq 1 ]; then
+        TRIES=200
+    fi
     for i in $(seq 0 $((nradios-1))); do
         log=${LOGS[$i]}
         iface=${IFACES[$i]}

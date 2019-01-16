@@ -258,6 +258,7 @@ static void peer_ampe_init(
 
   RAND_bytes((unsigned char *)&llid, sizeof(llid));
   RAND_bytes(cand->my_nonce, sizeof(cand->my_nonce));
+  memset(cand->peer_nonce, 0, sizeof(cand->peer_nonce));
   cand->cookie = cookie;
   cand->my_lid = llid;
   cand->peer_lid = 0;
@@ -611,7 +612,10 @@ static bool protection_is_valid(
     free(clear_ampe_ie);
     return false;
   }
-  memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
+
+  if (memcmp(cand->peer_nonce, null_nonce, 32) == 0) {
+    memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
+  }
 
   gtkdata = ies_parsed.ampe->variable;
 

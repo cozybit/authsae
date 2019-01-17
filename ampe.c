@@ -522,8 +522,8 @@ static bool protection_is_valid(
    */
   ampe_ie_len = len - (elems->mic + elems->mic_len - (unsigned char *)mgmt);
 
-  /* expect at least MGTK + RSC + expiry for open/confirm */
-  if (ftype != PLINK_CLOSE &&
+  /* expect at least MGTK + RSC + expiry for open */
+  if (ftype == PLINK_OPEN &&
       ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
     sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
     return false;
@@ -599,9 +599,6 @@ static bool protection_is_valid(
 
   sae_hexdump(AMPE_DEBUG_KEYS, "AMPE IE: ", clear_ampe_ie, ampe_ie_len);
 
-  if (ftype == PLINK_CLOSE)
-    return true;
-
   parse_ies(clear_ampe_ie, ampe_ie_len, &ies_parsed);
 
   if (memcmp(ies_parsed.ampe->peer_nonce, null_nonce, 32) != 0 &&
@@ -616,6 +613,10 @@ static bool protection_is_valid(
   if (memcmp(cand->peer_nonce, null_nonce, 32) == 0) {
     memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
   }
+
+  /* everything from here on out requires MGTKData */
+  if (ftype != PLINK_OPEN)
+    return true;
 
   gtkdata = ies_parsed.ampe->variable;
 

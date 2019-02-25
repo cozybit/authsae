@@ -258,6 +258,7 @@ static void peer_ampe_init(
 
   RAND_bytes((unsigned char *)&llid, sizeof(llid));
   RAND_bytes(cand->my_nonce, sizeof(cand->my_nonce));
+  memset(cand->peer_nonce, 0, sizeof(cand->peer_nonce));
   cand->cookie = cookie;
   cand->my_lid = llid;
   cand->peer_lid = 0;
@@ -392,7 +393,7 @@ static int protect_frame(
 
   ampe_ie_len = sizeof(struct ampe_ie);
 
-  if (ftype != PLINK_CLOSE) {
+  if (ftype == PLINK_OPEN) {
     /* MGTK + RSC + Exp */
     ampe_ie_len += 16 + 8 + 4;
 
@@ -426,7 +427,7 @@ static int protect_frame(
   memcpy(ie, cand->peer_nonce, 32);
   ie += 32;
 
-  if (ftype != PLINK_CLOSE) {
+  if (ftype == PLINK_OPEN) {
     memcpy(ie, mgtk_tx, 16);
     ie += 16;
     memset(ie, 0, 8); /*  TODO: Populate Key RSC */
@@ -490,7 +491,7 @@ static int protect_frame(
   return 0;
 }
 
-static int check_frame_protection(
+static bool protection_is_valid(
     struct candidate *cand,
     struct ieee80211_mgmt_frame *mgmt,
     int len,
@@ -507,11 +508,11 @@ static int check_frame_protection(
   assert(len && cand && mgmt);
 
   if (!mesh->conf->is_secure)
-    return 0;
+    return true;
 
   if (!elems->mic || elems->mic_len != MIC_IE_BODY_SIZE) {
     sae_debug(AMPE_DEBUG_KEYS, "Verify frame: invalid MIC\n");
-    return -1;
+    return false;
   }
 
   /*
@@ -521,26 +522,26 @@ static int check_frame_protection(
    */
   ampe_ie_len = len - (elems->mic + elems->mic_len - (unsigned char *)mgmt);
 
-  /* expect at least MGTK + RSC + expiry for open/confirm */
-  if (ftype != PLINK_CLOSE &&
+  /* expect at least MGTK + RSC + expiry for open */
+  if (ftype == PLINK_OPEN &&
       ampe_ie_len < 2 + sizeof(struct ampe_ie) + 16 + 8 + 4) {
     sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE too small\n");
-    return -1;
-  }
+    return false;
 
-  /* if PMF, then we also need IGTKData */
-  if (mesh->conf->pmf) {
-    if (ampe_ie_len <
-        2 + sizeof(struct ampe_ie) + 16 + 8 + 4 + 2 + 6 + 16 /* IGTKData */) {
-      sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE missing IGTK\n");
-      return -1;
+    /* if PMF, then we also need IGTKData */
+    if (mesh->conf->pmf) {
+      if (ampe_ie_len <
+          2 + sizeof(struct ampe_ie) + 16 + 8 + 4 + 2 + 6 + 16 /* IGTKData */) {
+        sae_debug(AMPE_DEBUG_KEYS, "Verify frame: AMPE IE missing IGTK\n");
+        return false;
+      }
     }
   }
 
   clear_ampe_ie = malloc(ampe_ie_len);
   if (!clear_ampe_ie) {
     sae_debug(AMPE_DEBUG_KEYS, "Verify frame: out of memory\n");
-    return -1;
+    return false;
   }
 
   /*
@@ -583,7 +584,7 @@ static int check_frame_protection(
   if (r != 1) {
     sae_debug(AMPE_DEBUG_KEYS, "Protection check failed\n");
     free(clear_ampe_ie);
-    return -1;
+    return false;
   }
 
   if (ampe_ie_len != clear_ampe_ie[1] + 2) {
@@ -593,7 +594,7 @@ static int check_frame_protection(
         ampe_ie_len,
         clear_ampe_ie[1] + 2);
     free(clear_ampe_ie);
-    return -1;
+    return false;
   }
 
   sae_hexdump(AMPE_DEBUG_KEYS, "AMPE IE: ", clear_ampe_ie, ampe_ie_len);
@@ -606,9 +607,16 @@ static int check_frame_protection(
         AMPE_DEBUG_KEYS, "IE peer_nonce ", ies_parsed.ampe->peer_nonce, 32);
     sae_debug(AMPE_DEBUG_KEYS, "Unexpected nonce\n");
     free(clear_ampe_ie);
-    return -1;
+    return false;
   }
-  memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
+
+  if (memcmp(cand->peer_nonce, null_nonce, 32) == 0) {
+    memcpy(cand->peer_nonce, ies_parsed.ampe->local_nonce, 32);
+  }
+
+  /* everything from here on out requires MGTKData */
+  if (ftype != PLINK_OPEN)
+    return true;
 
   gtkdata = ies_parsed.ampe->variable;
 
@@ -628,7 +636,7 @@ static int check_frame_protection(
         AMPE_DEBUG_KEYS, "Received igtk: ", cand->igtk, sizeof(cand->igtk));
   }
   free(clear_ampe_ie);
-  return -1;
+  return true;
 }
 
 static int plink_frame_tx(
@@ -1441,7 +1449,8 @@ int process_ampe_frame(
 
   ampe_set_peer_ies(cand, &elems);
 
-  check_frame_protection(cand, mgmt, len, &elems);
+  if (!protection_is_valid(cand, mgmt, len, &elems))
+    return 0;
 
   cand->cookie = cookie;
 

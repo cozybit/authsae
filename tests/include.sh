@@ -151,6 +151,8 @@ restart_meshd() {
 wait_for_plinks() {
     local nradios=$1
 
+    IN_VM=${IN_VM:-0}
+
     # Wait for peer link establishment
     TRIES=50
     if [ "$IN_VM" -eq 1 ]; then

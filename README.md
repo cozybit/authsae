@@ -21,11 +21,6 @@ SAE traffic and provide pithy output.
 
 ## RESTRICTIONS
 
-  Currently, the only OS with wireless support is freebsd. The
-linux module only supports communication over loopback. Extending
-the linux OS-specific module-- linux/meshd.c-- to support wireless
-interfaces is the subject of on-going work.
-
   Only elliptic curves defined over a prime field are supported--
 i.e. no characteristic two curves and no prime modulus groups.
 Therefore the only groups currently supported are 19, 20, 21, 25

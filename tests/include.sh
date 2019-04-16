@@ -2,6 +2,9 @@
 
 cleanup() {
     sudo killall meshd-nl80211 2> /dev/null
+    if [ -n "$ALT_MESHD" ]; then
+        sudo killall "$ALT_MESHD" 2> /dev/null
+    fi
     rm -fr "${TMP0}" "${TMP1}"
 }
 
@@ -22,6 +25,20 @@ wait_for_clean_start() {
     done
 
     [ $i -eq ${TRIES} ] && err_exit "Couldn't shut down meshd-nl80211"
+}
+
+find_meshd() {
+    # by default we use meshd out of the build directory, but for
+    # interop testing, specify ALT_MESHD to select another (known good)
+    # meshd at random
+    meshd=$(dirname $(realpath $0))/../build/linux/meshd-nl80211
+    if [ -n "$ALT_MESHD" ]; then
+        if (( "$RANDOM" & 1 )); then
+            meshd="$ALT_MESHD"
+        fi
+    fi
+    [ -x "${meshd}" ] || err_exit "${meshd} not found."
+    echo "$meshd"
 }
 
 load_hwsim() {
@@ -115,8 +132,7 @@ start_meshd() {
             sudo iw phy $radio interface add $iface type mesh
             sudo ip link set $iface up
 
-            MESHD=$(dirname $(realpath $0))/../build/linux/meshd-nl80211
-            [ -x "${MESHD}" ] || err_exit "${MESHD} not found."
+            MESHD=$(find_meshd)
 
             let i=$((i+1))
             sudo rm -f $log

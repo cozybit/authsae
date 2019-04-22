@@ -1092,19 +1092,39 @@ static int reject_to_peer(
 static int legendre(BIGNUM *a, BIGNUM *p, BIGNUM *exp, BN_CTX *bnctx) {
   BIGNUM *tmp = NULL;
   int symbol = -1;
+  int is_one, is_zero;
 
   if ((tmp = BN_new()) != NULL) {
-    BN_mod_exp(tmp, a, exp, p, bnctx);
-    if (BN_is_word(tmp, 1))
-      symbol = 1;
-    else if (BN_is_zero(tmp))
-      symbol = 0;
-    else
-      symbol = -1;
+    BN_mod_exp_mont_consttime(tmp, a, exp, p, bnctx, NULL);
+
+    is_one = BN_is_one(tmp);
+    is_zero = BN_is_zero(tmp);
+
+    /*
+     * return 0, 1 if tmp is 0, 1; -1 other.  bitwise ops are intentional
+     * to avoid jumps here and keep this code constant time.
+     */
+    symbol = is_one | ((is_one | is_zero) - 1);
 
     BN_free(tmp);
   }
   return symbol;
+}
+
+/* constant-time selection.  both arrays are fully read to defeat cache
+ * timing attacks.  Mask should be ~0 to take the first array, 0 to take
+ * the second.
+ */
+static void select_bin(unsigned int mask, unsigned char *a, unsigned char *b,
+                       unsigned char *dst, size_t dst_len)
+{
+  size_t i;
+  for (i = 0; i < dst_len; i++) {
+    unsigned char a_ch, b_ch;
+    a_ch = mask & a[i];
+    b_ch = ~mask & b[i];
+    dst[i] = a_ch | b_ch;
+  }
 }
 
 /*
@@ -1113,12 +1133,19 @@ static int legendre(BIGNUM *a, BIGNUM *p, BIGNUM *exp, BN_CTX *bnctx) {
  */
 static int assign_group_to_peer(struct candidate *peer, GD *grp) {
   HMAC_CTX *ctx;
-  BIGNUM *x_candidate = NULL, *x = NULL, *rnd = NULL, *qr = NULL, *qnr = NULL;
+  BIGNUM *x_candidate = NULL, *x = NULL, *rnd = NULL, *qr = NULL, *qnr = NULL,
+         *qr_or_qnr = NULL;
   BIGNUM *pm1 = NULL, *pm1d2 = NULL, *tmp1 = NULL, *tmp2 = NULL, *a = NULL,
          *b = NULL;
+  unsigned char qr_bin[SAE_MAX_ECC_PRIME_LENGTH];
+  unsigned char qnr_bin[SAE_MAX_ECC_PRIME_LENGTH];
+  unsigned char qr_or_qnr_bin[SAE_MAX_ECC_PRIME_LENGTH];
+
   unsigned char pwe_digest[SHA256_DIGEST_LENGTH], addrs[ETH_ALEN * 2], ctr;
   unsigned char *prfbuf = NULL, *primebuf = NULL;
   int primebitlen, is_odd, check, found = 0;
+  unsigned int mask;
+  unsigned int bn_is_odd = 0;
 
   /*
    * allow for replacement of group....
@@ -1136,7 +1163,8 @@ static int assign_group_to_peer(struct candidate *peer, GD *grp) {
       ((pm1 = BN_new()) == NULL) || ((tmp1 = BN_new()) == NULL) ||
       ((tmp2 = BN_new()) == NULL) || ((a = BN_new()) == NULL) ||
       ((b = BN_new()) == NULL) || ((qr = BN_new()) == NULL) ||
-      ((qnr = BN_new()) == NULL) || ((x_candidate = BN_new()) == NULL)) {
+      ((qnr = BN_new()) == NULL) || ((x_candidate = BN_new()) == NULL) ||
+      ((qr_or_qnr = BN_new()) == NULL)) {
     sae_debug(SAE_DEBUG_ERR, "can't create bignum for candidate!\n");
     goto fail;
   }
@@ -1294,13 +1322,26 @@ static int assign_group_to_peer(struct candidate *peer, GD *grp) {
      * flip a coin, multiply by the random quadratic residue or the
      * random quadratic nonresidue and record heads or tails
      */
-    if (BN_is_odd(tmp1)) {
-      BN_mod_mul(tmp2, tmp2, qr, grp->prime, bnctx);
-      check = 1;
-    } else {
-      BN_mod_mul(tmp2, tmp2, qnr, grp->prime, bnctx);
-      check = -1;
-    }
+
+    /*
+     * implement the following in constant time:
+     * if (BN_is_odd(tmp1)) {
+     *   BN_mod_mul(tmp2, tmp2, qr, grp->prime, bnctx);
+     *   check = 1;
+     * } else {
+     *   BN_mod_mul(tmp2, tmp2, qnr, grp->prime, bnctx);
+     *   check = -1;
+     * }
+     */
+    bn_is_odd = BN_is_odd(tmp1);
+    mask = ~(bn_is_odd - 1);
+    /* select qr if bn_is_odd, qnr otherwise */
+    BN_bn2bin(qr, qr_bin);
+    BN_bn2bin(qnr, qnr_bin);
+    select_bin(mask, qr_bin, qnr_bin, qr_or_qnr_bin, sizeof(qr_or_qnr_bin));
+    BN_bin2bn(qr_or_qnr_bin, BN_num_bytes(qr), qr_or_qnr);
+    BN_mod_mul(tmp2, tmp2, qr_or_qnr, grp->prime, bnctx);
+    check = (bn_is_odd << 1) - 1;
 
     /*
      * now it's safe to do legendre, if check is 1 then it's
@@ -1315,11 +1356,7 @@ static int assign_group_to_peer(struct candidate *peer, GD *grp) {
       /*
        * need to unambiguously identify the solution, if there is one...
        */
-      if (BN_is_odd(rnd)) {
-        is_odd = 1;
-      } else {
-        is_odd = 0;
-      }
+      is_odd = BN_is_odd(rnd);
       if ((x = BN_dup(x_candidate)) == NULL) {
         goto fail;
       }
@@ -1381,6 +1418,7 @@ fail:
   BN_free(b);
   BN_free(qr);
   BN_free(qnr);
+  BN_free(qr_or_qnr);
 
   if (peer->pwe == NULL) {
     sae_debug(

@@ -45,6 +45,7 @@
 
 #define SAE_MAX_EC_GROUPS 10
 #define SAE_MAX_PASSWORD_LEN 80
+#define SAE_MAX_ECC_PRIME_LENGTH 66
 
 struct sae_config {
   int group[SAE_MAX_EC_GROUPS];

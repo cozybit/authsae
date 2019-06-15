@@ -96,7 +96,7 @@ install(FILES
 OPTION(ENABLE_LINUX_TARGETS "enable building linux specific targets" ON)
 IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${ENABLE_LINUX_TARGETS})
 	ADD_SUBDIRECTORY(linux)
-ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND ${ENABLE_LINUX_TARGETS})
 
 #####################################################################
 SET(CONFFILE_DIR "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/etc")

@@ -1411,7 +1411,7 @@ void peer_created(unsigned char *peer) {
   }
 }
 
-void peer_deleted(unsigned char *peer) {
+void delete_sta(unsigned char *peer) {
   struct nl_msg *msg;
   struct netlink_ctx *nlcfg = meshd_ctx.nlcfg;
   uint8_t cmd = NL80211_CMD_DEL_STATION;
@@ -1466,7 +1466,7 @@ void fin(
     }
     ampe_open_peer_link(peer, cookie);
   } else if (reason) {
-    peer_deleted(peer);
+    delete_sta(peer);
   }
 }
 

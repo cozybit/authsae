@@ -281,8 +281,11 @@ static void delete_local_peer_info(struct candidate *delme)
 }
 
 /*
- * delete_peer()
- *      Clean up state, remove peer from database, and free up memory.
+ * Clean up state, remove peer from database, and free up memory.
+ *
+ * Note, to remove the station from the kernel, you should use
+ * finalize() instead, which will normally call this at the
+ * end.
  */
 void delete_peer(struct candidate **delme)
 {
@@ -297,6 +300,11 @@ static void destroy_peer(void *data) {
   delete_local_peer_info((struct candidate *) data);
 }
 
+/*
+ * finalize: call cb->fin, and then remove the local peer info.
+ * if reason is non-zero, cb->fin is expected to remove the station
+ * from the kernel, if necessary.
+ */
 static
 void finalize(unsigned short reason, struct candidate *peer,
     unsigned char *buf, int len, void *cookie)
@@ -1599,7 +1607,7 @@ void do_reauth(struct candidate *peer) {
     if ((newpeer = create_candidate(
              peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
       if (assign_group_to_peer(newpeer, gd) < 0) {
-        delete_peer(&newpeer);
+        delete_local_peer_info(newpeer);
       } else {
         commit_to_peer(newpeer, NULL, 0);
         cb->evl->rem_timeout(newpeer->t0);
@@ -1963,7 +1971,12 @@ static enum result process_authentication_frame(
                 MAC2STR(peer->peer_mac),
                 state_to_string(peer->state),
                 state_to_string(delme->state));
-            delete_peer(&delme);
+            finalize(
+              WLAN_STATUS_REQUEST_DECLINED,
+              delme,
+              NULL,
+              0,
+              delme->cookie);
           }
           /*
            * print out the PMK if we have debugging on for that
@@ -2386,7 +2399,7 @@ int process_mgmt_frame(
            * for instance-- that don't really need fin() notification because
            * the protocol might recover and successfully finish later.
            */
-          delete_peer(&peer);
+          delete_local_peer_info(peer);
           return 0;
         case ERR_NOT_FATAL:
           /*

@@ -292,9 +292,7 @@ void delete_peer(struct candidate **delme)
  * a callback-able version of delete peer
  */
 static void destroy_peer(void *data) {
-  struct candidate *peer = (struct candidate *)data;
-
-  delete_peer(&peer);
+  delete_local_peer_info((struct candidate *) data);
 }
 
 static

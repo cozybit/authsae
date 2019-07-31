@@ -90,5 +90,6 @@ struct candidate {
 
 struct candidate *find_peer(unsigned char *mac, int accept);
 void delete_peer(struct candidate **peer);
+void dump_peer_list();
 
 #endif /* _SAE_PEERS_H_ */

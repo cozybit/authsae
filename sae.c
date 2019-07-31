@@ -254,6 +254,8 @@ static void delete_local_peer_info(struct candidate *delme)
       cb->evl->rem_timeout(peer->rekey_ping_timer);
       peer->rekey_ping_timer = 0;
       TAILQ_REMOVE(&peers, peer, entry);
+      dump_peer_list();
+
       /*
        * PWE, the private value, the PMK and KCK are all secret so
        * take some special care when deleting them.
@@ -1532,6 +1534,7 @@ struct candidate *create_candidate(
   peer->association_id = aid_alloc();
   curr_open++;
 
+  dump_peer_list();
   cb->peer_created(her_mac);
 
   return peer;

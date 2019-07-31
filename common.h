@@ -55,7 +55,7 @@ int parse_buffer(char *, char **);
 #define SAE_DEBUG_STATE_MACHINE 0x04
 #define SAE_DEBUG_CRYPTO 0x08
 #define SAE_DEBUG_CRYPTO_VERB 0x10
-#define AMPE_DEBUG_CANDIDATES 0x20
+#define AMPE_DEBUG_PEERS 0x20
 #define MESHD_DEBUG 0x40
 #define AMPE_DEBUG_FSM 0x80
 #define AMPE_DEBUG_KEYS 0x100

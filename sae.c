@@ -227,7 +227,7 @@ static void delete_local_peer_info(struct candidate *delme)
   struct candidate *peer;
 
   TAILQ_FOREACH(peer, &peers, entry) {
-    if (memcmp(delme, peer, sizeof(struct candidate)) == 0) {
+    if (delme == peer) {
       sae_debug(
           SAE_DEBUG_PROTOCOL_MSG,
           "deleting peer at " MACSTR " in state %s\n",

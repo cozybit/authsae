@@ -69,7 +69,7 @@ authsae:
 {
  sae:
   {
-    debug = 480;
+    debug = 486;
     password = "thisisreallysecret";
     group = [19, 26, 21, 25, 20];
     blacklist = 5;

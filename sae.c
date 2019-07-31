@@ -2640,12 +2640,6 @@ int sae_initialize(
       gd = curr;
     prev = curr;
     curr->next = NULL;
-    sae_debug(
-        SAE_DEBUG_STATE_MACHINE,
-        "group %d is configured, prime is %d"
-        " bytes\n",
-        curr->group_num,
-        BN_num_bytes(curr->prime));
   }
   return 1;
 }

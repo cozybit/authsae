@@ -2348,6 +2348,19 @@ int process_mgmt_frame(
                 sae_debug(SAE_DEBUG_STATE_MACHINE, "correct token received\n");
               }
             }
+
+            /*
+             * let existing stations time out before trying to establish
+             * a new authentication.
+             */
+            if (peer != NULL && peer->link_state == PLINK_HOLDING) {
+              sae_debug(
+                  SAE_DEBUG_STATE_MACHINE,
+                  "ignore auth frame from " MACSTR " while in holding\n",
+                  MAC2STR(frame->sa));
+              return 0;
+            }
+
             /*
              * if we got here that means we're not demanding tokens or we are
              * and the token was correct. In either case we create a protocol

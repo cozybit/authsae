@@ -361,6 +361,7 @@ static void delete_peer_by_addr(unsigned char *addr) {
 static int handle_del_peer(struct netlink_ctx *nlcfg, struct nl_msg *msg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+  unsigned char *mac;
 
   nla_parse(
       tb,
@@ -375,8 +376,15 @@ static int handle_del_peer(struct netlink_ctx *nlcfg, struct nl_msg *msg) {
   if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
     return -1;
 
-  ampe_close_peer_link(nla_data(tb[NL80211_ATTR_MAC]));
-  delete_peer_by_addr(nla_data(tb[NL80211_ATTR_MAC]));
+  mac = nla_data(tb[NL80211_ATTR_MAC]);
+
+  sae_debug(
+      MESHD_DEBUG,
+      "NL80211_DEL_STATION " MACSTR "\n",
+      MAC2STR(mac));
+
+  ampe_close_peer_link(mac);
+  delete_peer_by_addr(mac);
 
   return 0;
 }

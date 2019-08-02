@@ -1548,7 +1548,7 @@ int ampe_initialize(struct mesh_node *mesh, struct ampe_cb *callbacks) {
 
   /* TODO: move these to a config file */
   ampe_conf.retry_timeout_ms = 1000;
-  ampe_conf.holding_timeout_ms = 10000;
+  ampe_conf.holding_timeout_ms = 3000;
   ampe_conf.confirm_timeout_ms = 1000;
   ampe_conf.max_retries = 10;
   ampe_conf.mesh = mesh;

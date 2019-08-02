@@ -1985,6 +1985,7 @@ static enum result process_authentication_frame(
             if (sae_debug_mask & SAE_DEBUG_CRYPTO) {
               print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
             }
+            peer->state = SAE_ACCEPTED;
             finalize(
                 WLAN_STATUS_SUCCESSFUL,
                 peer,
@@ -2000,7 +2001,6 @@ static enum result process_authentication_frame(
             cb->evl->rem_timeout(peer->t1);
           peer->t1 = cb->evl->add_timeout_with_jitter(
               SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
-          peer->state = SAE_ACCEPTED;
           break;
         default:
           sae_debug(

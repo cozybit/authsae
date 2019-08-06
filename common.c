@@ -43,6 +43,8 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "ieee802_11.h"
 
@@ -81,11 +83,21 @@ int parse_buffer(char *buf, char **val) {
   return 1;
 }
 
+#define TIME_FMT "[%s.%06ld] "
+
 void sae_debug(int level, const char *fmt, ...) {
   va_list argptr;
+  struct timeval tv;
+  struct tm cur_tm;
+  char buf[9];
 
   if (sae_debug_mask & level) {
+    gettimeofday(&tv, NULL);
+    localtime_r(&tv.tv_sec, &cur_tm);
+    strftime(buf, sizeof(buf), "%H:%M:%S", &cur_tm);
+
     va_start(argptr, fmt);
+    printf(TIME_FMT, buf, tv.tv_usec);
     vfprintf(stdout, fmt, argptr);
     va_end(argptr);
   }
@@ -98,17 +110,24 @@ void sae_hexdump(
     int len) {
   const unsigned char *pos;
   int i;
+  char buf[9];
+  struct timeval tv;
+  struct tm cur_tm;
+
+  gettimeofday(&tv, NULL);
+  localtime_r(&tv.tv_sec, &cur_tm);
+  strftime(buf, sizeof(buf), "%H:%M:%S", &cur_tm);
 
   if (sae_debug_mask & level) {
-    fprintf(stdout, "----------\n");
-    fprintf(stdout, "%s hexdump", label);
+    fprintf(stdout, TIME_FMT "----------\n", buf, tv.tv_usec);
+    fprintf(stdout, TIME_FMT "%s hexdump", buf, tv.tv_usec, label);
     pos = start;
     for (i = 0; i < len; i++) {
       if (!(i % 16))
-        fprintf(stdout, "\n%08x  ", i);
+        fprintf(stdout, "\n" TIME_FMT "%08x  ", buf, tv.tv_usec, i);
       fprintf(stdout, "%02x ", (unsigned char)*pos++);
     }
-    fprintf(stdout, "\n----------\n\n");
+    fprintf(stdout, "\n" TIME_FMT "----------\n\n", buf, tv.tv_usec);
     fflush(stdout);
   }
   return;

@@ -87,6 +87,12 @@
  *
  *  The kernel is informed of the authenticated and established plink state
  *  when AMPE completes, through the estab_peer_link() callback.
+ *
+ *  Once a station has been uploaded to the kernel, it remains in the
+ *  local peer database until a DEL_STATION message.  This may be initiated
+ *  by us (delete_peer_by_addr()) or by an external entity.  We keep the
+ *  station structure around to avoid initiating new authentication sessions
+ *  until it has been fully removed.
  */
 
 static struct meshd_ctx { struct netlink_ctx *nlcfg; } meshd_ctx;
@@ -352,15 +358,69 @@ int meshd_set_mesh_conf(struct mesh_node *mesh, uint32_t changed) {
   return set_mesh_conf(meshd_ctx.nlcfg, mesh, changed);
 }
 
-static void delete_peer_by_addr(unsigned char *addr) {
+void delete_sta(unsigned char *peer) {
+  struct nl_msg *msg;
+  struct netlink_ctx *nlcfg = meshd_ctx.nlcfg;
+  uint8_t cmd = NL80211_CMD_DEL_STATION;
+  int ret;
+  char *pret;
+
+  if (!peer)
+    return;
+
+  msg = nlmsg_alloc();
+
+  if (!msg)
+    return;
+
+  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
+
+  if (pret == NULL)
+    goto nla_put_failure;
+
+  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
+  NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
+
+  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
+  nlmsg_free(msg);
+  msg = NULL;
+  sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n", MAC2STR(peer));
+  if (ret < 0)
+    fprintf(stderr, "Remove candidate failed: %d (%s)\n", ret, strerror(-ret));
+
+  return;
+nla_put_failure:
+  nlmsg_free(msg);
+  msg = NULL;
+}
+
+static void delete_local_peer_by_addr(unsigned char *addr) {
   struct candidate *peer;
+
   if ((peer = find_peer(addr, 0)))
     delete_peer(&peer);
+}
+
+static void delete_peer_by_addr(unsigned char *addr) {
+  struct candidate *peer;
+
+  if ((peer = find_peer(addr, 0))) {
+    if (peer->in_kernel) {
+      /*
+       * remove from kernel, but wait for handle_del_peer() to remove from
+       * local database.
+       */
+      delete_sta(addr);
+    } else {
+      delete_peer(&peer);
+    }
+  }
 }
 
 static int handle_del_peer(struct netlink_ctx *nlcfg, struct nl_msg *msg) {
   struct nlattr *tb[NL80211_ATTR_MAX + 1];
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+  unsigned char *mac;
 
   nla_parse(
       tb,
@@ -375,8 +435,15 @@ static int handle_del_peer(struct netlink_ctx *nlcfg, struct nl_msg *msg) {
   if (!tb[NL80211_ATTR_MAC] || nla_len(tb[NL80211_ATTR_MAC]) != ETH_ALEN)
     return -1;
 
-  ampe_close_peer_link(nla_data(tb[NL80211_ATTR_MAC]));
-  delete_peer_by_addr(nla_data(tb[NL80211_ATTR_MAC]));
+  mac = nla_data(tb[NL80211_ATTR_MAC]);
+
+  sae_debug(
+      MESHD_DEBUG,
+      "NL80211_DEL_STATION " MACSTR "\n",
+      MAC2STR(mac));
+
+  ampe_close_peer_link(mac);
+  delete_local_peer_by_addr(mac);
 
   return 0;
 }
@@ -1411,42 +1478,6 @@ void peer_created(unsigned char *peer) {
   }
 }
 
-void peer_deleted(unsigned char *peer) {
-  struct nl_msg *msg;
-  struct netlink_ctx *nlcfg = meshd_ctx.nlcfg;
-  uint8_t cmd = NL80211_CMD_DEL_STATION;
-  int ret;
-  char *pret;
-
-  if (!peer)
-    return;
-
-  msg = nlmsg_alloc();
-
-  if (!msg)
-    return;
-
-  pret = genlmsg_put(msg, 0, 0, nlcfg->nl80211_id, 0, 0, cmd, 0);
-
-  if (pret == NULL)
-    goto nla_put_failure;
-
-  NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, nlcfg->ifindex);
-  NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, peer);
-
-  ret = nl_send_auto_complete(nlcfg->cmd_sock, msg);
-  nlmsg_free(msg);
-  msg = NULL;
-  sae_debug(MESHD_DEBUG, "removing peer candidate " MACSTR "\n", MAC2STR(peer));
-  if (ret < 0)
-    fprintf(stderr, "Remove candidate failed: %d (%s)\n", ret, strerror(-ret));
-
-  return;
-nla_put_failure:
-  nlmsg_free(msg);
-  msg = NULL;
-}
-
 void fin(
     unsigned short reason,
     unsigned char *peer,
@@ -1466,7 +1497,7 @@ void fin(
     }
     ampe_open_peer_link(peer, cookie);
   } else if (reason) {
-    peer_deleted(peer);
+    delete_peer_by_addr(peer);
   }
 }
 

@@ -29,32 +29,32 @@ LOG0=${LOGS[0]}
 LOG1=${LOGS[1]}
 
 # pmk match
-cat ${LOG0} | grep pmk -A 2 > ${TMP0}
-cat ${LOG1} | grep pmk -A 2 > ${TMP1}
+sed -e 's/.*] //' ${LOG0} | grep pmk -A 2 > ${TMP0}
+sed -e 's/.*] //' ${LOG1} | grep pmk -A 2 > ${TMP1}
 
 diff ${TMP0} ${TMP1} || { echo "pmk mismatch"; cat ${TMP0} ${TMP1}; err_exit "pmk mismatch"; }
 
 # mgtk exchange in both directions
-cat ${LOG0} | grep ^mgtk -A 1 | tail -1 > ${TMP0}
-cat ${LOG1} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP1}
+sed -e 's/.*] //' ${LOG0} | grep ^mgtk -A 1 | tail -1 > ${TMP0}
+sed -e 's/.*] //' ${LOG1} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP1}
 
 diff ${TMP0} ${TMP1} || { echo "mgtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "mgtk exchange failed"; }
 
-cat ${LOG0} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP0}
-cat ${LOG1} | grep ^mgtk -A 1 | tail -1 > ${TMP1}
+sed -e 's/.*] //' ${LOG0} | grep "Received mgtk:" -A 1 | tail -1 > ${TMP0}
+sed -e 's/.*] //' ${LOG1} | grep ^mgtk -A 1 | tail -1 > ${TMP1}
 
 diff ${TMP0} ${TMP1} || { echo "mgtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "mgtk exchange failed"; }
 
 # igtk exchange in both directions
-cat ${LOG0} | grep ^igtk -A 1 | tail -1 > ${TMP0}
-cat ${LOG1} | grep "Received igtk:" -A 1 | tail -1 > ${TMP1}
+sed -e 's/.*] //' ${LOG0} | grep ^igtk -A 1 | tail -1 > ${TMP0}
+sed -e 's/.*] //' ${LOG1} | grep "Received igtk:" -A 1 | tail -1 > ${TMP1}
 
 [ -s $TMP0 ] || err_exit "No igtk received"
 
 diff ${TMP0} ${TMP1} || { echo "igtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "igtk exchange failed"; }
 
-cat ${LOG0} | grep "Received igtk:" -A 1 | tail -1 > ${TMP0}
-cat ${LOG1} | grep ^igtk -A 1 | tail -1 > ${TMP1}
+sed -e 's/.*] //' ${LOG0} | grep "Received igtk:" -A 1 | tail -1 > ${TMP0}
+sed -e 's/.*] //' ${LOG1} | grep ^igtk -A 1 | tail -1 > ${TMP1}
 
 diff ${TMP0} ${TMP1} || { echo "igtk mismatch"; cat ${TMP0} ${TMP1}; err_exit "igtk exchange failed"; }
 

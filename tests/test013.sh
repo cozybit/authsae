@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# both ends close peer link when one side deletes its peer
+# node deletes station if other end is killed without close
 #
 
 . `dirname $0`/include.sh
@@ -22,21 +22,15 @@ start_meshd $(get_hwsim_radios) || err_exit "Failed to start meshd-nl80211"
 
 wait_for_plinks $nradios
 
-# Delete the peer from radio 1 -> radio 2
-sudo iw dev smesh0 station del $(cat /sys/class/net/smesh1/address)
+# Drop the link from radio 1 -> radio 2
+restart_meshd smesh0
 
-sleep 1
+sleep 2
 
-# Make sure both peers sent close
-for i in $LOGDIR/$TESTNAME/authsae*log; do
-    grep -q "Sending plink action 3" $i || err_exit "no close frame in $i"
-done
+wait_for_plinks $nradios
 
-# timeout holding timer
-sleep 5
-
-# Make sure both peers deleted the station
-for i in $LOGDIR/$TESTNAME/authsae*log; do
+# Make sure radio 2 deleted the station
+for i in $LOGDIR/$TESTNAME/authsae-1.log; do
     grep -q "NL80211_DEL_STATION" $i || err_exit "no peer deletion in $i"
 done
 

@@ -222,15 +222,12 @@ static void blacklist_peer(struct candidate *peer) {
   }
 }
 
-/*
- * delete_peer()
- *      Clean up state, remove peer from database, and free up memory.
- */
-void delete_peer(struct candidate **delme) {
+static void delete_local_peer_info(struct candidate *delme)
+{
   struct candidate *peer;
 
   TAILQ_FOREACH(peer, &peers, entry) {
-    if (memcmp(*delme, peer, sizeof(struct candidate)) == 0) {
+    if (delme == peer) {
       sae_debug(
           SAE_DEBUG_PROTOCOL_MSG,
           "deleting peer at " MACSTR " in state %s\n",
@@ -257,6 +254,8 @@ void delete_peer(struct candidate **delme) {
       cb->evl->rem_timeout(peer->rekey_ping_timer);
       peer->rekey_ping_timer = 0;
       TAILQ_REMOVE(&peers, peer, entry);
+      dump_peer_list();
+
       /*
        * PWE, the private value, the PMK and KCK are all secret so
        * take some special care when deleting them.
@@ -274,8 +273,7 @@ void delete_peer(struct candidate **delme) {
       free(peer->ht_info);
       free(peer->vht_cap);
       free(peer->vht_info);
-      free(*delme);
-      *delme = NULL;
+      free(delme);
       return;
     }
   }
@@ -283,12 +281,39 @@ void delete_peer(struct candidate **delme) {
 }
 
 /*
+ * Clean up state, remove peer from database, and free up memory.
+ *
+ * Note, to remove the station from the kernel, you should use
+ * finalize() instead, which will normally call this at the
+ * end.
+ */
+void delete_peer(struct candidate **delme)
+{
+  delete_local_peer_info(*delme);
+  *delme = NULL;
+}
+
+/*
  * a callback-able version of delete peer
  */
 static void destroy_peer(void *data) {
-  struct candidate *peer = (struct candidate *)data;
+  delete_local_peer_info((struct candidate *) data);
+}
 
-  delete_peer(&peer);
+/*
+ * finalize: call cb->fin, and then remove the local peer info.
+ * if reason is non-zero, cb->fin is expected to remove the station
+ * from the kernel, if necessary.
+ */
+static
+void finalize(unsigned short reason, struct candidate *peer,
+    unsigned char *buf, int len, void *cookie)
+{
+  cb->fin(reason, peer->peer_mac, buf, len, cookie);
+  if (reason == WLAN_STATUS_SUCCESSFUL)
+    return;
+
+  delete_local_peer_info(peer);
 }
 
 static int on_blacklist(unsigned char *mac) {
@@ -1458,13 +1483,12 @@ static void retransmit_peer(void *data) {
           MAC2STR(peer->peer_mac));
       blacklist_peer(peer);
     }
-    cb->fin(
+    finalize(
         WLAN_STATUS_AUTHENTICATION_TIMEOUT,
-        peer->peer_mac,
+        peer,
         NULL,
         0,
         peer->cookie);
-    delete_peer(&peer);
     return;
   }
   peer->sync++;
@@ -1518,6 +1542,7 @@ struct candidate *create_candidate(
   peer->association_id = aid_alloc();
   curr_open++;
 
+  dump_peer_list();
   cb->peer_created(her_mac);
 
   return peer;
@@ -1582,7 +1607,7 @@ void do_reauth(struct candidate *peer) {
     if ((newpeer = create_candidate(
              peer->peer_mac, peer->my_mac, 0, peer->cookie)) != NULL) {
       if (assign_group_to_peer(newpeer, gd) < 0) {
-        delete_peer(&newpeer);
+        delete_local_peer_info(newpeer);
       } else {
         commit_to_peer(newpeer, NULL, 0);
         cb->evl->rem_timeout(newpeer->t0);
@@ -1946,7 +1971,12 @@ static enum result process_authentication_frame(
                 MAC2STR(peer->peer_mac),
                 state_to_string(peer->state),
                 state_to_string(delme->state));
-            delete_peer(&delme);
+            finalize(
+              WLAN_STATUS_REQUEST_DECLINED,
+              delme,
+              NULL,
+              0,
+              delme->cookie);
           }
           /*
            * print out the PMK if we have debugging on for that
@@ -1955,9 +1985,10 @@ static enum result process_authentication_frame(
             if (sae_debug_mask & SAE_DEBUG_CRYPTO) {
               print_buffer("PMK", peer->pmk, SHA256_DIGEST_LENGTH);
             }
-            cb->fin(
+            peer->state = SAE_ACCEPTED;
+            finalize(
                 WLAN_STATUS_SUCCESSFUL,
-                peer->peer_mac,
+                peer,
                 peer->pmk,
                 SHA256_DIGEST_LENGTH,
                 peer->cookie);
@@ -1970,7 +2001,6 @@ static enum result process_authentication_frame(
             cb->evl->rem_timeout(peer->t1);
           peer->t1 = cb->evl->add_timeout_with_jitter(
               SRV_SEC(pmk_expiry), reauth, peer, SRV_SEC(REAUTH_JITTER));
-          peer->state = SAE_ACCEPTED;
           break;
         default:
           sae_debug(
@@ -2217,9 +2247,9 @@ int process_mgmt_frame(
           return -1;
         }
         peer->cookie = cookie;
-        cb->fin(
+        finalize(
             WLAN_STATUS_SUCCESSFUL,
-            peer->peer_mac,
+            peer,
             peer->pmk,
             SHA256_DIGEST_LENGTH,
             peer->cookie);
@@ -2244,13 +2274,12 @@ int process_mgmt_frame(
          * assign the first group in the list as the one to try
          */
         if (assign_group_to_peer(peer, gd) < 0) {
-          cb->fin(
+          finalize(
               WLAN_STATUS_UNSPECIFIED_FAILURE,
-              peer->peer_mac,
+              peer,
               NULL,
               0,
               peer->cookie);
-          delete_peer(&peer);
         } else {
           commit_to_peer(peer, NULL, 0);
           cb->evl->rem_timeout(peer->t0);
@@ -2319,6 +2348,19 @@ int process_mgmt_frame(
                 sae_debug(SAE_DEBUG_STATE_MACHINE, "correct token received\n");
               }
             }
+
+            /*
+             * let existing stations time out before trying to establish
+             * a new authentication.
+             */
+            if (peer != NULL && peer->link_state == PLINK_HOLDING) {
+              sae_debug(
+                  SAE_DEBUG_STATE_MACHINE,
+                  "ignore auth frame from " MACSTR " while in holding\n",
+                  MAC2STR(frame->sa));
+              return 0;
+            }
+
             /*
              * if we got here that means we're not demanding tokens or we are
              * and the token was correct. In either case we create a protocol
@@ -2356,13 +2398,13 @@ int process_mgmt_frame(
            * a "del" event
            */
           blacklist_peer(peer);
-          cb->fin(
+          finalize(
               WLAN_STATUS_UNSPECIFIED_FAILURE,
-              peer->peer_mac,
+              peer,
               NULL,
               0,
               peer->cookie);
-        /* no break / fall-through intentional */
+          return 0;
         case ERR_FATAL:
           /*
            * a "fail" event, it could be argued that fin() should be done
@@ -2370,7 +2412,7 @@ int process_mgmt_frame(
            * for instance-- that don't really need fin() notification because
            * the protocol might recover and successfully finish later.
            */
-          delete_peer(&peer);
+          delete_local_peer_info(peer);
           return 0;
         case ERR_NOT_FATAL:
           /*
@@ -2404,13 +2446,12 @@ int process_mgmt_frame(
             " to blacklist\n",
             MAC2STR(peer->peer_mac));
         blacklist_peer(peer);
-        cb->fin(
+        finalize(
             WLAN_STATUS_REQUEST_DECLINED,
-            peer->peer_mac,
+            peer,
             NULL,
             0,
             peer->cookie);
-        delete_peer(&peer);
       }
       break;
     case IEEE802_11_FC_STYPE_ACTION:
@@ -2640,12 +2681,6 @@ int sae_initialize(
       gd = curr;
     prev = curr;
     curr->next = NULL;
-    sae_debug(
-        SAE_DEBUG_STATE_MACHINE,
-        "group %d is configured, prime is %d"
-        " bytes\n",
-        curr->group_num,
-        BN_num_bytes(curr->prime));
   }
   return 1;
 }
